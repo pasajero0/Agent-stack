@@ -12,19 +12,29 @@ There is no unified CLI tool that detects installed AI coding providers, configu
 npx agent-stack init
 ```
 
-The wizard will:
-1. **Detect** installed AI coding providers (Claude Code, Kiro)
-2. **Install** a missing provider if needed
-3. **Configure MCP servers** (GitHub, Fetch, Memory, Sequential Thinking)
-4. **Create AGENTS.md** — a universal agent definition file
-5. **Generate** provider-specific configs from AGENTS.md
+The wizard auto-detects the scenario and adapts:
+
+```
+Existing project (has package.json/src/.git):
+  → fewer questions, project name from package.json
+  → agents pre-selected based on context
+
+Empty directory:
+  → asks project name, language, full configuration
+```
+
+Four steps:
+1. **detect()** — existing project or empty? which providers installed?
+2. **wizard()** — questions adapted to scenario, agent selection, MCP servers
+3. **generateAGENTS()** — filled AGENTS.md from agent defaults + answers
+4. **deployAdapters()** — provider configs (.claude/, .kiro/) + MCP servers
 
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `agent-stack init` | Full setup wizard |
-| `agent-stack detect` | Detect installed providers |
+| `agent-stack init` | Full setup wizard (4-step flow) |
+| `agent-stack detect` | Detect project context + installed providers |
 | `agent-stack mcp install` | Install MCP servers |
 | `agent-stack mcp list` | List configured MCP servers |
 | `agent-stack generate` | Generate provider configs from AGENTS.md |
@@ -56,16 +66,33 @@ You are a software architect...
 - Produce a plan before editing files
 ```
 
+## Agents
+
+Six built-in agents, each defined as `agents/<name>/AGENT.md`:
+
+| Agent | Role | Description |
+|-------|------|-------------|
+| **Scout** | Advisory (v0.2) | Scans existing projects, recommends agent configuration |
+| **Architect** | Planning | Explores codebases, designs implementation plans |
+| **Coder** | Implementation | Implements features, fixes bugs, follows conventions |
+| **Reviewer** | Quality | Reviews code for correctness, security, performance |
+| **Test Writer** | Testing | Writes tests that verify behavior and catch regressions |
+| **Researcher** | Research | Investigates APIs, libraries, documentation |
+
+Agent defaults are loaded from `agents/*/AGENT.md` at runtime — single source of truth.
+
 ## Supported Providers
 
 | Provider | Status | Detection |
 |----------|--------|-----------|
-| Claude Code | v1 | `claude --version` |
-| Kiro | v1 | `kiro` binary / Kiro.app |
+| Claude Code | v0.1 | `claude --version` |
+| Kiro | v0.1 | `kiro` binary / Kiro.app |
 | Cursor | planned | — |
 | Windsurf | planned | — |
 
 ## MCP Server Catalog
+
+Defined in `mcp/catalog.json`:
 
 | Server | Package | Description |
 |--------|---------|-------------|
@@ -77,15 +104,26 @@ You are a software architect...
 ## Architecture
 
 ```
-src/
-  cli.ts                  # Commander program
-  commands/               # init, detect, mcp, generate, sync
-  providers/              # Adapter per provider (claude-code, kiro)
-  mcp/                    # MCP server catalog + installer
-  agents/                 # AGENTS.md parser + config generator
-  utils/                  # Shell helpers, logger
-templates/
-  AGENTS.md               # Default template
+agent-stack/
+├── agents/                  # Agent definitions (AGENT.md + skills/)
+│   ├── scout/               # Advisory agent (v0.2)
+│   ├── architect/
+│   ├── coder/
+│   ├── reviewer/
+│   ├── test-writer/
+│   └── researcher/
+├── bin/cli.mjs              # Entry point
+├── mcp/catalog.json         # MCP server catalog (JSON)
+├── src/
+│   ├── cli.ts               # Commander program
+│   ├── detect/              # Project detection (existing/empty)
+│   ├── commands/            # init, detect, mcp, generate, sync
+│   ├── providers/           # Adapter per provider (claude-code, kiro)
+│   ├── mcp/                 # MCP catalog loader + installer
+│   ├── agents/              # AGENTS.md parser, defaults loader, generator
+│   └── utils/               # Shell helpers, logger
+├── templates/AGENTS.md      # Default template (5 agents)
+└── tests/                   # 22 tests
 ```
 
 Adding a new provider = implement `ProviderAdapter` interface + register in registry.
@@ -101,11 +139,28 @@ pnpm run typecheck
 
 ## Git Conventions
 
-Branches and commits use the same type prefixes for consistency.
+### Versioning
 
-Allowed types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `style`, `perf`, `build`, `revert`.
+[Semver](https://semver.org/) — version reflects the nature of changes:
+
+```
+v0.1.0
+  │ │ │
+  │ │ └── patch: bug fixes, minor corrections
+  │ └──── minor: new functionality, backwards compatible
+  └────── major: breaking changes
+```
+
+Commit types map to version bumps:
+- `feat` → minor (0.1.0 → 0.2.0)
+- `fix` → patch (0.1.0 → 0.1.1)
+- `docs`, `refactor`, `test`, `chore`, `ci`, `style`, `perf`, `build` → patch or no bump
 
 ### Branches
+
+Branches and commits use the same type prefixes.
+
+Allowed types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `style`, `perf`, `build`, `revert`.
 
 ```
 <type>/<short-description>
