@@ -93,11 +93,46 @@ Adding a new provider = implement `ProviderAdapter` interface + register in regi
 ## Development
 
 ```bash
-pnpm install
+pnpm install        # also installs husky hooks via prepare script
 pnpm run build
 pnpm run test
 pnpm run typecheck
 ```
+
+## Git Conventions
+
+Branches and commits use the same type prefixes for consistency.
+
+Allowed types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `style`, `perf`, `build`, `revert`.
+
+### Branches
+
+```
+<type>/<short-description>
+
+feat/scout-agent
+fix/mcp-env-placeholder
+refactor/init-flow
+docs/update-readme
+chore/commitlint-setup
+```
+
+### Commits
+
+[Conventional Commits](https://www.conventionalcommits.org/) enforced by commitlint + husky.
+
+```
+<type>: <description>
+
+feat: add project detection for existing/empty directories
+fix: handle empty env vars with placeholder
+docs: update README with v0.1 architecture
+refactor: split init into 4-step flow
+test: add project detection tests
+chore: move MCP catalog to JSON
+```
+
+Commits that don't follow this format will be rejected by the commit-msg hook.
 
 ## License
 
