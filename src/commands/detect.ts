@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { detectAll } from "../providers/registry.js";
+import { detect } from "../claude/provider.js";
 import { detectProject } from "../detect/project.js";
 import { banner, log } from "../utils/logger.js";
 
@@ -19,27 +19,19 @@ export async function detectCommand(): Promise<void> {
   console.log();
 
   // Provider detection
-  log.step("Detecting installed AI coding providers...");
+  log.step("Detecting Claude Code...");
   console.log();
 
-  const results = await detectAll();
-
-  for (const { info } of results) {
-    const status = info.installed
-      ? chalk.green("✔ installed")
-      : chalk.dim("✖ not found");
-
-    const version = info.version ? chalk.dim(` (${info.version})`) : "";
-    console.log(`  ${info.displayName.padEnd(20)} ${status}${version}`);
-  }
-
+  const info = await detect();
+  const status = info.installed ? chalk.green("✔ installed") : chalk.dim("✖ not found");
+  const version = info.version ? chalk.dim(` (${info.version})`) : "";
+  console.log(`  ${info.displayName.padEnd(20)} ${status}${version}`);
   console.log();
 
-  const installed = results.filter((r) => r.info.installed);
-  if (installed.length === 0) {
-    log.warn("No AI coding providers detected.");
-    log.info("Run 'agent-stack init' to install and configure one.");
+  if (info.installed) {
+    log.success("Claude Code detected.");
   } else {
-    log.success(`${installed.length} provider(s) detected.`);
+    log.warn("Claude Code not detected.");
+    log.info("Run 'agent-stack init' to install and configure it.");
   }
 }

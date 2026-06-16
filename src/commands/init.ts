@@ -1,8 +1,7 @@
 import { checkbox, input, confirm } from "@inquirer/prompts";
 import chalk from "chalk";
 import { detectProject } from "../detect/project.js";
-import { detectAll } from "../providers/registry.js";
-import type { ProviderAdapter } from "../providers/types.js";
+import { detect, install } from "../claude/provider.js";
 import { MCP_CATALOG } from "../mcp/catalog.js";
 import type { McpServerDefinition } from "../mcp/types.js";
 import { installMcpServers } from "../mcp/installer.js";
@@ -24,34 +23,23 @@ export async function initCommand(): Promise<void> {
   }
 
   console.log();
-  const providerResults = await detectAll();
-  for (const { info } of providerResults) {
-    const status = info.installed
-      ? chalk.green("  ✔ " + info.displayName)
-      : chalk.dim("  ✖ " + info.displayName);
-    const version = info.version ? chalk.dim(` (${info.version})`) : "";
-    console.log(`${status}${version}`);
-  }
+  const info = await detect();
+  const status = info.installed
+    ? chalk.green("  ✔ " + info.displayName)
+    : chalk.dim("  ✖ " + info.displayName);
+  const version = info.version ? chalk.dim(` (${info.version})`) : "";
+  console.log(`${status}${version}`);
   console.log();
 
-  const installed = providerResults.filter((r) => r.info.installed);
-  const notInstalled = providerResults.filter((r) => !r.info.installed);
-  const activeAdapters: ProviderAdapter[] = installed.map((r) => r.adapter);
-
-  if (installed.length === 0) {
+  if (!info.installed) {
     log.warn("Claude Code is not installed.");
     const doInstall = await confirm({ message: "Install Claude Code now?", default: true });
     if (doInstall) {
-      for (const { adapter } of notInstalled) {
-        await adapter.install();
-        activeAdapters.push(adapter);
-      }
+      await install();
+    } else {
+      log.error("Claude Code is required. Exiting.");
+      process.exit(1);
     }
-  }
-
-  if (activeAdapters.length === 0) {
-    log.error("No provider available. Exiting.");
-    process.exit(1);
   }
 
   // ── Step 2: deploy the Claude harness ─────────────────────────
@@ -63,7 +51,7 @@ export async function initCommand(): Promise<void> {
   const { mcpServers, envValues } = await collectMcpConfig();
   if (mcpServers.length > 0) {
     console.log();
-    await installMcpServers(activeAdapters, mcpServers, envValues);
+    await installMcpServers(mcpServers, envValues);
   }
 
   // ── Summary ───────────────────────────────────────────────────

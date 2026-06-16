@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { writeFile, mkdir, chmod } from "node:fs/promises";
 import { join, dirname, relative, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GeneratedFile } from "../providers/types.js";
+import type { GeneratedFile } from "./types.js";
 import type { HarnessParams } from "../detect/harness-params.js";
 import { detectHarnessParams } from "../detect/harness-params.js";
 import { log } from "../utils/logger.js";

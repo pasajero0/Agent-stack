@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { checkbox, input } from "@inquirer/prompts";
-import { detectAll } from "../providers/registry.js";
+import { detect, listMcp } from "../claude/provider.js";
 import { MCP_CATALOG } from "../mcp/catalog.js";
 import { installMcpServers } from "../mcp/installer.js";
 import { banner, log } from "../utils/logger.js";
@@ -8,25 +8,21 @@ import { banner, log } from "../utils/logger.js";
 export async function mcpCommand(action: "install" | "list"): Promise<void> {
   banner();
 
-  const results = await detectAll();
-  const installed = results.filter((r) => r.info.installed);
-
-  if (installed.length === 0) {
-    log.error("No AI coding providers detected. Run 'agent-stack init' first.");
+  const info = await detect();
+  if (!info.installed) {
+    log.error("Claude Code not detected. Run 'agent-stack init' first.");
     process.exit(1);
   }
 
   if (action === "list") {
-    for (const { adapter, info } of installed) {
-      console.log();
-      log.step(`${info.displayName} MCP servers:`);
-      const servers = await adapter.listMcp();
-      if (servers.length === 0) {
-        log.dim("  No MCP servers configured");
-      } else {
-        for (const s of servers) {
-          console.log(`  ${chalk.cyan(s.name.padEnd(25))} ${chalk.dim(s.command)} ${s.args.join(" ")}`);
-        }
+    console.log();
+    log.step(`${info.displayName} MCP servers:`);
+    const servers = await listMcp();
+    if (servers.length === 0) {
+      log.dim("  No MCP servers configured");
+    } else {
+      for (const s of servers) {
+        console.log(`  ${chalk.cyan(s.name.padEnd(25))} ${chalk.dim(s.command)} ${s.args.join(" ")}`);
       }
     }
     console.log();
@@ -50,16 +46,13 @@ export async function mcpCommand(action: "install" | "list"): Promise<void> {
   for (const server of servers) {
     if (server.envPrompts) {
       for (const [key, prompt] of Object.entries(server.envPrompts)) {
-        const value = await input({
-          message: prompt,
-        });
+        const value = await input({ message: prompt });
         envValues[key] = value;
       }
     }
   }
 
-  const adapters = installed.map((r) => r.adapter);
-  await installMcpServers(adapters, servers, envValues);
+  await installMcpServers(servers, envValues);
 
   console.log();
   log.success("MCP servers configured successfully!");
