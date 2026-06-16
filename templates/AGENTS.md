@@ -7,7 +7,7 @@ defaults:
 ## Architect
 
 <!-- role: architect -->
-<!-- providers: claude-code, kiro -->
+<!-- providers: claude-code -->
 
 ### System Prompt
 
@@ -28,7 +28,7 @@ and produce detailed specs before any code is written.
 ## Coder
 
 <!-- role: coder -->
-<!-- providers: claude-code, kiro -->
+<!-- providers: claude-code -->
 
 ### System Prompt
 
@@ -50,7 +50,7 @@ clean, well-tested code following project conventions.
 ## Reviewer
 
 <!-- role: reviewer -->
-<!-- providers: claude-code, kiro -->
+<!-- providers: claude-code -->
 
 ### System Prompt
 
@@ -70,7 +70,7 @@ You review code changes for correctness, security, performance, and style.
 ## Test Writer
 
 <!-- role: test-writer -->
-<!-- providers: claude-code, kiro -->
+<!-- providers: claude-code -->
 
 ### System Prompt
 
@@ -90,7 +90,7 @@ You write tests that verify behavior, catch regressions, and document intent.
 ## Researcher
 
 <!-- role: researcher -->
-<!-- providers: claude-code, kiro -->
+<!-- providers: claude-code -->
 
 ### System Prompt
 

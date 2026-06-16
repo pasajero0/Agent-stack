@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { select, checkbox, input, confirm } from "@inquirer/prompts";
+import { checkbox, input, confirm } from "@inquirer/prompts";
 import chalk from "chalk";
 import { detectProject, type ProjectContext } from "../detect/project.js";
-import { detectAll, getAllAdapters } from "../providers/registry.js";
+import { detectAll } from "../providers/registry.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import { MCP_CATALOG } from "../mcp/catalog.js";
 import type { McpServerDefinition } from "../mcp/types.js";
@@ -53,30 +53,15 @@ export async function initCommand(): Promise<void> {
   const installed = providerResults.filter((r) => r.info.installed);
   const notInstalled = providerResults.filter((r) => !r.info.installed);
 
-  let activeAdapters: ProviderAdapter[] = installed.map((r) => r.adapter);
+  const activeAdapters: ProviderAdapter[] = installed.map((r) => r.adapter);
 
   if (installed.length === 0) {
-    log.warn("No AI coding providers detected.");
-    const toInstall = await select({
-      message: "Which provider would you like to install?",
-      choices: notInstalled.map((r) => ({
-        name: r.info.displayName,
-        value: r.adapter.id,
-      })),
+    log.warn("Claude Code is not installed.");
+    const doInstall = await confirm({
+      message: "Install Claude Code now?",
+      default: true,
     });
-
-    const adapter = getAllAdapters().find((a) => a.id === toInstall);
-    if (adapter) {
-      await adapter.install();
-      activeAdapters = [adapter];
-    }
-  } else if (notInstalled.length > 0) {
-    const installMore = await confirm({
-      message: `Install additional providers? (${notInstalled.map((r) => r.info.displayName).join(", ")})`,
-      default: false,
-    });
-
-    if (installMore) {
+    if (doInstall) {
       for (const { adapter } of notInstalled) {
         await adapter.install();
         activeAdapters.push(adapter);
@@ -85,7 +70,7 @@ export async function initCommand(): Promise<void> {
   }
 
   if (activeAdapters.length === 0) {
-    log.error("No providers available. Exiting.");
+    log.error("No provider available. Exiting.");
     process.exit(1);
   }
 

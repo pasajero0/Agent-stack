@@ -1,11 +1,7 @@
 import type { ProviderAdapter, ProviderInfo } from "./types.js";
 import { ClaudeCodeAdapter } from "./claude-code.js";
-import { KiroAdapter } from "./kiro.js";
 
-const adapters: ProviderAdapter[] = [
-  new ClaudeCodeAdapter(),
-  new KiroAdapter(),
-];
+const adapters: ProviderAdapter[] = [new ClaudeCodeAdapter()];
 
 export function getAllAdapters(): ProviderAdapter[] {
   return adapters;

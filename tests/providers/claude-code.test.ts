@@ -63,9 +63,9 @@ describe("ClaudeCodeAdapter", () => {
     it("skips agents not targeting claude-code", async () => {
       const agents = [
         {
-          name: "KiroOnly",
-          providers: ["kiro"],
-          systemPrompt: "Kiro agent",
+          name: "OtherOnly",
+          providers: ["other-provider"],
+          systemPrompt: "Non-Claude agent",
         },
       ];
 

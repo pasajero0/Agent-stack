@@ -12,7 +12,7 @@ defaults:
 ## Architect
 
 <!-- role: architect -->
-<!-- providers: claude-code, kiro -->
+<!-- providers: claude-code -->
 
 ### System Prompt
 
@@ -63,7 +63,7 @@ describe("parseAgentsContent", () => {
     const config = parseAgentsContent(SAMPLE_AGENTS_MD);
     const architect = config.agents[0];
     expect(architect.role).toBe("architect");
-    expect(architect.providers).toEqual(["claude-code", "kiro"]);
+    expect(architect.providers).toEqual(["claude-code"]);
 
     const reviewer = config.agents[1];
     expect(reviewer.role).toBe("reviewer");
