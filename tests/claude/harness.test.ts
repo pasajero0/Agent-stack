@@ -51,4 +51,12 @@ describe("buildHarnessFiles", () => {
   it("emits an empty rules dir via its README", () => {
     expect(byPath(".claude/rules/README.md")).toBeDefined();
   });
+
+  it("stamps a version manifest with template version + params", () => {
+    const m = byPath(".claude/.harness.json");
+    expect(m).toBeDefined();
+    const parsed = JSON.parse(m!.content);
+    expect(typeof parsed.templateVersion).toBe("string");
+    expect(parsed.params.packageManager).toBe("pnpm");
+  });
 });

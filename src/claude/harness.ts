@@ -54,6 +54,19 @@ function templatesRoot(): string {
   throw new Error("Could not find templates/claude");
 }
 
+/** agent-stack's own version — stamped into the deployed harness manifest. */
+function toolVersion(): string {
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  for (const c of [join(thisDir, "..", "package.json"), join(thisDir, "..", "..", "package.json")]) {
+    try {
+      return JSON.parse(readFileSync(c, "utf-8")).version ?? "0.0.0";
+    } catch {
+      continue;
+    }
+  }
+  return "0.0.0";
+}
+
 function substitute(text: string, p: HarnessParams): string {
   return text
     .replaceAll("{{PM}}", p.packageManager)
@@ -178,15 +191,21 @@ export function buildHarnessFiles(params: HarnessParams): GeneratedFile[] {
   });
   files.push({ path: "CLAUDE.md", content: buildClaudeMd(params, root), action: "create" });
   files.push({ path: "CODEMAP.md", content: buildCodemap(), action: "create" });
+  files.push({
+    path: ".claude/.harness.json",
+    content: JSON.stringify({ templateVersion: toolVersion(), params }, null, 2) + "\n",
+    action: "create",
+  });
 
   return files;
 }
 
-/** Detect params, build the harness, write it to disk (chmod +x hooks). */
-export async function emitHarness(projectDir: string): Promise<GeneratedFile[]> {
-  const params = await detectHarnessParams(projectDir);
-  const files = buildHarnessFiles(params);
-
+/** Write a harness file set to disk (chmod +x hooks). Only touches the listed
+ *  (emitter-owned) paths — anything else under .claude/ (rules/, tmp/) is left intact. */
+export async function writeHarnessFiles(
+  projectDir: string,
+  files: GeneratedFile[]
+): Promise<void> {
   for (const f of files) {
     const full = join(projectDir, f.path);
     await mkdir(dirname(full), { recursive: true });
@@ -196,6 +215,12 @@ export async function emitHarness(projectDir: string): Promise<GeneratedFile[]> 
     }
     log.success(f.path);
   }
+}
 
+/** Detect params, build the harness, write it to disk. */
+export async function emitHarness(projectDir: string): Promise<GeneratedFile[]> {
+  const params = await detectHarnessParams(projectDir);
+  const files = buildHarnessFiles(params);
+  await writeHarnessFiles(projectDir, files);
   return files;
 }
