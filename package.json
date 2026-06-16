@@ -1,8 +1,9 @@
 {
   "name": "agent-stack",
   "version": "0.1.0",
-  "description": "CLI configurator for AI coding environments — detect providers, manage MCP servers, generate agent configs",
+  "description": "CLI that deploys a Claude Code harness (hooks, subagents, skills, guards) onto your repo and manages MCP servers",
   "type": "module",
+  "main": "./dist/index.js",
   "bin": {
     "agent-stack": "./bin/cli.mjs"
   },
@@ -24,10 +25,11 @@
   "keywords": [
     "ai",
     "claude",
-    "kiro",
+    "claude-code",
     "mcp",
+    "hooks",
+    "subagents",
     "agent",
-    "configurator",
     "cli"
   ],
   "license": "MIT",

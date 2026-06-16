@@ -1,193 +1,113 @@
-# Agent-stack
+# agent-stack
 
-CLI configurator for AI coding environments. Detect providers, manage MCP servers, generate agent configs from a single source of truth.
+CLI that deploys a **Claude Code harness** onto any repository and manages MCP servers. One command
+drops in a battle-tested `.claude/` setup — deterministic guards, session/git context, a disciplined
+migration loop, and scoped subagents — specialized to your project.
 
-## Problem
+## Install
 
-There is no unified CLI tool that detects installed AI coding providers, configures them from a single source, and manages MCP servers cross-provider. Each tool (Claude Code, Kiro, Cursor, etc.) has its own config format, its own MCP setup, and its own agent definitions. Agent-stack fills this gap.
-
-## How it works
-
-```
-npx agent-stack init
-```
-
-The wizard auto-detects the scenario and adapts:
-
-```
-Existing project (has package.json/src/.git):
-  → fewer questions, project name from package.json
-  → agents pre-selected based on context
-
-Empty directory:
-  → asks project name, language, full configuration
+```bash
+npx agent-stack init        # no install
+# or
+npm i -g agent-stack
 ```
 
-Four steps:
-1. **detect()** — existing project or empty? which providers installed?
-2. **wizard()** — questions adapted to scenario, agent selection, MCP servers
-3. **generateAGENTS()** — filled AGENTS.md from agent defaults + answers
-4. **deployAdapters()** — provider configs (.claude/, .kiro/) + MCP servers
+Requires `git`, `jq`, and (for the verify hook) `python3` on PATH for the deployed hooks to run.
 
-## CLI Commands
+## What it deploys
+
+`agent-stack generate` (or `init`) writes a `.claude/` tree plus `CLAUDE.md` / `CODEMAP.md`,
+specialized to the detected project (package manager, lockfile, build outputs, default branch, forge):
+
+```
+.claude/
+├── settings.json          # hook registration + permission allow-list
+├── settings.local.json    # read-deny for build/generated noise
+├── hooks/                 # 6 deterministic shell hooks (run outside the model)
+│   ├── guard-bash.sh        # block `git push` + foreign package managers
+│   ├── guard-file.sh        # block edits to generated files / lockfile; confirm .env
+│   ├── session-start-context.sh
+│   ├── stop-flag-reflect.sh
+│   ├── post-edit-lint.sh    # self-disables if no linter is installed
+│   └── post-edit-verify.sh  # post-apply diff check during migrations
+├── agents/                # task-analyzer, code-reviewer, test-writer, pattern-scout
+├── commands/              # /reflect, /review
+├── skills/                # migration, mr-description, + reference docs
+└── rules/                 # EMPTY by design — generate per-repo (see below)
+```
+
+The hooks are the core value: they enforce hard prohibitions at tool-call time and inject context,
+deterministically, regardless of the model.
+
+## Commands
 
 | Command | Description |
 |---------|-------------|
-| `agent-stack init` | Full setup wizard (4-step flow) |
-| `agent-stack detect` | Detect project context + installed providers |
-| `agent-stack mcp install` | Install MCP servers |
+| `agent-stack init` | Wizard: detect environment → deploy harness → optionally install MCP servers |
+| `agent-stack generate` | Deploy the harness into the current repo |
+| `agent-stack sync` | `detect` + `generate` |
+| `agent-stack detect` | Report project context + whether Claude Code is installed |
+| `agent-stack mcp install` | Install MCP servers from the catalog |
 | `agent-stack mcp list` | List configured MCP servers |
-| `agent-stack generate` | Generate provider configs from AGENTS.md |
-| `agent-stack sync` | Detect + generate (shortcut) |
 
-## AGENTS.md — Single Source of Truth
+## After deploying
 
-One file defines all agent roles. The wizard generates provider-specific configs from it:
+1. **Exclude the harness from git** (it is personal) — add to `.git/info/exclude`:
+   ```
+   .claude/
+   CLAUDE.md
+   CODEMAP.md
+   ```
+2. **Generate rules** — `.claude/rules/` ships empty on purpose: path-scoped rules must reflect *your*
+   code, not another project's. Open `claude` in the repo and run the **pattern-scout** subagent; it
+   drafts rules you review and keep.
+3. **Smoke-test the guards** — a `git push` or a foreign package-manager command should be blocked;
+   a normal command should pass.
 
-- **Claude Code** — `CLAUDE.md`, `.claude/settings.json`
-- **Kiro** — `.kiro/rules/*.md`
+## MCP server catalog
 
-```markdown
----
-version: 1
-defaults:
-  model: claude-sonnet-4-20250514
----
+Defined in `mcp/catalog.json`, installed via `claude mcp add`:
 
-## Architect
-<!-- role: architect -->
-<!-- providers: claude-code, kiro -->
-
-### System Prompt
-You are a software architect...
-
-### Rules
-- Always read existing code before proposing changes
-- Produce a plan before editing files
-```
-
-## Agents
-
-Six built-in agents, each defined as `agents/<name>/AGENT.md`:
-
-| Agent | Role | Description |
-|-------|------|-------------|
-| **Scout** | Advisory (v0.2) | Scans existing projects, recommends agent configuration |
-| **Architect** | Planning | Explores codebases, designs implementation plans |
-| **Coder** | Implementation | Implements features, fixes bugs, follows conventions |
-| **Reviewer** | Quality | Reviews code for correctness, security, performance |
-| **Test Writer** | Testing | Writes tests that verify behavior and catch regressions |
-| **Researcher** | Research | Investigates APIs, libraries, documentation |
-
-Agent defaults are loaded from `agents/*/AGENT.md` at runtime — single source of truth.
-
-## Supported Providers
-
-| Provider | Status | Detection |
-|----------|--------|-----------|
-| Claude Code | v0.1 | `claude --version` |
-| Kiro | v0.1 | `kiro` binary / Kiro.app |
-| Cursor | planned | — |
-| Windsurf | planned | — |
-
-## MCP Server Catalog
-
-Defined in `mcp/catalog.json`:
-
-| Server | Package | Description |
-|--------|---------|-------------|
-| GitHub | `@modelcontextprotocol/server-github` | Issues, PRs, repos |
-| Fetch | `mcp-server-fetch` | Web content as markdown |
-| Memory | `@modelcontextprotocol/server-memory` | Persistent knowledge graph |
-| Sequential Thinking | `@modelcontextprotocol/server-sequential-thinking` | Structured reasoning |
+| Server | Description |
+|--------|-------------|
+| GitHub | Issues, PRs, repos |
+| Fetch | Web content as markdown |
+| Memory | Persistent knowledge graph |
+| Sequential Thinking | Structured reasoning |
 
 ## Architecture
 
 ```
 agent-stack/
-├── agents/                  # Agent definitions (AGENT.md + skills/)
-│   ├── scout/               # Advisory agent (v0.2)
-│   ├── architect/
-│   ├── coder/
-│   ├── reviewer/
-│   ├── test-writer/
-│   └── researcher/
-├── bin/cli.mjs              # Entry point
-├── mcp/catalog.json         # MCP server catalog (JSON)
+├── bin/cli.mjs            # executable shim → dist/index.js
 ├── src/
-│   ├── cli.ts               # Commander program
-│   ├── detect/              # Project detection (existing/empty)
-│   ├── commands/            # init, detect, mcp, generate, sync
-│   ├── providers/           # Adapter per provider (claude-code, kiro)
-│   ├── mcp/                 # MCP catalog loader + installer
-│   ├── agents/              # AGENTS.md parser, defaults loader, generator
-│   └── utils/               # Shell helpers, logger
-├── templates/AGENTS.md      # Default template (5 agents)
-└── tests/                   # 22 tests
+│   ├── cli.ts             # commander program
+│   ├── commands/          # init, detect, generate, sync, mcp
+│   ├── detect/            # project + harness-param detection
+│   ├── claude/            # harness emitter (templates → .claude/)
+│   ├── mcp/               # MCP catalog loader + installer
+│   └── utils/             # shell helpers, logger
+├── templates/claude/      # harness core (tokenized) — the source of truth
+├── mcp/catalog.json       # MCP server catalog
+└── tests/                 # vitest unit tests
 ```
 
-Adding a new provider = implement `ProviderAdapter` interface + register in registry.
+`templates/claude/` holds the harness with `{{TOKEN}}` placeholders; the emitter in `src/claude/`
+substitutes values from the detector and writes the tree. This tool targets **Claude Code only**.
 
 ## Development
 
 ```bash
-pnpm install        # also installs husky hooks via prepare script
-pnpm run build
-pnpm run test
-pnpm run typecheck
+pnpm install      # pnpm only — npm/yarn/bun are not supported
+pnpm build
+pnpm test
+pnpm typecheck    # the static gate (no linter yet)
 ```
 
-## Git Conventions
+## Conventions
 
-### Versioning
-
-[Semver](https://semver.org/) — version reflects the nature of changes:
-
-```
-v0.1.0
-  │ │ │
-  │ │ └── patch: bug fixes, minor corrections
-  │ └──── minor: new functionality, backwards compatible
-  └────── major: breaking changes
-```
-
-Commit types map to version bumps:
-- `feat` → minor (0.1.0 → 0.2.0)
-- `fix` → patch (0.1.0 → 0.1.1)
-- `docs`, `refactor`, `test`, `chore`, `ci`, `style`, `perf`, `build` → patch or no bump
-
-### Branches
-
-Branches and commits use the same type prefixes.
-
-Allowed types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `style`, `perf`, `build`, `revert`.
-
-```
-<type>/<short-description>
-
-feat/scout-agent
-fix/mcp-env-placeholder
-refactor/init-flow
-docs/update-readme
-chore/commitlint-setup
-```
-
-### Commits
-
-[Conventional Commits](https://www.conventionalcommits.org/) enforced by commitlint + husky.
-
-```
-<type>: <description>
-
-feat: add project detection for existing/empty directories
-fix: handle empty env vars with placeholder
-docs: update README with v0.1 architecture
-refactor: split init into 4-step flow
-test: add project detection tests
-chore: move MCP catalog to JSON
-```
-
-Commits that don't follow this format will be rejected by the commit-msg hook.
+[Conventional Commits](https://www.conventionalcommits.org/) enforced by commitlint + husky
+(`commit-msg`). Default branch `main`; `git push` is manual. GitHub PRs (`gh`).
 
 ## License
 
