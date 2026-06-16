@@ -1,5 +1,4 @@
 import type { McpServerDefinition, McpServerConfig } from "../mcp/types.js";
-import type { AgentDefinition } from "../agents/types.js";
 
 export interface ProviderInfo {
   name: string;
@@ -25,9 +24,4 @@ export interface ProviderAdapter {
   configureMcp(servers: McpServerDefinition[], envValues: Record<string, string>): Promise<void>;
   removeMcp(serverName: string): Promise<void>;
   listMcp(): Promise<McpServerConfig[]>;
-
-  generateAgentConfig(
-    agents: AgentDefinition[],
-    projectDir: string
-  ): Promise<GeneratedFile[]>;
 }

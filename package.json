@@ -10,7 +10,6 @@
   "files": [
     "dist",
     "bin",
-    "agents",
     "mcp",
     "templates"
   ],
@@ -44,7 +43,6 @@
     "chalk": "5.4.1",
     "commander": "13.1.0",
     "execa": "9.5.2",
-    "gray-matter": "4.0.3",
     "ora": "8.2.0"
   },
   "devDependencies": {

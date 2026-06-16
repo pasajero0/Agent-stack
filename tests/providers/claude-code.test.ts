@@ -40,49 +40,4 @@ describe("ClaudeCodeAdapter", () => {
     });
   });
 
-  describe("generateAgentConfig", () => {
-    it("generates CLAUDE.md from agent definitions", async () => {
-      const agents = [
-        {
-          name: "Architect",
-          role: "architect",
-          providers: ["claude-code"],
-          systemPrompt: "You are an architect.",
-          rules: ["Read code first", "Plan before coding"],
-        },
-      ];
-
-      const files = await adapter.generateAgentConfig(agents, "/tmp/test");
-      expect(files).toHaveLength(1);
-      expect(files[0].path).toBe("CLAUDE.md");
-      expect(files[0].content).toContain("## Architect");
-      expect(files[0].content).toContain("You are an architect.");
-      expect(files[0].content).toContain("- Read code first");
-    });
-
-    it("skips agents not targeting claude-code", async () => {
-      const agents = [
-        {
-          name: "OtherOnly",
-          providers: ["other-provider"],
-          systemPrompt: "Non-Claude agent",
-        },
-      ];
-
-      const files = await adapter.generateAgentConfig(agents, "/tmp/test");
-      expect(files).toHaveLength(0);
-    });
-
-    it("includes agents with no provider restriction", async () => {
-      const agents = [
-        {
-          name: "Universal",
-          systemPrompt: "Works everywhere",
-        },
-      ];
-
-      const files = await adapter.generateAgentConfig(agents, "/tmp/test");
-      expect(files).toHaveLength(1);
-    });
-  });
 });

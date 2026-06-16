@@ -38,11 +38,10 @@ mcp
 
 program
   .command("generate")
-  .description("Generate provider-specific configs from AGENTS.md")
-  .option("-p, --path <path>", "Path to AGENTS.md", "AGENTS.md")
+  .description("Generate the Claude harness into the current repo")
   .action(generateCommand);
 
 program
   .command("sync")
-  .description("Detect providers and regenerate configs from AGENTS.md")
+  .description("Detect Claude Code and regenerate the harness")
   .action(syncCommand);
