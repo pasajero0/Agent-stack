@@ -1,3 +1,5 @@
+![CI](https://github.com/pasajero0/Agent-stack/actions/workflows/ci.yml/badge.svg)
+
 # agent-stack
 
 CLI that deploys a **Claude Code harness** onto any repository and manages MCP servers. One command
@@ -7,9 +9,9 @@ migration loop, and scoped subagents — specialized to your project.
 ## Install
 
 ```bash
-npx agent-stack init        # no install
+npx @pasajero_0/agent-stack init        # no install
 # or
-npm i -g agent-stack
+npm i -g @pasajero_0/agent-stack
 ```
 
 Requires `git`, `jq`, and (for the verify hook) `python3` on PATH for the deployed hooks to run.
