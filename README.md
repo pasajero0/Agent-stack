@@ -2,9 +2,10 @@
 
 # agent-stack
 
-CLI that deploys a **Claude Code harness** onto any repository and manages MCP servers. One command
-drops in a battle-tested `.claude/` setup — deterministic guards, session/git context, a disciplined
-migration loop, and scoped subagents — specialized to your project.
+CLI that deploys a **Claude Code harness** onto any JS/TS repository and manages MCP servers. One command
+drops in a battle-tested harness — a `.claude/` tree and a repo-root `CLAUDE.md` — with deterministic
+guards, session/git context, a disciplined migration loop, and scoped subagents, specialized to your
+project.
 
 ## Install
 
@@ -18,10 +19,14 @@ Requires `git`, `jq`, and (for the verify hook) `python3` on PATH for the deploy
 
 ## What it deploys
 
-`agent-stack generate` (or `init`) writes a `.claude/` tree plus `CLAUDE.md` / `CODEMAP.md`,
-specialized to the detected project (package manager, lockfile, build outputs, default branch, forge):
+The harness is a set of layers with different enforcement, not a single instruction file.
+`agent-stack generate` (or `init`) writes them all — a `.claude/` tree together with a repo-root
+`CLAUDE.md` / `CODEMAP.md` — specialized to the detected project (package manager, lockfile, build
+outputs, default branch, forge):
 
 ```
+CLAUDE.md                  # project guide — the soft, always-on layer (built by the emitter)
+CODEMAP.md                 # where things live — generated stub, fill in
 .claude/
 ├── settings.json          # hook registration + permission allow-list
 ├── settings.local.json    # read-deny for build/generated noise
@@ -38,8 +43,14 @@ specialized to the detected project (package manager, lockfile, build outputs, d
 └── rules/                 # EMPTY by design — generate per-repo (see below)
 ```
 
-The hooks are the core value: they enforce hard prohibitions at tool-call time and inject context,
-deterministically, regardless of the model.
+The layers differ in how strongly they bind. `CLAUDE.md` is always-on guidance the model can still
+ignore; `rules/` are the same soft conventions but scoped to matching paths; `hooks/` are
+deterministic scripts that run *outside* the model at tool-call time — a blocked `git push` returns
+`exit 2` and cannot be skipped the way a `CLAUDE.md` line can. So `CLAUDE.md` is the first, softest
+layer of the harness, not an add-on to it. The emitter deploys exactly what the tree above shows —
+the `.claude/` tree and the root `CLAUDE.md` / `CODEMAP.md`. The manual guide,
+[docs/HARNESS-SETUP.md](docs/HARNESS-SETUP.md), walks through the same harness **and** its
+surroundings the emitter does not install (official plugins, linter, git hooks).
 
 ## Commands
 
@@ -89,13 +100,17 @@ agent-stack/
 │   ├── claude/            # harness emitter (templates → .claude/)
 │   ├── mcp/               # MCP catalog loader + installer
 │   └── utils/             # shell helpers, logger
-├── templates/claude/      # harness core (tokenized) — the source of truth
+├── templates/claude/      # harness core (tokenized) — hooks/agents/skills (CLAUDE.md is built in code)
+├── docs/HARNESS-SETUP.md  # manual deploy guide — the harness + setup the emitter doesn't install
 ├── mcp/catalog.json       # MCP server catalog
 └── tests/                 # vitest unit tests
 ```
 
 `templates/claude/` holds the harness with `{{TOKEN}}` placeholders; the emitter in `src/claude/`
-substitutes values from the detector and writes the tree. This tool targets **Claude Code only**.
+substitutes values from the detector and writes the tree. `CLAUDE.md` / `CODEMAP.md` aren't in
+`templates/` — the emitter builds them in code (`buildClaudeMd` from the detected params plus the
+`_normative.md` generator input, `buildCodemap`) and writes them to the **repo root**, git-excluded —
+see [After deploying](#after-deploying). This tool targets **Claude Code only**.
 
 ## Development
 
