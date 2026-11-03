@@ -11,7 +11,7 @@ the tables with **this project's** actual structure.
 
 ## Tooling
 
-- **Package manager**: {{PM}} only.
+- **Package manager**: `<package manager>` only.
 - **Build**: `<build command>` → `<output dir>`.
 - **Typecheck / static gate**: `<typecheck command>`.
 - **Test**: `<test command>`.

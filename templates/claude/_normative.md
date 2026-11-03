@@ -1,8 +1,82 @@
 <!--
 Normative CLAUDE.md sections — emitted VERBATIM into the target repo's CLAUDE.md by the harness
 generator. Not a deployed file itself (leading underscore = generator input, not copied as-is).
-These two sections are project-agnostic and must transfer unchanged.
+These sections are project-agnostic and must transfer unchanged.
 -->
+
+## Explaining to the human
+
+Explain as simply as possible — the human decides from your reply, so it must be readable when tired.
+
+- Lead with the answer in one or two plain sentences. Details come after, or go into a file.
+- Short sentences, everyday words. Explain a term the first time, or do not use it.
+- When proposing a change, show **now → proposed** side by side, with one concrete example.
+- Few options: recommend one. End with one question the human can answer with yes/no or a choice.
+
+## Spec-driven workflow
+
+Each stage of work goes through these steps; hooks enforce the ones marked 🔒.
+
+1. **`/grill`** — interrogate the idea until nothing is open. Decisions → **`/adr`**; edge cases → the spec.
+2. **`/spec <stage>`** — `SPEC.md` with EARS acceptance criteria (happy, unhappy, edge), reviewed by the
+   **spec-reviewer** subagent, committed on a branch. A human pushes, reviews and merges the MR.
+   🔒 The stage's first spec must be merged before any of its code (spec-gate).
+3. **`/plan <stage>`** — on a branch named after the stage (`A0-ingest`): `.claude/tmp/<stage>/tasks.json`,
+   every AC → a task with a `verify` command and a tier.
+   🔒 The spec leads the code: a requirement change is first a committed `spec: …` with a "## Changes"
+   entry, then tests and code — in the same branch and MR (spec-gate checks the order).
+4. **Red tests first** — the **test-writer** subagent writes failing tests named `"<stage> AC-n: …"`.
+   🔒 `.claude/bin/trace` links criteria and tests: a criterion without a test, or a test for a criterion
+   the spec does not have (feature drift), keeps `STATUS: DONE` blocked.
+   🔒 cheat-guard blocks adding skipped tests or suppressed checks (`.skip`, `@ts-ignore`, `any`, …).
+5. **One task at a time** — the **implementer** subagent, model by tier; then `.claude/bin/verify <id>`.
+   🔒 Only `verify` marks a task as passing.
+6. **Review** — the **code-reviewer** subagent against the spec, then the report below.
+   🔒 evidence-gate blocks `STATUS: DONE` while a task fails, without EVIDENCE, while criteria and tests
+   do not line up (`trace`), or while a code-health SLO is broken (`health`).
+
+**Drift, measured like a service.** `.claude/bin/health` measures what the branch changed (file size,
+new dependencies, project metrics such as complexity) against SLOs in `.claude/gates.json` and appends
+each run to `.claude/tmp/health.jsonl`. arch-guard blocks new imports across layer boundaries. A broken
+SLO or boundary is fixed — or justified in an ADR, after which the human raises the limit.
+
+## Report contract
+
+Finish every stage, task or autonomous run with:
+
+```
+STATUS: DONE | IN PROGRESS | BLOCKED
+DONE: what is finished
+NOT DONE: what is left
+EVIDENCE: the commands run and their real output — a claim without evidence is not done
+RISKS: what may break, what was not checked
+NEEDS HUMAN DECISION: questions only the human can answer (never guessed)
+```
+
+## Modes
+
+`mode` in `.claude/gates.json` — switched only by the human.
+
+- **interactive** (default): show each diff and wait for confirmation before applying it.
+- **autonomous**: diffs need no confirmation. Hard limits stay: never install anything from outside
+  (guard-bash denies it), never push. Commit per phase — Conventional Commits, the phase in the
+  subject, what and why in the body. A decision you cannot make → NEEDS HUMAN DECISION, then move to
+  the next item; never guess. The human fixes up in the morning.
+
+## Model routing
+
+Pick the subagent by the work, not by habit. Delegation is not free — every subagent loads its own
+context — so do trivial things directly and delegate when it buys a cheaper model or a clean context.
+
+| Work | Subagent | Model |
+| --- | --- | --- |
+| fact lookups in the repo | researcher | haiku |
+| task tier S / M (from tasks.json) | implementer | sonnet |
+| task tier L, risky paths (auth, money, data migrations) | implementer | opus |
+| tests from acceptance criteria | test-writer | sonnet |
+| spec review, code review, task analysis | spec-reviewer, code-reviewer, task-analyzer | opus |
+
+A task that fails `verify` twice moves one tier up.
 
 ## Multi-step migrations
 
@@ -10,7 +84,8 @@ Before any multi-file migration or refactor, write decision invariants to
 `.claude/tmp/<task>-plan.md`. Re-read that plan from disk (not memory) immediately before composing
 each diff preview, and open every diff preview with a compliance header — e.g.
 `Plan check: D1 — ok; D3 — n/a`. Any deviation requires explicit user approval before the diff —
-surface it as `ОТКЛОНЕНИЕ ОТ ПЛАНА` with rationale.
+surface it as `ОТКЛОНЕНИЕ ОТ ПЛАНА` with rationale. In autonomous mode, put the plan check in the
+commit body instead of waiting, and list deviations under NEEDS HUMAN DECISION.
 
 ## Scope discipline
 

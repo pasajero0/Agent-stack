@@ -2,10 +2,10 @@
 
 # agent-stack
 
-CLI that deploys a **Claude Code harness** onto any JS/TS repository and manages MCP servers. One command
-drops in a battle-tested harness — a `.claude/` tree and a repo-root `CLAUDE.md` — with deterministic
-guards, session/git context, a disciplined migration loop, and scoped subagents, specialized to your
-project.
+CLI that deploys a **Claude Code harness** onto a repository and manages MCP servers. The harness is an
+enforcement layer: deterministic hooks outside the model that gate a spec-driven workflow — no code
+before the spec is merged, no skipped tests, no "done" without evidence — plus the skills and subagents
+that drive that workflow. It is stack-agnostic: everything language-specific lives in one config file.
 
 ## Install
 
@@ -15,111 +15,151 @@ npx @pasajero_0/agent-stack init        # no install
 npm i -g @pasajero_0/agent-stack
 ```
 
-Requires `git`, `jq`, and (for the verify hook) `python3` on PATH for the deployed hooks to run.
+The deployed hooks need `bash`, `git` and `jq` on PATH (`python3` for the migration verify hook).
+GNU `timeout` is used when present (`gtimeout` on macOS with coreutils); without it hooks run unbounded.
 
 ## What it deploys
 
-The harness is a set of layers with different enforcement, not a single instruction file.
-`agent-stack generate` (or `init`) writes them all — a `.claude/` tree together with a repo-root
-`CLAUDE.md` / `CODEMAP.md` — specialized to the detected project (package manager, lockfile, build
-outputs, default branch, forge):
-
 ```
-CLAUDE.md                  # project guide — the soft, always-on layer (built by the emitter)
-CODEMAP.md                 # where things live — generated stub, fill in
+CLAUDE.md                  # project guide + workflow, report contract, modes, model routing (yours after generate)
+CODEMAP.md                 # where things live — a stub to fill in (yours after generate)
 .claude/
+├── gates.json             # every stack-specific value the hooks read — human-edited (yours after generate)
 ├── settings.json          # hook registration + permission allow-list
-├── settings.local.json    # read-deny for build/generated noise
-├── hooks/                 # 6 deterministic shell hooks (run outside the model)
-│   ├── guard-bash.sh        # block `git push` + foreign package managers
-│   ├── guard-file.sh        # block edits to generated files / lockfile; confirm .env
-│   ├── session-start-context.sh
+├── settings.local.json    # read-deny for build/generated noise (yours after generate)
+├── hooks/                 # deterministic shell hooks, run outside the model
+│   ├── guard-bash.sh        # block git push (in any form), foreign package managers; installs: ask / deny
+│   ├── guard-file.sh        # protect the harness itself, generated files, lockfiles, tasks.json; confirm .env
+│   ├── spec-gate.sh         # the spec leads the code: first spec merged, later changes committed first
+│   ├── cheat-guard.sh       # block edits that add .skip/.only, @ts-ignore, eslint-disable, any, …
+│   ├── arch-guard.sh        # block new imports across layer boundaries set in gates.json
+│   ├── evidence-gate.sh     # Stop: no "STATUS: DONE" while a task fails or without EVIDENCE
+│   ├── post-edit-lint.sh    # run the configured linter on the edited file, surface errors + warnings
+│   ├── post-edit-verify.sh  # post-apply diff check during migrations
+│   ├── session-start-context.sh  # git context, mode, active stage progress
 │   ├── stop-flag-reflect.sh
-│   ├── post-edit-lint.sh    # self-disables if no linter is installed
-│   └── post-edit-verify.sh  # post-apply diff check during migrations
-├── agents/                # task-analyzer, code-reviewer, test-writer, pattern-scout
+│   └── gates-lib.sh         # shared helpers (not a hook)
+├── bin/verify             # runs each task's verify command — the only writer of `passes`
+├── bin/trace              # links spec criteria ↔ tests ("A0 AC-3: …"): missing tests, invented criteria
+├── bin/health             # code-health SLIs on the branch's changes vs SLOs; time series in tmp/health.jsonl
+├── agents/                # spec-reviewer, implementer, test-writer, code-reviewer, task-analyzer,
+│                          # researcher, pattern-scout — each with a model and effort level
+├── skills/                # grill, adr, spec, plan, migration, mr-description + reference docs
 ├── commands/              # /reflect, /review
-├── skills/                # migration, mr-description, + reference docs
-└── rules/                 # EMPTY by design — generate per-repo (see below)
+└── rules/                 # EMPTY by design — generate per repo with pattern-scout
 ```
 
-The layers differ in how strongly they bind. `CLAUDE.md` is always-on guidance the model can still
-ignore; `rules/` are the same soft conventions but scoped to matching paths; `hooks/` are
-deterministic scripts that run *outside* the model at tool-call time — a blocked `git push` returns
-`exit 2` and cannot be skipped the way a `CLAUDE.md` line can. So `CLAUDE.md` is the first, softest
-layer of the harness, not an add-on to it. The emitter deploys exactly what the tree above shows —
-the `.claude/` tree and the root `CLAUDE.md` / `CODEMAP.md`. The manual guide,
-[docs/HARNESS-SETUP.md](docs/HARNESS-SETUP.md), walks through the same harness **and** its
-surroundings the emitter does not install (official plugins, linter, git hooks).
+## The workflow it enforces
+
+1. **`/grill`** — the agent interviews you in numbered rounds, each question with a recommended answer,
+   until no decision is open. Decisions become ADRs (**`/adr`**), edge cases go into the spec.
+2. **`/spec <stage>`** — `docs/specs/<stage>/SPEC.md` with EARS acceptance criteria (happy, unhappy, edge),
+   reviewed by the **spec-reviewer** subagent. You push, review and **merge the MR — merged means approved**.
+   Until then **spec-gate** blocks every code edit for the stage.
+3. **`/plan <stage>`** on a branch named after the stage (`A0-ingest` — the gates read the stage from it):
+   `.claude/tmp/<stage>/tasks.json`, every criterion → a task with a `verify` command and a tier (S/M/L)
+   that picks the implementer's model.
+   **Requirements change?** The spec changes first, in the same branch: a `spec: …` commit with a
+   "## Changes" entry, then tests and code. spec-gate keeps code closed while the spec has uncommitted
+   edits or an unexplained change — so history always shows the spec before the code it explains.
+4. **Tests first**, named with criterion ids. **cheat-guard** blocks adding skipped tests or suppressed checks.
+5. **One task at a time** by the **implementer** subagent; **`.claude/bin/verify`** is the only thing that
+   marks a task as passing.
+6. **Report** with STATUS / DONE / NOT DONE / EVIDENCE / RISKS / NEEDS HUMAN DECISION.
+   **evidence-gate** blocks a "done" that the task results contradict.
+
+## Drift — measured like a service
+
+Tests catch a broken feature. Two more kinds of drift are measured the way you would monitor a server:
+
+| Server | Here |
+| --- | --- |
+| SLI — a metric | file size, new dependencies, complexity of the code this branch changed; layer imports |
+| SLO — a target | `slo` / `health[].max` in `gates.json`; `layers` boundaries |
+| Breach → stop releases | `STATUS: DONE` blocked; fix it, or justify it in an ADR and the human raises the limit |
+| Time series | `.claude/tmp/health.jsonl`, one line per `health` run |
+| Trace | spec criterion → test (`trace`) → code, in commit order: `spec: …` before the code |
+
+Only what the branch changed is measured, so old debt never blocks new work and new debt cannot slip in.
+
+## Configuration — `.claude/gates.json`
+
+Detected for node, python, go and rust (other stacks get empty defaults to fill in):
+
+| Key | Meaning |
+| --- | --- |
+| `mode` | `interactive` (default: confirm each diff) or `autonomous` (no confirmations; installs denied, no push, commit per phase) |
+| `baseBranch` | where merged specs are read from (`origin/<base>` if present, else local) |
+| `specGate` | `strict` (no code without a merged spec) · `stage` (only on a stage branch) · `off` |
+| `stagePattern` | regex on the branch name's last segment; group 1 is the stage (default: `A0-…` → `A0`) |
+| `openPaths` | paths editable without a spec (docs, `*.md`, `.claude/`) |
+| `protectedGlobs` | generated files and lockfiles — never hand-edited |
+| `packageManager`, `forbiddenPackageManagers` | the one package manager, the blocked ones |
+| `installPatterns`, `cheatPatterns` | what counts as an install / a cheat (POSIX regex) |
+| `commands.test`, `commands.lint`, `lintMatch` | test command; per-file lint command with `{file}`; files to lint |
+| `testGlobs` | where `trace` looks for tests that name criteria |
+| `slo` | code-health limits on changed files: `maxFileLines` (400), `newDependencies` (null = report only) |
+| `health` | project metrics: `[{"name": "complexity", "command": "… {files} …", "max": 0}]` — detected for ESLint and ruff |
+| `layers` | architecture boundaries, empty until an ADR sets them: `[{"name": "domain stays pure", "files": ["src/domain/*"], "forbid": ["infra/"], "adr": "docs/adr/0003-layers.md"}]` |
+
+The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — guard-file blocks it.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `agent-stack init` | Wizard: detect environment → deploy harness → optionally install MCP servers |
-| `agent-stack generate` | Deploy the harness into the current repo |
-| `agent-stack sync` | `detect` + `generate` |
+| `agent-stack init` | Wizard: detect environment → deploy harness (skipped if `.claude/` exists) → optional MCP servers |
+| `agent-stack generate` | Deploy the harness into the current repo (`--force` to overwrite an existing one) |
+| `agent-stack update` | Refresh an existing harness; keeps your seed files (`CLAUDE.md`, `CODEMAP.md`, `gates.json`, `settings.local.json`), `rules/`, `tmp/`; `--dry-run` to preview |
+| `agent-stack sync` | `detect`, then `generate` or `update` |
 | `agent-stack detect` | Report project context + whether Claude Code is installed |
-| `agent-stack mcp install` | Install MCP servers from the catalog |
-| `agent-stack mcp list` | List configured MCP servers |
+| `agent-stack mcp install` / `list` | MCP servers from the catalog |
+
+## Limits — read before trusting it
+
+- **Blocklists, not a sandbox.** Guards catch an agent's mistakes, not a determined bypass: a file written
+  through Bash (`sed -i`, `>`) skips the Edit/Write gates, and command matching is regex-based (known false
+  positive: `git push` quoted inside another command's argument is blocked). Put the same checks in CI for
+  anything that must hold.
+- **Hooks fail open** when they crash. Stop hooks can only nudge once per turn (`stop_hook_active`).
+- `verify` runs commands from an agent-written plan; it is not allow-listed and refuses commands guard-bash
+  would block. Review the plan table before implementation starts.
+- **Hook output is a prompt-injection surface.** SessionStart injects branch names and commit messages, the
+  lint hook quotes file content and runs repo-controlled config. Treat that text as data.
 
 ## After deploying
 
-1. **Exclude the harness from git** (it is personal) — add to `.git/info/exclude`:
-   ```
-   .claude/
-   CLAUDE.md
-   CODEMAP.md
-   ```
-2. **Generate rules** — `.claude/rules/` ships empty on purpose: path-scoped rules must reflect *your*
-   code, not another project's. Open `claude` in the repo and run the **pattern-scout** subagent; it
-   drafts rules you review and keep.
-3. **Smoke-test the guards** — a `git push` or a foreign package-manager command should be blocked;
-   a normal command should pass.
+1. Review `.claude/gates.json`.
+2. Exclude the harness from git if it is personal — add `/.claude/`, `/CLAUDE.md`, `/CODEMAP.md` to
+   `.git/info/exclude`. Keep the leading `/`: on a case-insensitive filesystem an unanchored `CLAUDE.md` also
+   hides `docs/claude.md`.
+3. Generate rules with the **pattern-scout** subagent (`.claude/rules/` ships empty on purpose).
 
-## MCP server catalog
+### Pair it with Claude Code plugins
 
-Defined in `mcp/catalog.json`, installed via `claude mcp add`:
+agent-stack does not install these — LSP and service integrations are better served by official plugins:
 
-| Server | Description |
-|--------|-------------|
-| GitHub | Issues, PRs, repos |
-| Fetch | Web content as markdown |
-| Memory | Persistent knowledge graph |
-| Sequential Thinking | Structured reasoning |
-
-## Architecture
-
-```
-agent-stack/
-├── bin/cli.mjs            # executable shim → dist/index.js
-├── src/
-│   ├── cli.ts             # commander program
-│   ├── commands/          # init, detect, generate, sync, mcp
-│   ├── detect/            # project + harness-param detection
-│   ├── claude/            # harness emitter (templates → .claude/)
-│   ├── mcp/               # MCP catalog loader + installer
-│   └── utils/             # shell helpers, logger
-├── templates/claude/      # harness core (tokenized) — hooks/agents/skills (CLAUDE.md is built in code)
-├── docs/HARNESS-SETUP.md  # manual deploy guide — the harness + setup the emitter doesn't install
-├── mcp/catalog.json       # MCP server catalog
-└── tests/                 # vitest unit tests
+```bash
+claude plugin install typescript-lsp@claude-plugins-official   # needs typescript-language-server on PATH
+claude plugin install github@claude-plugins-official
 ```
 
-`templates/claude/` holds the harness with `{{TOKEN}}` placeholders; the emitter in `src/claude/`
-substitutes values from the detector and writes the tree. `CLAUDE.md` / `CODEMAP.md` aren't in
-`templates/` — the emitter builds them in code (`buildClaudeMd` from the detected params plus the
-`_normative.md` generator input, `buildCodemap`) and writes them to the **repo root**, git-excluded —
-see [After deploying](#after-deploying). This tool targets **Claude Code only**.
+An old Claude Code rejects the current plugin marketplace — `claude update` first; plugins load on the next
+session.
 
 ## Development
 
 ```bash
 pnpm install      # pnpm only — npm/yarn/bun are not supported
 pnpm build
-pnpm test
+pnpm test         # unit tests + hook tests (bash, jq, git) + end-to-end generate on fresh repos
 pnpm typecheck    # the static gate (no linter yet)
 ```
+
+Husky hooks from a GUI git client (VS Code, GitKraken) do not see an nvm-installed `pnpm` — add the node bin
+to PATH in `~/.config/husky/init.sh`.
+
+Release notes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Conventions
 

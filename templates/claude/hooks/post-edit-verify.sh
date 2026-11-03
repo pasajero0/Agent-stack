@@ -43,9 +43,14 @@ case "$abs_path" in
 esac
 
 # (5) Build diff: tracked → git diff -U2 (truncated 200 lines); untracked → head -50.
+# GNU `timeout` is absent on stock macOS (coreutils ships it as `gtimeout`); without either, run unbounded
+# rather than fail silently — a missing binary used to make this hook emit nothing for tracked files.
+TIMEOUT_BIN=$(command -v timeout || command -v gtimeout || true)
+with_timeout() { local secs=$1; shift; if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" "$secs" "$@"; else "$@"; fi; }
+
 cd "$PROJECT_DIR" 2>/dev/null || exit 0
 if git ls-files --error-unmatch -- "$abs_path" >/dev/null 2>&1; then
-  diff_output=$(timeout 10 git diff -U2 -- "$abs_path" 2>/dev/null | head -200)
+  diff_output=$(with_timeout 10 git diff -U2 -- "$abs_path" 2>/dev/null | head -200)
 else
   diff_output=$(head -50 "$abs_path" 2>/dev/null)
 fi

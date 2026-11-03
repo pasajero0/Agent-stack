@@ -47,6 +47,25 @@ if ls "${CLAUDE_PROJECT_DIR:-$cwd}"/.claude/tmp/*-plan.md >/dev/null 2>&1; then
   echo
 fi
 
+# Gate state — mode and active stage, on every source (survives compaction).
+. "$(dirname "$0")/gates-lib.sh"
+if [ "$(gate_get '.mode')" = "autonomous" ]; then
+  echo "🤖 Autonomous mode (.claude/gates.json): no diff confirmations; never install anything, never push;"
+  echo "commit per phase; unresolved decisions go to NEEDS HUMAN DECISION in the report."
+  echo
+fi
+stage=$(active_stage)
+if [ -n "$stage" ]; then
+  tasks=$(tasks_file)
+  if [ -f "$tasks" ]; then
+    progress=$(jq -r '"\([.tasks[] | select(.passes == true)] | length)/\(.tasks | length) tasks passing"' "$tasks" 2>/dev/null || echo "tasks.json unreadable")
+    echo "📋 Active stage: $stage — $progress (.claude/bin/verify to re-check)."
+  else
+    echo "📋 Active stage: $stage — no tasks.json yet (run /plan)."
+  fi
+  echo
+fi
+
 # Pending /reflect notice — always (cheap), regardless of source
 if [ -f /tmp/.claude-reflect-pending ]; then
   echo "💡 Memory was modified in the previous session — consider running \`/reflect\` to consolidate."

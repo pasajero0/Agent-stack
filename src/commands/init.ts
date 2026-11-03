@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { checkbox, input, confirm } from "@inquirer/prompts";
 import chalk from "chalk";
 import { detectProject } from "../detect/project.js";
@@ -7,6 +9,7 @@ import type { McpServerDefinition } from "../mcp/types.js";
 import { installMcpServers } from "../mcp/installer.js";
 import { emitHarness } from "../claude/harness.js";
 import { banner, log } from "../utils/logger.js";
+import { printNextSteps } from "./next-steps.js";
 
 export async function initCommand(): Promise<void> {
   banner();
@@ -44,8 +47,13 @@ export async function initCommand(): Promise<void> {
 
   // ── Step 2: deploy the Claude harness ─────────────────────────
   console.log();
-  log.step("Generating the Claude harness...");
-  await emitHarness(process.cwd());
+  if (existsSync(join(process.cwd(), ".claude"))) {
+    // Same rule as `generate`: never overwrite a deployed harness — `update` keeps the user's files.
+    log.warn(".claude/ already exists — skipping the harness. Run `agent-stack update` to refresh it.");
+  } else {
+    log.step("Generating the Claude harness...");
+    await emitHarness(process.cwd());
+  }
 
   // ── Step 3: MCP servers (optional) ────────────────────────────
   const { mcpServers, envValues } = await collectMcpConfig();
@@ -58,10 +66,7 @@ export async function initCommand(): Promise<void> {
   console.log();
   console.log(chalk.bold.green("  Setup complete!"));
   console.log();
-  log.dim("  Next steps:");
-  log.dim("  • Exclude the harness from git: add .claude/, CLAUDE.md, CODEMAP.md to .git/info/exclude");
-  log.dim("  • Generate rules: open `claude` and run the pattern-scout subagent (.claude/rules/ is empty by design)");
-  log.dim("  • Smoke-test the guards: a `git push` or foreign package-manager command should block");
+  printNextSteps();
   console.log();
 }
 

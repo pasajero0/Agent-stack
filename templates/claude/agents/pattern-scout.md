@@ -2,6 +2,7 @@
 name: pattern-scout
 description: Use to generate or update skills/rules files based on architecture docs and real code. Invoke for new projects, after major refactors, or when code review surfaces missed conventions.
 model: opus
+effort: high
 tools: Read, Glob, Grep, Write, Edit
 ---
 

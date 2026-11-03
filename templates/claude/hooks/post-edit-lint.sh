@@ -1,55 +1,44 @@
 #!/usr/bin/env bash
-# PostToolUse(Edit|Write|MultiEdit) — lint edited source files, surface issues as additionalContext.
-# Does NOT modify the file (no --fix) — keeps Claude's file-state tracking consistent.
-# NOTE: this repo currently has no linter installed, so this hook self-disables
-# (the `[ -x "$LINTER" ] || exit 0` guard). Install a linter or point LINTER at it to enable.
-set -euo pipefail
+# PostToolUse(Edit|Write|MultiEdit) — lint the edited file, surface errors and warnings as additionalContext.
+# Stack-agnostic: the command (`commands.lint`, {file} placeholder) and globs (`lintMatch`) come from
+# gates.json; no linter configured → no-op. Does NOT modify the file (no --fix) — keeps Claude's
+# file-state tracking consistent.
+set -uo pipefail
+. "$(dirname "$0")/gates-lib.sh"
 
 input=$(cat)
-path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
 [ -z "$path" ] && exit 0
 
-case "$path" in
-  *.ts|*.tsx|*.js|*.jsx|*.mts|*.cts) ;;
-  *) exit 0 ;;
-esac
+lint=$(gate_get '.commands.lint')
+[ -z "$lint" ] && exit 0
+rel=$(rel_path "$path")
+gate_list '.lintMatch' | glob_match_any "$rel" || exit 0
+gate_list '.protectedGlobs' | glob_match_any "$rel" && exit 0
 
-case "$path" in
-  *.gen.*|*/node_modules/*|*/dist/*|*/build/*|*/storybook-static/*|*/coverage/*) exit 0 ;;
-esac
+# GNU `timeout` is absent on stock macOS (`gtimeout` with coreutils); without either, run unbounded.
+TIMEOUT_BIN=$(command -v timeout || command -v gtimeout || true)
+with_timeout() { local secs=$1; shift; if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" "$secs" "$@"; else "$@"; fi; }
 
-LINTER="${CLAUDE_PROJECT_DIR:-$(pwd)}/node_modules/.bin/eslint"
-[ -x "$LINTER" ] || LINTER="$(command -v eslint || true)"
-[ -x "$LINTER" ] || exit 0
+placeholder='{file}'
+quoted=$(printf '%q' "$path")
+cmd=""
+rest=$lint
+while case "$rest" in *"$placeholder"*) true ;; *) false ;; esac; do
+  cmd="$cmd${rest%%"$placeholder"*}$quoted"
+  rest=${rest#*"$placeholder"}
+done
+cmd="$cmd$rest"
 
-CACHE_DIR=/tmp/claude-eslint-cache
-mkdir -p "$CACHE_DIR"
+cd "$PROJECT_DIR" || exit 0
+output=$(with_timeout 30 bash -c "$cmd" 2>&1)
+status=$?
 
-output=$(timeout 20 "$LINTER" \
-  --cache \
-  --cache-location "$CACHE_DIR/" \
-  --cache-strategy content \
-  --format=json \
-  --no-warn-ignored \
-  "$path" 2>/dev/null) || true
-
-# Parse only if output is valid JSON (eslint may bail on config errors)
-echo "$output" | jq empty 2>/dev/null || exit 0
-
-filtered=$(echo "$output" | jq -r '
-  .[].messages[]?
-  | select(.severity >= 1)
-  | "  \(if .severity==2 then "✘" else "⚠" end) line \(.line):\(.column)  \(.message)  (\(.ruleId // "—"))"
-' 2>/dev/null)
-
-if [ -n "$filtered" ]; then
-  jq -nc --arg ctx "Linter issues in $(basename "$path"):
-$filtered" '{
-    hookSpecificOutput: {
-      hookEventName: "PostToolUse",
-      additionalContext: $ctx
-    }
-  }'
+# Clean runs stay silent; anything failing or mentioning a warning is surfaced (first 60 lines).
+if [ "$status" -ne 0 ] || printf '%s' "$output" | grep -qi 'warn'; then
+  ctx="Linter (exit $status) on $rel — \`$cmd\`:
+$(printf '%s\n' "$output" | head -60)"
+  jq -nc --arg ctx "$ctx" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'
 fi
 
 exit 0

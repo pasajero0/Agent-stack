@@ -43,7 +43,7 @@ render markdown inline in the reply — bold/lists/headers won't survive the cli
 
 **Verification**
 
-- `{{PM}} typecheck && {{PM}} test` — green.
+- `{{VERIFY_CMD}}` — green.
 
 Closes #<issue>
 ````
@@ -53,4 +53,4 @@ Closes #<issue>
 - **Bug-fix PR:** add a "**Reproduction**" line above "Scenarios" with exact repro steps, then
   scenarios verify the fix.
 - **Pure refactor / chore:** drop "Scenarios"; replace with "No behaviour change — verified by
-  `{{PM}} test`".
+  `{{VERIFY_CMD}}`".

@@ -2,6 +2,7 @@
 name: task-analyzer
 description: Use at the start of a non-trivial task to validate intake (clarity, context, constraints, creativity), decompose work, and identify affected areas of the codebase.
 model: opus
+effort: high
 tools: Read, Glob, Grep
 ---
 

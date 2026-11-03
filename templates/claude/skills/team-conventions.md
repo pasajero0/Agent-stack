@@ -26,6 +26,7 @@ Capture the load-bearing rules: typing strictness, import conventions, formatter
 
 ## Hard prohibitions
 
-- **{{PM}} only** — other package managers are blocked by the guard-bash hook.
+- **One package manager** — `packageManager` in `.claude/gates.json`; the others are blocked by the
+  guard-bash hook.
 - **Never `git push`** from the agent — manual-only.
-- **Never hand-edit generated files** ({{GEN_GLOBS}}, {{LOCKFILE}}).
+- **Never hand-edit generated files** — `protectedGlobs` in `.claude/gates.json` (build output, lockfiles).

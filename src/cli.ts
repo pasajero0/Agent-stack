@@ -5,13 +5,14 @@ import { mcpCommand } from "./commands/mcp.js";
 import { generateCommand } from "./commands/generate.js";
 import { updateCommand } from "./commands/update.js";
 import { syncCommand } from "./commands/sync.js";
+import { toolVersion } from "./claude/harness.js";
 
 export const program = new Command();
 
 program
   .name("agent-stack")
   .description("CLI that deploys a Claude Code harness and manages MCP servers")
-  .version("0.1.0");
+  .version(toolVersion());
 
 program
   .command("init")
@@ -29,7 +30,7 @@ const mcp = program
 
 mcp
   .command("install")
-  .description("Install and configure MCP servers for detected providers")
+  .description("Install and configure MCP servers for Claude Code")
   .action(() => mcpCommand("install"));
 
 mcp
@@ -45,7 +46,7 @@ program
 
 program
   .command("update")
-  .description("Update an existing harness to the current version (preserves rules/ and tmp/)")
+  .description("Update an existing harness to the current version (keeps seed files, rules/ and tmp/)")
   .option("--dry-run", "Show what would change without writing")
   .action(updateCommand);
 

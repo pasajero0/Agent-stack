@@ -1,0 +1,124 @@
+import type { HarnessParams } from "../detect/harness-params.js";
+
+/** interactive: step-by-step diff confirmation (default). autonomous: no confirmations, hard limits. */
+export type GateMode = "interactive" | "autonomous";
+
+/** strict: no code edit without a merged spec for the active stage. stage: only while a stage is active. */
+export type SpecGateMode = "strict" | "stage" | "off";
+
+/**
+ * `.claude/gates.json` — every stack-specific value the hooks need. Hooks read only this file, so the
+ * harness works the same for any language. Edited by a human (guard-file blocks the agent).
+ */
+export interface GatesConfig {
+  mode: GateMode;
+  baseBranch: string;
+  specsDir: string;
+  adrDir: string;
+  /** Bash regex on the branch's last path segment; capture group 1 is the stage id. */
+  stagePattern: string;
+  specGate: SpecGateMode;
+  /** Case-globs (relative to the repo root) that stay editable without a merged spec. */
+  openPaths: string[];
+  /** Case-globs of generated files and lockfiles — never hand-edited. */
+  protectedGlobs: string[];
+  packageManager: string;
+  forbiddenPackageManagers: string[];
+  /** ERE fragments matched at a command start; ask in interactive mode, deny in autonomous. */
+  installPatterns: string[];
+  cheatGuard: boolean;
+  /** ERE patterns whose count must not grow in an edit (skipped tests, suppressed checks). */
+  cheatPatterns: string[];
+  evidenceGate: boolean;
+  commands: { test: string; lint: string };
+  /** Case-globs of files the lint hook checks. */
+  lintMatch: string[];
+  /** Case-globs of test files — `.claude/bin/trace` looks for "<stage> AC-n" there. */
+  testGlobs: string[];
+  /** Architecture boundaries (arch-guard): files in a layer may not add imports matching `forbid`. */
+  layers: LayerRule[];
+  /** Code-health targets for `.claude/bin/health`, on files changed in the branch. null = report only. */
+  slo: { maxFileLines: number | null; newDependencies: number | null };
+  /** Project-specific health metrics: the command prints one number; {files} = changed code files. */
+  health: HealthMetric[];
+}
+
+export interface HealthMetric {
+  name: string;
+  command: string;
+  max: number | null;
+}
+
+export interface LayerRule {
+  name: string;
+  /** Case-globs of the layer's files. */
+  files: string[];
+  /** ERE patterns an import line in those files must not match. */
+  forbid: string[];
+  /** The ADR that decided the boundary. */
+  adr?: string;
+}
+
+// Union across stacks on purpose: a pattern for another language costs nothing and keeps the
+// guard stack-agnostic. POSIX ERE only (no \b) — must behave the same in BSD and GNU grep.
+export const CHEAT_PATTERNS = [
+  "(^|[^A-Za-z0-9_])(it|test|describe|suite|context|bench)\\.(skip|only)",
+  "(^|[^A-Za-z0-9_.])(xit|xtest|xdescribe|fit|fdescribe)[[:space:]]*\\(",
+  "@ts-ignore",
+  "@ts-nocheck",
+  "eslint-disable",
+  "biome-ignore",
+  "(:|[[:space:]]as)[[:space:]]*any([^A-Za-z0-9_]|$)",
+  "@pytest\\.mark\\.(skip|xfail)",
+  "pytest\\.skip\\(",
+  "@unittest\\.skip",
+  "#[[:space:]]*type:[[:space:]]*ignore",
+  "#[[:space:]]*noqa",
+  "t\\.Skip(Now|f)?\\(",
+  "//[[:space:]]*nolint",
+  "#\\[ignore\\]",
+];
+
+export const INSTALL_PATTERNS = [
+  // flags may come first: `pnpm add -D vitest`, `npm i --save x`; bare `pnpm install` stays allowed
+  "(pnpm|npm|yarn|bun)[[:space:]]+(add|install|i)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]]",
+  "(pip|pip3|pipx)[[:space:]]+install",
+  "uv[[:space:]]+(add|pip[[:space:]]+install|tool[[:space:]]+install)",
+  "poetry[[:space:]]+add",
+  "brew[[:space:]]+(install|upgrade|tap)",
+  "cargo[[:space:]]+(add|install)",
+  "go[[:space:]]+(get|install)",
+  "gem[[:space:]]+install",
+  "apt(-get)?[[:space:]]+install",
+  "claude[[:space:]]+(plugin|mcp)[[:space:]]+(install|add)",
+  "(curl|wget)[^|]*\\|[[:space:]]*(sudo[[:space:]]+)?(ba|z)?sh",
+];
+
+export function buildGatesConfig(p: HarnessParams): GatesConfig {
+  const generated = p.generatedGlobs ? p.generatedGlobs.split("|") : [];
+  return {
+    mode: "interactive",
+    baseBranch: p.mainBranch,
+    specsDir: `${p.docsDir}specs`,
+    stagePattern: "^([A-Za-z]+[0-9]+)([-_.]|$)",
+    adrDir: `${p.docsDir}adr`,
+    specGate: "strict",
+    openPaths: [`${p.docsDir}*`, "*.md", ".claude/*", ".gitignore"],
+    protectedGlobs: [...generated, ...(p.lockfile ? [`*${p.lockfile}`] : [])],
+    packageManager: p.packageManager,
+    forbiddenPackageManagers: p.forbiddenPms ? p.forbiddenPms.split("|") : [],
+    installPatterns: INSTALL_PATTERNS,
+    cheatGuard: true,
+    cheatPatterns: CHEAT_PATTERNS,
+    evidenceGate: true,
+    commands: { test: p.testCommand, lint: p.lintCommand },
+    lintMatch: p.lintMatch ? p.lintMatch.split("|") : [],
+    testGlobs: p.testGlobs ? p.testGlobs.split("|") : [],
+    // Boundaries are a decision, not a detection: empty until an ADR sets them.
+    layers: [],
+    slo: { maxFileLines: 400, newDependencies: null },
+    health: p.complexityCommand
+      ? [{ name: "complexity", command: p.complexityCommand, max: 0 }]
+      : [],
+  };
+}

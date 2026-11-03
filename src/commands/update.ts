@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { detectHarnessParams } from "../detect/harness-params.js";
-import { buildHarnessFiles, writeHarnessFiles } from "../claude/harness.js";
+import { buildHarnessFiles, planUpdate, writeHarnessFiles } from "../claude/harness.js";
 import { banner, log } from "../utils/logger.js";
 
 export async function updateCommand(options: { dryRun?: boolean } = {}): Promise<void> {
@@ -14,34 +14,25 @@ export async function updateCommand(options: { dryRun?: boolean } = {}): Promise
   }
 
   const params = await detectHarnessParams(projectDir);
-  const files = buildHarnessFiles(params);
-
-  // Classify against what's on disk (emitter-owned files only).
-  const created: string[] = [];
-  const changed: string[] = [];
-  let unchanged = 0;
-  for (const f of files) {
-    const full = join(projectDir, f.path);
-    if (!existsSync(full)) created.push(f.path);
-    else if (readFileSync(full, "utf-8") !== f.content) changed.push(f.path);
-    else unchanged++;
-  }
+  const plan = planUpdate(projectDir, buildHarnessFiles(params));
 
   if (options.dryRun) {
     log.step("Harness update preview (dry run):");
-    created.forEach((p) => console.log(`  + ${p}`));
-    changed.forEach((p) => console.log(`  ~ ${p}`));
+    plan.created.forEach((p) => console.log(`  + ${p}`));
+    plan.changed.forEach((p) => console.log(`  ~ ${p}`));
+    plan.kept.forEach((p) => console.log(`  = ${p} (yours — kept)`));
     console.log();
-    log.dim(`  ${unchanged} unchanged. rules/ and tmp/ are preserved (not emitter-owned).`);
+    log.dim(`  ${plan.unchanged} unchanged. rules/ and tmp/ are preserved (not emitter-owned).`);
     return;
   }
 
   log.step("Updating the Claude harness...");
-  await writeHarnessFiles(projectDir, files);
+  await writeHarnessFiles(projectDir, plan.toWrite);
 
   console.log();
   log.success(
-    `Harness updated: ${created.length} added, ${changed.length} changed, ${unchanged} unchanged.`
+    `Harness updated: ${plan.created.length} added, ${plan.changed.length} changed, ` +
+      `${plan.unchanged} unchanged, ${plan.kept.length} kept as yours.`
   );
-  log.dim("  .claude/rules/ and .claude/tmp/ were left untouched.");
+  log.dim("  .claude/rules/, .claude/tmp/ and your seed files (CLAUDE.md, gates.json…) were left untouched.");
 }
