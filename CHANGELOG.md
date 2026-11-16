@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`agent-stack usage`** — reads the project's Claude Code session logs and reports what the harness actually
+  did: hook blocks and added context, Stop-hook runs, subagent and skill calls, slash commands, `.claude/bin`
+  runs, tokens by agent and model, and the installed parts that never acted. Read-only; `--days`, `--logs`,
+  `--json`. `--save` writes the summary (counts only, no conversation text) to
+  `.claude/tmp/usage/<date>.json`, so it outlives the logs. Guide: `docs/usage-analytics.md`.
 - Removed the `post-edit-verify` hook. While any `*-plan.md` sat in `.claude/tmp/`, it pasted the file's
   diff into the context after every edit, including plans that were long finished. The `/migration`
   skill still asks for the same check by hand. After `update`, an existing

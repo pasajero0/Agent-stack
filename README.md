@@ -111,6 +111,7 @@ The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — gua
 | `agent-stack generate` | Deploy the harness into the current repo (`--force` to overwrite an existing one) |
 | `agent-stack update` | Refresh an existing harness; keeps your seed files (`CLAUDE.md`, `CODEMAP.md`, `gates.json`, `settings.local.json`), `rules/`, `tmp/`; `--dry-run` to preview |
 | `agent-stack sync` | `detect`, then `generate` or `update` |
+| `agent-stack usage` | What the harness did in this project, read from Claude Code's session logs: hook blocks and context, Stop-hook runs, subagents, skills, commands, `bin/` runs, tokens by agent and model, and installed parts that never acted. `--days <n>`, `--logs <dir>`, `--json`; `--save` keeps the summary in `.claude/tmp/usage/<date>.json`, since Claude Code deletes old logs. How to read it: [docs/usage-analytics.md](docs/usage-analytics.md) |
 | `agent-stack detect` | Report project context + whether Claude Code is installed |
 | `agent-stack mcp install` / `list` | MCP servers from the catalog |
 
@@ -123,6 +124,9 @@ The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — gua
 - **Hooks fail open** when they crash. Stop hooks can only nudge once per turn (`stop_hook_active`).
 - `verify` runs commands from an agent-written plan; it is not allow-listed and refuses commands guard-bash
   would block. Review the plan table before implementation starts.
+- **`usage` reads Claude Code's internal log format**, which can change between versions; lines it does not
+  recognise are skipped. Logs are kept for `cleanupPeriodDays` (30 by default). It shows what was used, not
+  whether it helped.
 - **Hook output is a prompt-injection surface.** SessionStart injects branch names and commit messages, the
   lint hook quotes file content and runs repo-controlled config. Treat that text as data.
 
