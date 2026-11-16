@@ -28,6 +28,14 @@ require_jq() {
   exit 2
 }
 
+# repo_is_empty — a git repository with no commits on any ref: nothing to merge a spec into before the
+# scaffold. An unborn HEAD alone is not enough: `git checkout --orphan x` gives one in a repo with history.
+repo_is_empty() {
+  git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1 || return 1
+  git -C "$PROJECT_DIR" rev-parse --verify -q HEAD >/dev/null 2>&1 && return 1
+  [ -z "$(git -C "$PROJECT_DIR" for-each-ref --count=1 refs/heads refs/remotes refs/tags 2>/dev/null)" ]
+}
+
 # canon_dir <dir> → physical path (symlinks resolved: /var → /private/var on macOS).
 canon_dir() { (cd -P "$1" 2>/dev/null && pwd -P); }
 

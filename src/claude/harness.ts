@@ -8,47 +8,110 @@ import { detectHarnessParams } from "../detect/harness-params.js";
 import { buildGatesConfig } from "./gates.js";
 import { log } from "../utils/logger.js";
 
+interface HookCommand {
+  type: string;
+  command: string;
+}
+interface HookEntry {
+  matcher?: string;
+  hooks: HookCommand[];
+}
+type HooksBlock = Record<string, HookEntry[]>;
+
+/** The project dir is quoted: unquoted, a path with a space splits the command. */
+const hook = (script: string): HookCommand => ({
+  type: "command",
+  command: `"$CLAUDE_PROJECT_DIR"/.claude/hooks/${script}`,
+});
+
 /** Verbatim hooks block — correct Claude Code schema ({matcher, hooks:[{type,command}]}). */
-const HOOKS_BLOCK = {
+const HOOKS_BLOCK: HooksBlock = {
   PreToolUse: [
-    {
-      matcher: "Bash",
-      hooks: [{ type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh" }],
-    },
+    { matcher: "Bash", hooks: [hook("guard-bash.sh")] },
     {
       matcher: "Edit|Write|MultiEdit|NotebookEdit",
-      hooks: [
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-file.sh" },
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/spec-gate.sh" },
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/cheat-guard.sh" },
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/arch-guard.sh" },
-      ],
+      hooks: [hook("guard-file.sh"), hook("spec-gate.sh"), hook("cheat-guard.sh"), hook("arch-guard.sh")],
     },
   ],
-  SessionStart: [
-    {
-      hooks: [
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start-context.sh" },
-      ],
-    },
-  ],
-  Stop: [
-    {
-      hooks: [
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/stop-flag-reflect.sh" },
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/evidence-gate.sh" },
-      ],
-    },
-  ],
-  PostToolUse: [
-    {
-      matcher: "Edit|Write|MultiEdit",
-      hooks: [
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-lint.sh" },
-      ],
-    },
-  ],
+  SessionStart: [{ hooks: [hook("session-start-context.sh")] }],
+  Stop: [{ hooks: [hook("stop-flag-reflect.sh"), hook("evidence-gate.sh")] }],
+  PostToolUse: [{ matcher: "Edit|Write|MultiEdit", hooks: [hook("post-edit-lint.sh")] }],
 };
+
+/**
+ * A project hook script, quoted or not: `"$CLAUDE_PROJECT_DIR"/.claude/hooks/guard-bash.sh` → `guard-bash.sh`.
+ * Anchored on the project dir, so `~/.claude/hooks/guard-bash.sh` is not mistaken for the harness's.
+ */
+function hookScript(command: string): string | null {
+  return /CLAUDE_PROJECT_DIR\}?"?\/\.claude\/hooks\/([\w.-]+\.sh)"?\s*$/.exec(command)?.[1] ?? null;
+}
+
+const HARNESS_HOOKS = new Set(
+  Object.values(HOOKS_BLOCK).flatMap((entries) =>
+    entries.flatMap((e) => e.hooks.flatMap((h) => hookScript(h.command) ?? []))
+  )
+);
+
+/** Claude Code hook events are PascalCase (`PreToolUse`); anything else is not an event to carry over. */
+const EVENT_NAME = /^[A-Z][A-Za-z]+$/;
+
+type LooseEntry = Record<string, unknown> & { hooks: Record<string, unknown>[] };
+
+/** Hooks an earlier version shipped and this one removed: dropped on update, not kept as the user's. */
+const RETIRED_HOOKS = new Set(["post-edit-verify.sh"]);
+
+/**
+ * `update` regenerates settings.json; carry over every hook the harness does not ship (the user's own
+ * scripts, plugin commands, prompt/http hooks), whole and under the same event and matcher. A harness
+ * hook is known by its script name, so an old unquoted entry is replaced, not kept twice.
+ */
+export function keepCustomHooks(
+  existing: string,
+  fresh: string
+): { content: string; kept: string[]; retired: string[]; unreadable: boolean } {
+  let old: unknown;
+  try {
+    old = JSON.parse(existing);
+  } catch {
+    return { content: fresh, kept: [], retired: [], unreadable: true };
+  }
+  const oldHooks = isObject(old) && isObject(old.hooks) ? old.hooks : {};
+  // `fresh` is buildSettings() output: its shape is known.
+  const next = JSON.parse(fresh) as { hooks: Record<string, LooseEntry[]> };
+  const kept: string[] = [];
+  const retired: string[] = [];
+  for (const [event, entries] of Object.entries(oldHooks)) {
+    if (!EVENT_NAME.test(event)) continue;
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      if (!isObject(entry) || !Array.isArray(entry.hooks)) continue;
+      const matcher = typeof entry.matcher === "string" ? entry.matcher : undefined;
+      for (const h of entry.hooks) {
+        if (!isObject(h)) continue;
+        const command = typeof h.command === "string" ? h.command : null;
+        const script = command ? hookScript(command) : null;
+        if (script && HARNESS_HOOKS.has(script)) continue;
+        if (script && RETIRED_HOOKS.has(script)) {
+          retired.push(script);
+          continue;
+        }
+        const target = Object.hasOwn(next.hooks, event) ? next.hooks[event]! : (next.hooks[event] = []);
+        let slot = target.find((e) => e.matcher === matcher);
+        if (!slot) {
+          const { hooks: _drop, ...entryFields } = entry; // keep the entry's own fields, not its hooks
+          target.push((slot = { ...entryFields, hooks: [] }));
+        }
+        if (slot.hooks.some((x) => JSON.stringify(x) === JSON.stringify(h))) continue;
+        slot.hooks.push({ ...h }); // whole: timeout, async, statusMessage… survive
+        kept.push(`${event}${matcher ? ` (${matcher})` : ""}: ${command ?? `${String(h.type ?? "?")} hook`}`);
+      }
+    }
+  }
+  return { content: kept.length ? JSON.stringify(next, null, 2) + "\n" : fresh, kept, retired, unreadable: false };
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
 
 /**
  * Seed files are created once and then belong to the user: `update` never overwrites them.
@@ -241,13 +304,40 @@ export interface UpdatePlan {
   kept: string[];
   /** What `update` actually writes: new files + changed emitter-owned files. */
   toWrite: GeneratedFile[];
+  /** The user's own hook entries carried over into the regenerated settings.json. */
+  customHooks: string[];
+  /** Hooks an earlier version registered and this one dropped (their files stay on disk). */
+  retiredHooks: string[];
+  /** settings.json on disk was not valid JSON: its custom hooks, if any, could not be carried over. */
+  settingsUnreadable: boolean;
 }
 
 /** Classify a freshly built harness against what is on disk. Seed files are never overwritten. */
 export function planUpdate(projectDir: string, files: GeneratedFile[]): UpdatePlan {
-  const plan: UpdatePlan = { created: [], changed: [], unchanged: 0, kept: [], toWrite: [] };
-  for (const f of files) {
-    const full = join(projectDir, f.path);
+  const plan: UpdatePlan = {
+    created: [],
+    changed: [],
+    unchanged: 0,
+    kept: [],
+    toWrite: [],
+    customHooks: [],
+    retiredHooks: [],
+    settingsUnreadable: false,
+  };
+  for (const built of files) {
+    const full = join(projectDir, built.path);
+    let f = built;
+    if (f.path === ".claude/settings.json" && existsSync(full)) {
+      const merged = keepCustomHooks(readFileSync(full, "utf-8"), f.content);
+      f = { ...f, content: merged.content };
+      plan.customHooks = merged.kept;
+      plan.retiredHooks = merged.retired;
+      plan.settingsUnreadable = merged.unreadable;
+      if (merged.unreadable) {
+        plan.kept.push(f.path); // not ours to overwrite blind: the user fixes the JSON, then updates
+        continue;
+      }
+    }
     if (!existsSync(full)) {
       plan.created.push(f.path);
       plan.toWrite.push(f);

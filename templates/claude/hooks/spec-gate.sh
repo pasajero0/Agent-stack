@@ -6,6 +6,7 @@
 #     uncommitted edits, code is closed; a committed spec that differs from the base must say what
 #     changed under "## Changes". So history always reads "spec: …" before the code it explains.
 # openPaths (docs, *.md, .claude/) stay open. gates.json → specGate: strict (default) | stage | off.
+# A repository with no commits yet is open too: there is nothing to merge a spec into before the scaffold.
 set -euo pipefail
 . "$(dirname "$0")/gates-lib.sh"
 require_jq
@@ -20,6 +21,9 @@ path=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')
 rel=$(rel_path "$path")
 case "$rel" in /*) exit 0 ;; esac # outside the project
 gate_list '.openPaths' | glob_match_any "$rel" && exit 0
+
+# Bootstrap: an empty repository has no base branch to read a spec from — the scaffold comes first.
+repo_is_empty && exit 0
 
 deny() {
   echo "Blocked by spec-gate ($rel): $1" >&2

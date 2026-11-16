@@ -2,6 +2,13 @@
 # SessionStart — write start-marker for Stop hook + inject git context (only on fresh starts).
 set -euo pipefail
 
+# Without jq every guard denies every Bash call and edit (gates-lib require_jq): say so once, up front.
+if ! command -v jq >/dev/null 2>&1; then
+  cat >/dev/null
+  echo "⚠️ jq is not on PATH: the harness guards will block every Bash command and file edit until jq is installed."
+  exit 0
+fi
+
 input=$(cat)
 session_id=$(echo "$input" | jq -r '.session_id // "unknown"')
 cwd=$(echo "$input" | jq -r '.cwd // "."')
@@ -18,8 +25,10 @@ touch "/tmp/claude-sessions/$session_id.start"
 case "$src" in
   startup|clear)
     if git -C "$cwd" rev-parse 2>/dev/null >/dev/null; then
-      branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
-      last=$(git -C "$cwd" log -1 --pretty='%h %s' 2>/dev/null || echo none)
+      # symbolic-ref also names an unborn branch (no commits yet); a detached HEAD falls back to its hash.
+      branch=$(git -C "$cwd" symbolic-ref --quiet --short HEAD 2>/dev/null ||
+        git -C "$cwd" rev-parse --short HEAD 2>/dev/null || echo unknown)
+      last=$(git -C "$cwd" log -1 --pretty='%h %s' 2>/dev/null || echo "none yet")
       changed=$(git -C "$cwd" status --short 2>/dev/null | head -20)
       echo "## Session context"
       echo
@@ -64,6 +73,30 @@ if [ -n "$stage" ]; then
     echo "📋 Active stage: $stage — no tasks.json yet (run /plan)."
   fi
   echo
+fi
+if [ "$(gate_get '.specGate')" != "off" ] && repo_is_empty; then
+  echo "🌱 No commits yet: spec-gate stays open until the first commit — scaffold first."
+  echo
+fi
+
+# A hook file that can never run: not registered in settings, or registered but not executable.
+broken=""
+for h in "$PROJECT_DIR"/.claude/hooks/*.sh; do
+  [ -f "$h" ] || continue
+  name=$(basename "$h")
+  [ "$name" = gates-lib.sh ] && continue # sourced by the gates, not a hook
+  # grep reads the files itself: `cat … | grep -q` can die of SIGPIPE under pipefail on a big file.
+  # The closing quote of the JSON string keeps `x.sh` from matching `x.sh.bak`.
+  if ! grep -qF "hooks/$name\"" "$PROJECT_DIR"/.claude/settings*.json 2>/dev/null; then
+    broken="$broken
+⚠️ Hook $name is in .claude/hooks/ but not registered in .claude/settings.json — it never runs."
+  elif [ ! -x "$h" ]; then
+    broken="$broken
+⚠️ Hook $name is registered but not executable — it never runs. Fix: chmod +x .claude/hooks/$name"
+  fi
+done
+if [ -n "$broken" ]; then
+  printf '%s\n\n' "${broken#?}"
 fi
 
 # Pending /reflect notice — always (cheap), regardless of source

@@ -60,6 +60,20 @@ describe("guard-bash", () => {
     expect(runHook(dir, "guard-bash.sh", bash("pnpm install --frozen-lockfile")).stdout).toBe("");
   });
 
+  it.each(["pnpm install && pnpm test", "pnpm i; pnpm test", "pnpm install | tee log", "(pnpm install)"])(
+    "does not read a shell operator as a package name: %s",
+    (cmd) => {
+      const r = runHook(dir, "guard-bash.sh", bash(cmd));
+      expect(r.code).toBe(0);
+      expect(r.stdout).toBe("");
+    }
+  );
+
+  it("still asks when a real package precedes the operator", () => {
+    const r = runHook(dir, "guard-bash.sh", bash("pnpm add lodash && pnpm test"));
+    expect(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision).toBe("ask");
+  });
+
   it("denies installing in autonomous mode", () => {
     const auto = deployHarness();
     setMode(auto, "autonomous");

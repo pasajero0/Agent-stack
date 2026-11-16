@@ -33,9 +33,10 @@ describe("buildHarnessFiles", () => {
   it("builds settings.json in the correct Claude Code schema", () => {
     const s = JSON.parse(byPath(".claude/settings.json")!.content);
     expect(s.hooks.PreToolUse[0].matcher).toBe("Bash");
-    expect(s.hooks.PreToolUse[0].hooks[0].command).toContain(
-      "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh"
-    );
+    expect(s.hooks.PreToolUse[0].hooks[0].command).toBe('"$CLAUDE_PROJECT_DIR"/.claude/hooks/guard-bash.sh');
+    const commands = JSON.stringify(s.hooks).match(/"command":"[^"\\]*(\\"[^"\\]*)*"/g) ?? [];
+    expect(commands.length).toBeGreaterThan(0);
+    for (const c of commands) expect(c).toContain('\\"$CLAUDE_PROJECT_DIR\\"/'); // a space in the path cannot split it
     expect(s.permissions.allow).toContain("Bash(pnpm typecheck:*)");
   });
 

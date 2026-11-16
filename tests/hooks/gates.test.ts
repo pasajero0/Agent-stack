@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
@@ -42,6 +42,24 @@ const setStage = (dir: string, stage: string) => git(dir, "checkout", "-q", "-b"
 const codeEdit = (dir: string) => edit(join(dir, "src/app.ts"));
 
 describe("spec-gate", () => {
+  it("stays open in a repository with no commits, and closes after the first one", () => {
+    const dir = deployHarness();
+    git(dir, "init", "-q", "-b", "main");
+    expect(runHook(dir, "spec-gate.sh", codeEdit(dir)).code).toBe(0);
+    write(dir, "package.json", "{}\n");
+    git(dir, "add", "package.json");
+    git(dir, "commit", "-q", "-m", "scaffold");
+    expect(runHook(dir, "spec-gate.sh", codeEdit(dir)).code).toBe(2);
+  });
+
+  it("does not open on an orphan branch in a repository with history", () => {
+    const dir = repo();
+    git(dir, "checkout", "-q", "--orphan", "sneaky");
+    expect(runHook(dir, "spec-gate.sh", codeEdit(dir)).code).toBe(2);
+    const start = runHook(dir, "session-start-context.sh", { session_id: "t", cwd: dir, source: "startup" });
+    expect(start.stdout).not.toContain("No commits yet");
+  });
+
   it("strict: no code off a stage branch, docs stay open", () => {
     const dir = repo();
     const r = runHook(dir, "spec-gate.sh", codeEdit(dir));
@@ -297,6 +315,39 @@ describe("session-start-context", () => {
     expect(r.code).toBe(0);
     expect(r.stdout).not.toContain("Autonomous");
     expect(r.stdout).not.toContain("Active stage");
+    expect(r.stdout).not.toContain("⚠️ Hook");
+    expect(r.stdout).not.toContain("No commits yet");
+  });
+
+  it("names the unborn branch and says spec-gate is open before the first commit", () => {
+    const dir = deployHarness();
+    git(dir, "init", "-q", "-b", "main");
+    const r = runHook(dir, "session-start-context.sh", { session_id: "t", cwd: dir, source: "startup" });
+    expect(r.stdout).toContain("- Branch: `main`");
+    expect(r.stdout).toContain("- Last commit: none yet");
+    expect(r.stdout).toContain("No commits yet: spec-gate stays open");
+  });
+
+  it("warns about a hook file that is not registered or not executable", () => {
+    const dir = repo();
+    write(dir, ".claude/hooks/docs-guard.sh", "#!/usr/bin/env bash\nexit 0\n");
+    chmodSync(join(dir, ".claude/hooks/cheat-guard.sh"), 0o644);
+    const r = start(dir);
+    expect(r.stdout).toContain("Hook docs-guard.sh is in .claude/hooks/ but not registered");
+    expect(r.stdout).toContain("Hook cheat-guard.sh is registered but not executable");
+    expect(r.stdout).not.toContain("gates-lib.sh");
+  });
+
+  it("says once that the guards block everything when jq is missing", () => {
+    const dir = repo();
+    const bin = join(dir, "fakebin");
+    mkdirSync(bin);
+    for (const tool of ["bash", "cat"]) {
+      symlinkSync(spawnSync("bash", ["-c", `command -v ${tool}`], { encoding: "utf-8" }).stdout.trim(), join(bin, tool));
+    }
+    const r = runHook(dir, "session-start-context.sh", { session_id: "t", cwd: dir }, { PATH: bin });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("jq is not on PATH");
   });
 });
 

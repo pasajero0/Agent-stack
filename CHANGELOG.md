@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+Fixes from the first real trial (lex-poc):
+
+- **`update` keeps your own hooks.** It regenerated `settings.json` and silently dropped hook entries you had
+  added; now every hook the harness does not ship is carried over whole (all its fields, any hook type) under
+  the same event and matcher, and `update` lists them. Hooks an earlier version shipped and this one removed
+  are dropped with a note. A `settings.json` that is not valid JSON is left as is, with a warning. Other hand
+  edits to `settings.json` (permissions, env, plugins) are still regenerated.
+- **A repository with no commits** no longer blocks the scaffold: `spec-gate` stays open until the first
+  commit on any branch, and session start says so. An orphan branch in a repo with history stays closed. The session context names the unborn branch instead of `HEAD`/`unknown`.
+- **Session start warns about a hook that never runs** — a file in `.claude/hooks/` that is not registered in
+  `settings*.json`, or registered but not executable — and, once, when `jq` is missing (every guard then
+  blocks every call).
+- **Hook commands quote the project dir** (`"$CLAUDE_PROJECT_DIR"/.claude/hooks/…`), so a path with a space works.
+- **The install guard no longer reads a shell operator as a package**: `pnpm install && pnpm test` is not an
+  install. `gates.json` is yours after `generate`, so an existing repo gets this only by updating
+  `installPatterns` there by hand.
 - **`agent-stack usage`** — reads the project's Claude Code session logs and reports what the harness actually
   did: hook blocks and added context, Stop-hook runs, subagent and skill calls, slash commands, `.claude/bin`
   runs, tokens by agent and model, and the installed parts that never acted. Read-only; `--days`, `--logs`,

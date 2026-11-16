@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { detectHarnessParams } from "../detect/harness-params.js";
-import { buildHarnessFiles, planUpdate, writeHarnessFiles } from "../claude/harness.js";
+import { buildHarnessFiles, planUpdate, writeHarnessFiles, type UpdatePlan } from "../claude/harness.js";
 import { banner, log } from "../utils/logger.js";
 
 export async function updateCommand(options: { dryRun?: boolean } = {}): Promise<void> {
@@ -21,6 +21,7 @@ export async function updateCommand(options: { dryRun?: boolean } = {}): Promise
     plan.created.forEach((p) => console.log(`  + ${p}`));
     plan.changed.forEach((p) => console.log(`  ~ ${p}`));
     plan.kept.forEach((p) => console.log(`  = ${p} (yours — kept)`));
+    reportHooks(plan);
     console.log();
     log.dim(`  ${plan.unchanged} unchanged. rules/ and tmp/ are preserved (not emitter-owned).`);
     return;
@@ -35,4 +36,15 @@ export async function updateCommand(options: { dryRun?: boolean } = {}): Promise
       `${plan.unchanged} unchanged, ${plan.kept.length} kept as yours.`
   );
   log.dim("  .claude/rules/, .claude/tmp/ and your seed files (CLAUDE.md, gates.json…) were left untouched.");
+  reportHooks(plan);
+}
+
+function reportHooks(plan: UpdatePlan): void {
+  plan.customHooks.forEach((h) => log.dim(`  kept your hook in settings.json — ${h}`));
+  plan.retiredHooks.forEach((h) =>
+    log.dim(`  dropped ${h} from settings.json — no longer part of the harness; delete .claude/hooks/${h}`)
+  );
+  if (plan.settingsUnreadable) {
+    log.warn(".claude/settings.json is not valid JSON, so it was left as is. Fix it, then run update again.");
+  }
 }

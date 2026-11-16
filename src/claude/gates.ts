@@ -80,8 +80,9 @@ export const CHEAT_PATTERNS = [
 ];
 
 export const INSTALL_PATTERNS = [
-  // flags may come first: `pnpm add -D vitest`, `npm i --save x`; bare `pnpm install` stays allowed
-  "(pnpm|npm|yarn|bun)[[:space:]]+(add|install|i)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]]",
+  // flags may come first: `pnpm add -D vitest`, `npm i --save x`; bare `pnpm install` stays allowed,
+  // also when a shell operator follows it (`pnpm install && pnpm test`)
+  "(pnpm|npm|yarn|bun)[[:space:]]+(add|install|i)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:];&|<>()]",
   "(pip|pip3|pipx)[[:space:]]+install",
   "uv[[:space:]]+(add|pip[[:space:]]+install|tool[[:space:]]+install)",
   "poetry[[:space:]]+add",

@@ -42,6 +42,16 @@ describe("ingestLine counter keys", () => {
     expect(r.hookBlocks["cheat-guard"]).toBe(1);
   });
 
+  it("reads hook blocks and Stop-hook runs from quoted commands too", () => {
+    const quoted = hookText.replace("[$CLAUDE_PROJECT_DIR/", '["$CLAUDE_PROJECT_DIR"/');
+    const r = run([
+      userResult(quoted, true),
+      { type: "system", subtype: "stop_hook_summary", hookInfos: [{ command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/evidence-gate.sh' }] },
+    ]);
+    expect(r.hookBlocks["spec-gate"]).toBe(1);
+    expect(r.stopRuns["evidence-gate"]).toBe(1);
+  });
+
   it("ignores a hook error quoted inside another failing command's output", () => {
     const r = run([userResult(`grep: exit 1\nlog.jsonl:12: ${hookText}`, true)]);
     expect(r.hookBlocks).toEqual({});
