@@ -45,7 +45,6 @@ const HOOKS_BLOCK = {
       matcher: "Edit|Write|MultiEdit",
       hooks: [
         { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-lint.sh" },
-        { type: "command", command: "$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-verify.sh" },
       ],
     },
   ],

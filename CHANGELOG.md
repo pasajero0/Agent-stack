@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Removed the `post-edit-verify` hook. While any `*-plan.md` sat in `.claude/tmp/`, it pasted the file's
+  diff into the context after every edit, including plans that were long finished. The `/migration`
+  skill still asks for the same check by hand. After `update`, an existing
+  `.claude/hooks/post-edit-verify.sh` stays on disk but is no longer registered; delete it if you like.
+
 ## 0.2.0 — gates
 
 The harness becomes an enforcement layer for a spec-driven workflow, on any stack.

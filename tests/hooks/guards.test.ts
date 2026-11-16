@@ -5,12 +5,10 @@ import {
   cleanupProjects,
   deployHarness,
   edit,
-  git,
   patchGates,
   PY_PARAMS,
   runHook,
   setMode,
-  write,
   writeTool,
 } from "./fixture.js";
 
@@ -133,23 +131,5 @@ describe("post-edit-lint", () => {
     patchGates(repo, { commands: { test: "", lint: "false {file}" }, lintMatch: ["*.ts"] });
     expect(runHook(repo, "post-edit-lint.sh", edit(join(repo, "README.md"))).stdout).toBe("");
     expect(runHook(dir, "post-edit-lint.sh", edit(join(dir, "src/a.ts"))).stdout).toBe("");
-  });
-});
-
-describe("post-edit-verify", () => {
-  it("shows the diff of a tracked file during a migration, with or without GNU timeout", () => {
-    const repo = deployHarness();
-    git(repo, "init", "-q", "-b", "main");
-    write(repo, "src/a.ts", "export const a = 1;\n");
-    git(repo, "add", "src/a.ts");
-    git(repo, "commit", "-q", "-m", "init");
-    write(repo, "src/a.ts", "export const a = 2;\n");
-    write(repo, ".claude/tmp/demo-plan.md", "# plan\n");
-
-    const r = runHook(repo, "post-edit-verify.sh", edit(join(repo, "src/a.ts")));
-    expect(r.code).toBe(0);
-    const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext as string;
-    expect(ctx).toContain("POST-APPLY VERIFY");
-    expect(ctx).toContain("+export const a = 2;");
   });
 });

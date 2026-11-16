@@ -35,7 +35,6 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 │   ├── arch-guard.sh        # block new imports across layer boundaries set in gates.json
 │   ├── evidence-gate.sh     # Stop: no "STATUS: DONE" while a task fails or without EVIDENCE
 │   ├── post-edit-lint.sh    # run the configured linter on the edited file, surface errors + warnings
-│   ├── post-edit-verify.sh  # post-apply diff check during migrations
 │   ├── session-start-context.sh  # git context, mode, active stage progress
 │   ├── stop-flag-reflect.sh
 │   └── gates-lib.sh         # shared helpers (not a hook)
