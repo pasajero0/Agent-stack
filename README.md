@@ -99,7 +99,12 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `testGlobs` | where `trace` looks for tests that name criteria |
 | `slo` | code-health limits on changed files: `maxFileLines` (400), `newDependencies` (null = report only) |
 | `health` | project metrics: `[{"name": "complexity", "command": "… {files} …", "max": 0}]` — detected for ESLint and ruff |
+| `docsLayout` | where Markdown files belong; `health` lists a changed `.md` outside these globs (a hint, never a block). Root-level `*.md` always fits. Set for a monorepo (see below), empty otherwise |
 | `layers` | architecture boundaries, empty until an ADR sets them: `[{"name": "domain stays pure", "files": ["src/domain/*"], "forbid": ["infra/"], "adr": "docs/adr/0003-layers.md"}]` |
+
+**Default doc layout for a monorepo** (workspaces — pnpm, npm/yarn, `go.work`, Cargo — or an `apps/` or
+`packages/` folder; e.g. api + web + contracts): project docs (specs, ADRs, guides) under `docs/`, a
+`README.md` in each app or package, package `CHANGELOG.md`s, plus `.claude/` and `.github/`. Keep docs next to the code instead? Change `docsLayout` and record the decision in an ADR.
 
 The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — guard-file blocks it.
 
@@ -129,6 +134,27 @@ The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — gua
   whether it helped.
 - **Hook output is a prompt-injection surface.** SessionStart injects branch names and commit messages, the
   lint hook quotes file content and runs repo-controlled config. Treat that text as data.
+
+## Experimental parts
+
+In the first trial (lex-poc, 10 sessions) these never acted, or acted without helping. They stay for now;
+`agent-stack usage --save` records whether they are used, and a part that stays unused across several
+weekly summaries is removed in a later version.
+
+| Part | What the trial showed |
+| --- | --- |
+| `/plan` → `tasks.json` → `bin/verify` → `evidence-gate` | no `tasks.json` written; `evidence-gate` ran 218 times, stopped nothing |
+| `task-analyzer`, `pattern-scout` subagents | never called |
+| `spec-reviewer` subagent | called once (~47k tokens), result discarded |
+| `/grill`, `/migration`, `/mr-description` skills | never called |
+| `/review`, `/reflect` commands, `stop-flag-reflect` hook | never called; the hook only raises a flag for `/reflect` |
+| `cheat-guard`, `arch-guard` hooks | never blocked (`arch-guard` has no `layers` until an ADR sets them) |
+| `post-edit-lint` hook | never reported (`lintMatch` empty; the IDE reports errors anyway) |
+| `bin/health` | never run in the project (its `misplacedDocs` report is new in this version, also experimental) |
+
+Proven in use: `guard-bash`, `guard-file`, `spec-gate`, `session-start-context`, `bin/trace`, `/spec`, `/adr`,
+`implementer`, `test-writer`, `code-reviewer`, `researcher`. How to read the summaries:
+[docs/usage-analytics.md](docs/usage-analytics.md).
 
 ## After deploying
 

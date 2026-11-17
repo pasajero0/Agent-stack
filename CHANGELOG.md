@@ -23,6 +23,15 @@ Fixes from the first real trial (lex-poc):
   runs, tokens by agent and model, and the installed parts that never acted. Read-only; `--days`, `--logs`,
   `--json`. `--save` writes the summary (counts only, no conversation text) to
   `.claude/tmp/usage/<date>.json`, so it outlives the logs. Guide: `docs/usage-analytics.md`.
+- **Experimental parts are marked** in the README: the parts the first trial never used (the `tasks.json`
+  chain, `task-analyzer`, `pattern-scout`, `spec-reviewer`, several skills and commands, `cheat-guard`,
+  `arch-guard`, `post-edit-lint`, `health`). Nothing is removed yet; `usage --save` summaries decide.
+- **Default doc layout for a monorepo.** `gates.json` gets `docsLayout` — where Markdown files belong —
+  filled for a monorepo (`docs/`, a README in each app or package, package CHANGELOGs, `.claude/`,
+  `.github/`) and empty
+  otherwise. `health` lists a changed `.md` outside it as `misplacedDocs`, report only: nothing is blocked,
+  and a project with another layout changes the list and records it in an ADR. An existing repo gets it
+  only by adding `docsLayout` to its `gates.json` by hand.
 - Removed the `post-edit-verify` hook. While any `*-plan.md` sat in `.claude/tmp/`, it pasted the file's
   diff into the context after every edit, including plans that were long finished. The `/migration`
   skill still asks for the same check by hand. After `update`, an existing

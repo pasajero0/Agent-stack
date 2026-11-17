@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  detectHarnessParams,
+  detectMonorepo,
   detectPackageManager,
   detectStack,
   detectStackFacts,
@@ -94,5 +96,40 @@ describe("detectStackFacts", () => {
     );
     const empty = detectStackFacts(project({}), "unknown");
     expect(empty).toMatchObject({ packageManager: "", lockfile: "", commands: [], lintCommand: "" });
+  });
+});
+
+describe("detectMonorepo", () => {
+  it.each([
+    ["pnpm-workspace.yaml", "packages:\n  - 'apps/*'\n"],
+    ["go.work", "go 1.22\n"],
+  ])("is true with a %s file", (name, content) => {
+    expect(detectMonorepo(project({ [name]: content }))).toBe(true);
+  });
+
+  it.each(["apps", "packages"])("is true with a %s folder", (name) => {
+    const dir = project({});
+    mkdirSync(join(dir, name));
+    expect(detectMonorepo(dir)).toBe(true);
+  });
+
+  it("is true for a Cargo workspace, false for a plain crate", () => {
+    expect(detectMonorepo(project({ "Cargo.toml": '[package]\nname = "x"\n\n[workspace]\nmembers = ["a"]\n' }))).toBe(true);
+    expect(detectMonorepo(project({ "Cargo.toml": '[package]\nname = "x"\n' }))).toBe(false);
+  });
+
+  it("is true when package.json has a workspaces key", () => {
+    expect(detectMonorepo(project({ "package.json": JSON.stringify({ workspaces: ["apps/*"] }) }))).toBe(true);
+  });
+
+  it("is false for a single package, an empty dir, and an unparseable package.json", () => {
+    expect(detectMonorepo(project({ "package.json": "{}" }))).toBe(false);
+    expect(detectMonorepo(project({}))).toBe(false);
+    expect(detectMonorepo(project({ "package.json": "{ not json" }))).toBe(false);
+  });
+
+  it("detectHarnessParams sets the monorepo flag", async () => {
+    expect((await detectHarnessParams(project({ "package.json": "{}" }))).monorepo).toBe(false);
+    expect((await detectHarnessParams(project({ "pnpm-workspace.yaml": "" }))).monorepo).toBe(true);
   });
 });

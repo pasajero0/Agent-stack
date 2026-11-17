@@ -37,6 +37,11 @@ export interface GatesConfig {
   testGlobs: string[];
   /** Architecture boundaries (arch-guard): files in a layer may not add imports matching `forbid`. */
   layers: LayerRule[];
+  /**
+   * Case-globs where Markdown files belong; `health` reports a changed `.md` outside them (never
+   * blocks). Markdown at the repo root always fits. Empty = no check.
+   */
+  docsLayout: string[];
   /** Code-health targets for `.claude/bin/health`, on files changed in the branch. null = report only. */
   slo: { maxFileLines: number | null; newDependencies: number | null };
   /** Project-specific health metrics: the command prints one number; {files} = changed code files. */
@@ -95,6 +100,16 @@ export const INSTALL_PATTERNS = [
   "(curl|wget)[^|]*\\|[[:space:]]*(sudo[[:space:]]+)?(ba|z)?sh",
 ];
 
+/**
+ * The default doc layout for a monorepo (api + web + contracts): project docs — specs, ADRs, guides —
+ * under the docs dir, a README in each app or package (any depth: `*` matches `/`), package
+ * CHANGELOGs, plus the harness and forge folders. A project
+ * that keeps docs elsewhere changes `docsLayout` and records why in an ADR.
+ */
+export function monorepoDocsLayout(docsDir: string): string[] {
+  return [`${docsDir}*`, "apps/*/README.md", "packages/*/README.md", "packages/*/CHANGELOG.md", ".claude/*", ".github/*"];
+}
+
 export function buildGatesConfig(p: HarnessParams): GatesConfig {
   const generated = p.generatedGlobs ? p.generatedGlobs.split("|") : [];
   return {
@@ -117,6 +132,7 @@ export function buildGatesConfig(p: HarnessParams): GatesConfig {
     testGlobs: p.testGlobs ? p.testGlobs.split("|") : [],
     // Boundaries are a decision, not a detection: empty until an ADR sets them.
     layers: [],
+    docsLayout: p.monorepo ? monorepoDocsLayout(p.docsDir) : [],
     slo: { maxFileLines: 400, newDependencies: null },
     health: p.complexityCommand
       ? [{ name: "complexity", command: p.complexityCommand, max: 0 }]

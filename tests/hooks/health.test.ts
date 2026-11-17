@@ -103,4 +103,55 @@ describe("health", () => {
     write(dir, "src/big.ts", lines(50));
     expect(runHook(dir, "evidence-gate.sh", done).stdout).toBe("");
   });
+
+  it("has no misplacedDocs row with the default gates", () => {
+    const dir = repo();
+    write(dir, "apps/web/notes.md", "# notes\n");
+    const r = health(dir);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("misplacedDocs");
+  });
+
+  it("reports changed Markdown outside docsLayout, never breaks", () => {
+    const dir = repo();
+    patchGates(dir, { docsLayout: ["docs/*", "apps/*/README.md"] });
+    write(dir, "apps/web/notes.md", "# notes\n");
+    write(dir, "apps/web/README.md", "# web\n");
+    write(dir, "docs/x.md", "# x\n");
+    write(dir, "NOTES.md", "# root\n");
+    const r = health(dir);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/misplacedDocs\s+1\s+limit —\s+report\s+"apps\/web\/notes\.md"/);
+    expect(r.out).toContain("docsLayout");
+    expect(r.out).not.toContain("apps/web/README.md");
+    expect(r.out).not.toContain("docs/x.md");
+    expect(r.out).not.toContain("NOTES.md");
+  });
+
+  it("counts a misplaced file with spaces or Cyrillic in its name once", () => {
+    const dir = repo();
+    patchGates(dir, { docsLayout: ["docs/*"] });
+    write(dir, "notes dir/a b.md", "# a\n");
+    write(dir, "заметки/план.md", "# план\n");
+    const r = health(dir);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/misplacedDocs\s+2\s/);
+    expect(r.out).toContain('"notes dir/a b.md"');
+    expect(r.out).toContain('"заметки/план.md"');
+  });
+
+  it("does not report a misplaced Markdown file the branch did not change", () => {
+    const dir = deployHarness();
+    git(dir, "init", "-q", "-b", "main");
+    write(dir, "apps/web/old-notes.md", "# old\n");
+    git(dir, "add", "-A");
+    git(dir, "commit", "-q", "-m", "base");
+    git(dir, "checkout", "-q", "-b", "A0-work");
+    patchGates(dir, { docsLayout: ["docs/*", "apps/*/README.md"] });
+    write(dir, "src/a.ts", lines(5));
+    const r = health(dir);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/misplacedDocs\s+0/);
+    expect(r.out).not.toContain("old-notes.md");
+  });
 });
