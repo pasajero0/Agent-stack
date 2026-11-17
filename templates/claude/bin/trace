@@ -7,6 +7,8 @@
 #   it("A0 AC-3: counts duplicates")   ·   def test_A0_AC_3_counts_duplicates()
 # Test files: gates.json → testGlobs. Spec: <specsDir>/<stage>/SPEC.md in the working tree.
 #
+# A light spec (exactly "light: true" in the frontmatter) is not traced: exit 0.
+#
 # Usage: .claude/bin/trace [STAGE]      (default: the stage from the branch name)
 # Exit:  0 every criterion traced, no orphans · 1 gaps · 2 no stage / no spec
 set -uo pipefail
@@ -25,6 +27,12 @@ spec="$PROJECT_DIR/${specs:-docs/specs}/$stage/SPEC.md"
 if [ ! -f "$spec" ]; then
   echo "trace: no spec at ${spec#"$PROJECT_DIR"/}." >&2
   exit 2
+fi
+
+# A light spec (frontmatter "light: true") is setup work: its checklist is proven by commands, not tests.
+if awk '{ sub(/\r$/, "") } NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1' "$spec" | grep -qE '^light:[[:space:]]*true[[:space:]]*$'; then
+  echo "trace $stage: light spec — its checklist is checked by the commands it names, not by tests"
+  exit 0
 fi
 
 # Criteria are defined by list items that start with their id: "- **AC-3:** WHEN …".

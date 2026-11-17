@@ -69,6 +69,12 @@ describe("buildHarnessFiles", () => {
     }
     expect(byPath(".claude/skills/spec/template.md")!.content).toContain("IF <invalid input");
     expect(byPath(".claude/skills/adr/template.md")!.content).toContain("Alternatives considered");
+    expect(byPath(".claude/skills/spec/light-template.md")!.content).toContain("light: true");
+    expect(byPath(".claude/skills/adr/template.md")!.content).toContain("**Applies to:**");
+    const codemap = byPath("CODEMAP.md")!.content;
+    expect(codemap).toContain("## Specs");
+    expect(codemap).toContain("docs/specs/");
+    expect(codemap).not.toContain("`src/`");
   });
 
   it("gives every subagent a model and an effort level (routing)", () => {

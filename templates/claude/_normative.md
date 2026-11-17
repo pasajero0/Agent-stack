@@ -19,7 +19,8 @@ Each stage of work goes through these steps; hooks enforce the ones marked 🔒.
 
 1. **`/grill`** — interrogate the idea until nothing is open. Decisions → **`/adr`**; edge cases → the spec.
 2. **`/spec <stage>`** — `SPEC.md` with EARS acceptance criteria (happy, unhappy, edge), reviewed by the
-   **spec-reviewer** subagent, committed on a branch. A human pushes, reviews and merges the MR.
+   **spec-reviewer** subagent, committed on a branch. A human pushes, reviews and merges the MR (no remote:
+   merges it locally). Setup work with nothing to see gets a **light spec** — a checklist proven by commands.
    🔒 The stage's first spec must be merged before any of its code (spec-gate).
 3. **`/plan <stage>`** — on a branch named after the stage (`A0-ingest`): `.claude/tmp/<stage>/tasks.json`,
    every AC → a task with a `verify` command and a tier.
@@ -27,7 +28,7 @@ Each stage of work goes through these steps; hooks enforce the ones marked 🔒.
    entry, then tests and code — in the same branch and MR (spec-gate checks the order).
 4. **Red tests first** — the **test-writer** subagent writes failing tests named `"<stage> AC-n: …"`.
    🔒 `.claude/bin/trace` links criteria and tests: a criterion without a test, or a test for a criterion
-   the spec does not have (feature drift), keeps `STATUS: DONE` blocked.
+   the spec does not have (feature drift), keeps `STATUS: DONE` blocked (a light spec is not traced).
    🔒 cheat-guard blocks adding skipped tests or suppressed checks (`.skip`, `@ts-ignore`, `any`, …).
 5. **One task at a time** — the **implementer** subagent, model by tier; then `.claude/bin/verify <id>`.
    🔒 Only `verify` marks a task as passing.

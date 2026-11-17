@@ -12,8 +12,13 @@ the code it touches if any. Do not edit files.
 
 ## Rubric — check every item
 
-1. **Sections.** Goal, Context, Terms, Model/transitions, Contract, Acceptance criteria, NFR, Out of
+0. **Light spec?** A spec with `light: true` in its frontmatter is setup work and is not reviewed: return
+   `VERDICT: PASS` with one line, unless it describes behaviour a user or client can see — then REVISE
+   with one finding: "needs a full spec". If a "## Changes" entry turned a full spec light, it must say why
+   (trace stops checking its tests); no reason is a blocker.
+1. **Sections.** Purpose, Decisions, Terms, Model/transitions, Contract, Acceptance criteria, NFR, Out of
    scope, How to verify, Changes — present and filled (empty only where truly not applicable, with a reason).
+   Criteria may be grouped by part (Backend, Frontend, …) with ids running on; that is not a finding.
 2. **Criteria are EARS with ids.** Each `AC-n` is unique and uses an EARS form (`THE SYSTEM SHALL`,
    `WHEN … SHALL`, `WHILE … SHALL`, `IF … THEN … SHALL`, `WHERE … SHALL`).
 3. **Testable.** Each criterion names an observable outcome a test can assert (status, value, event,
@@ -25,6 +30,8 @@ the code it touches if any. Do not edit files.
 7. **NFRs have numbers** and conditions (load, environment).
 8. **No contradictions or ambiguity.** Two criteria that cannot both hold, terms used two ways, an
    undefined term, a decision silently assumed instead of stated (→ should be an ADR).
+   **Decisions link both ways:** every `(ADR-NNNN)` cited by a criterion is in the Decisions table, and each
+   table row's ADR exists and lists this stage under "Applies to" (or is project-wide).
 9. **No implementation leaks** into criteria (how, instead of what) unless the contract requires it.
 10. **Verifiable.** "How to verify" gives concrete commands; tests can be filtered by AC id.
 

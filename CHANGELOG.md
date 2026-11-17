@@ -32,6 +32,22 @@ Fixes from the first real trial (lex-poc):
   otherwise. `health` lists a changed `.md` outside it as `misplacedDocs`, report only: nothing is blocked,
   and a project with another layout changes the list and records it in an ADR. An existing repo gets it
   only by adding `docsLayout` to its `gates.json` by hand.
+- **Spec and ADR templates** (from the lex-poc trial):
+  - `/spec` takes the stage id as the first word and the rest as a description, so a description no longer
+    ends up in the path; it says how to hand over a spec with no remote (a local merge is the approval).
+  - **Light spec** for setup work: `light-template.md` — Purpose, a checklist proven by commands, Out of
+    scope. `light: true` in its frontmatter: `spec-reviewer` passes it, `trace` does not ask for tests.
+  - The spec template has `Purpose` and a `Decisions` table instead of `Goal` and `Context`; a criterion
+    cites its ADR (`ADR-0003`); a stage with several parts groups criteria by part, ids running on.
+  - The ADR template has `Decided` (may be `unknown`) and `Recorded` instead of one date, `Applies to`
+    instead of `Stage / spec`, and `Supersedes`. The skill no longer pushes the agent to invent a second
+    alternative, and text the human did not give is marked "(agent's inference)".
+  - `spec-reviewer` checks the new sections and the links both ways; `pattern-scout` reads
+    `docs/architecture/`.
+- **`CODEMAP.md` stub** has Code, Specs and Docs tables instead of a fixed `src/` and `tests/`, and says to
+  keep it in git. `generate` no longer suggests excluding it.
+- **`stagePattern` is explained** in the README, with a branch → spec path example, including the
+  feature-name pattern. The default stays `A0`.
 - Removed the `post-edit-verify` hook. While any `*-plan.md` sat in `.claude/tmp/`, it pasted the file's
   diff into the context after every edit, including plans that were long finished. The `/migration`
   skill still asks for the same check by hand. After `update`, an existing

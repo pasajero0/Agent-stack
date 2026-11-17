@@ -53,7 +53,10 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 1. **`/grill`** — the agent interviews you in numbered rounds, each question with a recommended answer,
    until no decision is open. Decisions become ADRs (**`/adr`**), edge cases go into the spec.
 2. **`/spec <stage>`** — `docs/specs/<stage>/SPEC.md` with EARS acceptance criteria (happy, unhappy, edge),
-   reviewed by the **spec-reviewer** subagent. You push, review and **merge the MR — merged means approved**.
+   reviewed by the **spec-reviewer** subagent. You push, review and **merge the MR — merged means approved**
+   (no remote: merge the `spec/<stage>` branch locally). Setup work with nothing to see — scaffold, tooling,
+   CI — gets a **light spec** instead: a checklist, each item with the command that proves it; no review,
+   not traced to tests. Criteria cite the ADRs behind them, and each ADR lists the stages it applies to.
    Until then **spec-gate** blocks every code edit for the stage.
 3. **`/plan <stage>`** on a branch named after the stage (`A0-ingest` — the gates read the stage from it):
    `.claude/tmp/<stage>/tasks.json`, every criterion → a task with a `verify` command and a tier (S/M/L)
@@ -90,7 +93,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `mode` | `interactive` (default: confirm each diff) or `autonomous` (no confirmations; installs denied, no push, commit per phase) |
 | `baseBranch` | where merged specs are read from (`origin/<base>` if present, else local) |
 | `specGate` | `strict` (no code without a merged spec) · `stage` (only on a stage branch) · `off` |
-| `stagePattern` | regex on the branch name's last segment; group 1 is the stage (default: `A0-…` → `A0`) |
+| `stagePattern` | bash regex on the **branch name** (its last `/` segment); capture group 1 is the stage id, and the spec lives at `<specsDir>/<group 1>/SPEC.md`. Default `^([A-Za-z]+[0-9]+)([-_.]\|$)`: branch `feat/A0-ingest` → `docs/specs/A0/SPEC.md`. To name specs after features, `^f-([a-z0-9]+(-[a-z0-9]+)*)$`: branch `f-request-review` → `docs/specs/request-review/SPEC.md`, and `fix-typo` is no stage. Stage ids with `-` cannot appear in Python test function names, so name such tests with a string (`pytest.mark.parametrize` ids, a docstring) or keep `A0`-style ids |
 | `openPaths` | paths editable without a spec (docs, `*.md`, `.claude/`) |
 | `protectedGlobs` | generated files and lockfiles — never hand-edited |
 | `packageManager`, `forbiddenPackageManagers` | the one package manager, the blocked ones |
@@ -159,8 +162,8 @@ Proven in use: `guard-bash`, `guard-file`, `spec-gate`, `session-start-context`,
 ## After deploying
 
 1. Review `.claude/gates.json`.
-2. Exclude the harness from git if it is personal — add `/.claude/`, `/CLAUDE.md`, `/CODEMAP.md` to
-   `.git/info/exclude`. Keep the leading `/`: on a case-insensitive filesystem an unanchored `CLAUDE.md` also
+2. Exclude the harness from git if it is personal — add `/.claude/` and `/CLAUDE.md` to `.git/info/exclude`.
+   Keep `CODEMAP.md` tracked: it is the project's map. Keep the leading `/`: on a case-insensitive filesystem an unanchored `CLAUDE.md` also
    hides `docs/claude.md`.
 3. Generate rules with the **pattern-scout** subagent (`.claude/rules/` ships empty on purpose).
 
