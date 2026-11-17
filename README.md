@@ -15,8 +15,9 @@ npx @pasajero_0/agent-stack init        # no install
 npm i -g @pasajero_0/agent-stack
 ```
 
-The deployed hooks need `bash`, `git` and `jq` on PATH (`python3` for the migration verify hook).
-GNU `timeout` is used when present (`gtimeout` on macOS with coreutils); without it hooks run unbounded.
+The deployed hooks need `bash` (3.2 is enough), `git` and `jq` on PATH; without `jq` every guard blocks,
+and session start says so. GNU `timeout` is used when present (`gtimeout` on macOS with coreutils);
+without it hooks run unbounded.
 
 ## What it deploys
 
@@ -35,29 +36,36 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 │   ├── arch-guard.sh        # block new imports across layer boundaries set in gates.json
 │   ├── evidence-gate.sh     # Stop: no "STATUS: DONE" while a task fails or without EVIDENCE
 │   ├── post-edit-lint.sh    # run the configured linter on the edited file, surface errors + warnings
-│   ├── session-start-context.sh  # git context, mode, active stage progress
-│   ├── stop-flag-reflect.sh
+│   ├── session-start-context.sh  # git context, mode, active stage progress; warns about hooks that never
+│   │                        #   run (unregistered or not executable), missing jq, a repo with no commits
+│   ├── stop-flag-reflect.sh # Stop: after a memory change, suggests /reflect next session
 │   └── gates-lib.sh         # shared helpers (not a hook)
 ├── bin/verify             # runs each task's verify command — the only writer of `passes`
 ├── bin/trace              # links spec criteria ↔ tests ("A0 AC-3: …"): missing tests, invented criteria
 ├── bin/health             # code-health SLIs on the branch's changes vs SLOs; time series in tmp/health.jsonl
 ├── agents/                # spec-reviewer, implementer, test-writer, code-reviewer, task-analyzer,
 │                          # researcher, pattern-scout — each with a model and effort level
-├── skills/                # grill, adr, spec, plan, migration, mr-description + reference docs
+├── skills/                # grill, adr, spec (full + light template), plan, migration, mr-description
+│                          # + reference docs to fill in (update keeps your edits)
 ├── commands/              # /reflect, /review
 └── rules/                 # EMPTY by design — generate per repo with pattern-scout
 ```
 
-## The workflow it enforces
+## The workflow
+
+Hooks enforce three points of it: no code before the spec is merged (**spec-gate**), no skipped tests or
+suppressed checks (**cheat-guard**), no "done" that the task results contradict (**evidence-gate**). The
+order of the other steps is kept by skills, which the model may skip: in the first trial `/plan` was never
+called. Keeping the whole order outside the model is the next step for this project.
 
 1. **`/grill`** — the agent interviews you in numbered rounds, each question with a recommended answer,
    until no decision is open. Decisions become ADRs (**`/adr`**), edge cases go into the spec.
 2. **`/spec <stage>`** — `docs/specs/<stage>/SPEC.md` with EARS acceptance criteria (happy, unhappy, edge),
-   reviewed by the **spec-reviewer** subagent. You push, review and **merge the MR — merged means approved**
-   (no remote: merge the `spec/<stage>` branch locally). Setup work with nothing to see — scaffold, tooling,
-   CI — gets a **light spec** instead: a checklist, each item with the command that proves it; no review,
-   not traced to tests. Criteria cite the ADRs behind them, and each ADR lists the stages it applies to.
-   Until then **spec-gate** blocks every code edit for the stage.
+   reviewed by the **spec-reviewer** subagent. Criteria cite the ADRs behind them, and each ADR lists the
+   stages it applies to. You push, review and **merge the MR — merged means approved** (no remote: merge the
+   `spec/<stage>` branch locally). Until then **spec-gate** blocks every code edit for the stage.
+   Setup work with nothing to see — scaffold, tooling, CI — gets a **light spec** instead: a checklist, each
+   item with the command that proves it; no review, not traced to tests.
 3. **`/plan <stage>`** on a branch named after the stage (`A0-ingest` — the gates read the stage from it):
    `.claude/tmp/<stage>/tasks.json`, every criterion → a task with a `verify` command and a tier (S/M/L)
    that picks the implementer's model.
@@ -137,6 +145,16 @@ The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — gua
   whether it helped.
 - **Hook output is a prompt-injection surface.** SessionStart injects branch names and commit messages, the
   lint hook quotes file content and runs repo-controlled config. Treat that text as data.
+- **Known gaps** (security review of 0.3, fixes planned):
+  - reading secrets is not blocked — only *editing* a `.env` file asks first; `cat .env` and Read of keys pass;
+  - the network is not restricted (`curl`, `gh gist`, WebFetch) — turn on Claude Code's `/sandbox`;
+  - "download and run" (`npx`, `pnpm dlx`, `curl … | sh`) is not treated as an install;
+  - guard-file matches the path as written, so `.claude/./hooks/…` or a different letter case slips past it;
+  - irreversible commands (`rm -rf`, `git reset --hard`) are left to Claude Code's own permission prompt;
+  - tool results (web pages, MCP output) are not checked for injected instructions.
+- **The MCP catalog is not maintained:** entries run `npx -y` without a pinned version, `server-github` is
+  archived upstream, and the `fetch` entry is not the official server (that one is Python, `uvx
+  mcp-server-fetch`). Check an entry before `mcp install`.
 
 ## Experimental parts
 
