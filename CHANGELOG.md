@@ -7,8 +7,13 @@ Fixes from the first real trial (lex-poc):
 - **`update` keeps your own hooks.** It regenerated `settings.json` and silently dropped hook entries you had
   added; now every hook the harness does not ship is carried over whole (all its fields, any hook type) under
   the same event and matcher, and `update` lists them. Hooks an earlier version shipped and this one removed
-  are dropped with a note. A `settings.json` that is not valid JSON is left as is, with a warning. Other hand
-  edits to `settings.json` (permissions, env, plugins) are still regenerated.
+  are dropped with a note. A `settings.json` that is not valid JSON is left as is, with a warning.
+- **`update` no longer overwrites what you changed.** The manifest (`.claude/.harness.json`) records a
+  sha256 of every harness file it deploys. A file you changed since is kept and listed (`update --force`
+  overwrites it); a file a newer version no longer ships is deleted, or left in place if you changed it.
+  `settings.json` keeps your permission entries and keys the harness does not write (`env`, `plugins`, …),
+  besides your hooks. A harness deployed by 0.2 has no hashes yet: its first `update` still overwrites
+  hand edits, and says so — copy them first.
 - **A repository with no commits** no longer blocks the scaffold: `spec-gate` stays open until the first
   commit on any branch, and session start says so. An orphan branch in a repo with history stays closed. The session context names the unborn branch instead of `HEAD`/`unknown`.
 - **Session start warns about a hook that never runs** — a file in `.claude/hooks/` that is not registered in

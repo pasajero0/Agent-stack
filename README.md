@@ -117,7 +117,7 @@ The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — gua
 |---------|-------------|
 | `agent-stack init` | Wizard: detect environment → deploy harness (skipped if `.claude/` exists) → optional MCP servers |
 | `agent-stack generate` | Deploy the harness into the current repo (`--force` to overwrite an existing one) |
-| `agent-stack update` | Refresh an existing harness; keeps your seed files (`CLAUDE.md`, `CODEMAP.md`, `gates.json`, `settings.local.json`), `rules/`, `tmp/`; `--dry-run` to preview |
+| `agent-stack update` | Refresh an existing harness; keeps your seed files (`CLAUDE.md`, `CODEMAP.md`, `gates.json`, `settings.local.json`), `rules/`, `tmp/`, any harness file you changed since it was deployed (`--force` overwrites those), and your own hooks, permissions and other keys in `settings.json`. Deletes harness files a newer version no longer ships, unless you changed them. `--dry-run` to preview |
 | `agent-stack sync` | `detect`, then `generate` or `update` |
 | `agent-stack usage` | What the harness did in this project, read from Claude Code's session logs: hook blocks and context, Stop-hook runs, subagents, skills, commands, `bin/` runs, tokens by agent and model, and installed parts that never acted. `--days <n>`, `--logs <dir>`, `--json`; `--save` keeps the summary in `.claude/tmp/usage/<date>.json`, since Claude Code deletes old logs. How to read it: [docs/usage-analytics.md](docs/usage-analytics.md) |
 | `agent-stack detect` | Report project context + whether Claude Code is installed |

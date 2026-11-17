@@ -49,6 +49,7 @@ program
   .command("update")
   .description("Update an existing harness to the current version (keeps seed files, rules/ and tmp/)")
   .option("--dry-run", "Show what would change without writing")
+  .option("-f, --force", "Also overwrite harness files you changed since they were deployed")
   .action(updateCommand);
 
 program

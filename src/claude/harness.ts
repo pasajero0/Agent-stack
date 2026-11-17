@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { writeFile, mkdir, chmod } from "node:fs/promises";
-import { join, dirname, relative, basename } from "node:path";
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync, statSync, existsSync, lstatSync, realpathSync } from "node:fs";
+import { writeFile, mkdir, chmod, unlink } from "node:fs/promises";
+import { join, dirname, relative, basename, posix, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GeneratedFile } from "./types.js";
 import type { HarnessParams } from "../detect/harness-params.js";
@@ -114,6 +115,56 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 /**
+ * Keep the user's own settings when settings.json is regenerated (variant A2): top-level keys the harness
+ * does not write (`env`, `plugins`, …), `permissions` keys it does not write, and entries in
+ * `permissions.*` arrays beyond the generated ones. The harness's own values win where both exist.
+ * `fresh` is valid JSON (buildSettings output, maybe with hooks merged); `existing` was parsed before.
+ */
+export function keepUserSettings(
+  existing: string,
+  fresh: string,
+  /** `permissions.allow` the harness generated last time (manifest): an entry it no longer writes is dropped. */
+  generatedBefore: readonly string[] = []
+): { content: string; kept: string[] } {
+  let old: unknown;
+  try {
+    old = JSON.parse(existing);
+  } catch {
+    return { content: fresh, kept: [] };
+  }
+  if (!isObject(old)) return { content: fresh, kept: [] };
+  const next = JSON.parse(fresh) as Record<string, unknown>;
+  const kept: string[] = [];
+  for (const [key, value] of Object.entries(old)) {
+    if (key === "hooks" || key === "__proto__") continue; // hooks: keepCustomHooks
+    if (!Object.hasOwn(next, key)) {
+      next[key] = value;
+      kept.push(key);
+    }
+  }
+  const oldPerms = old.permissions;
+  const perms = next.permissions;
+  if (isObject(oldPerms) && isObject(perms)) {
+    for (const [key, value] of Object.entries(oldPerms)) {
+      if (key === "__proto__") continue;
+      const mine = perms[key];
+      if (!Object.hasOwn(perms, key)) {
+        perms[key] = value;
+        kept.push(`permissions.${key}`);
+      } else if (Array.isArray(mine) && Array.isArray(value)) {
+        for (const v of value) {
+          if (mine.some((m) => JSON.stringify(m) === JSON.stringify(v))) continue;
+          if (key === "allow" && typeof v === "string" && generatedBefore.includes(v)) continue; // ours, retired
+          mine.push(v);
+          kept.push(`permissions.${key}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
+        }
+      }
+    }
+  }
+  return { content: kept.length ? JSON.stringify(next, null, 2) + "\n" : fresh, kept };
+}
+
+/**
  * Seed files are created once and then belong to the user: `update` never overwrites them.
  * CLAUDE.md / CODEMAP.md invite edits; gates.json is tuned per repo; Claude Code itself appends
  * "always allow" rules to settings.local.json.
@@ -124,6 +175,72 @@ export const SEED_PATHS = new Set([
   ".claude/gates.json",
   ".claude/settings.local.json",
 ]);
+
+const MANIFEST = ".claude/.harness.json";
+const SETTINGS = ".claude/settings.json";
+
+const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
+
+/** Files the manifest hashes: everything the harness owns outright (settings.json is merged instead). */
+function tracked(path: string): boolean {
+  return path.startsWith(".claude/") && !SEED_PATHS.has(path) && path !== SETTINGS && path !== MANIFEST;
+}
+
+/**
+ * A path read back from the manifest on disk is untrusted: only a plain harness path may be deleted through
+ * it — never rules/ or tmp/ (the user's), a directory, or anything `..` or `//` could steer elsewhere.
+ */
+function safeTrackedPath(path: string): boolean {
+  return (
+    tracked(path) &&
+    posix.normalize(path) === path &&
+    !path.endsWith("/") &&
+    !path.split("/").includes("..") &&
+    !/^\.claude\/(rules|tmp)\//.test(path)
+  );
+}
+
+/** A regular file whose real location is inside the project's .claude/ — not a symlink, not through one. */
+function plainFileInHarness(projectDir: string, path: string): boolean {
+  try {
+    const full = join(projectDir, path);
+    if (!lstatSync(full).isFile()) return false;
+    const root = realpathSync(join(projectDir, ".claude"));
+    const parent = realpathSync(dirname(full));
+    return parent === root || parent.startsWith(root + sep);
+  } catch {
+    return false;
+  }
+}
+
+function manifestContent(params: unknown, files: Record<string, string>, generatedAllow: unknown): string {
+  return JSON.stringify({ templateVersion: toolVersion(), params, files, generatedAllow }, null, 2) + "\n";
+}
+
+interface Manifest {
+  /** sha256 of each harness file as deployed; null for a manifest written before 0.3 (or none). */
+  hashes: Record<string, string> | null;
+  /** The `permissions.allow` entries the harness generated. */
+  generatedAllow: string[];
+}
+
+function readManifest(projectDir: string): Manifest {
+  const none: Manifest = { hashes: null, generatedAllow: [] };
+  let m: unknown;
+  try {
+    m = JSON.parse(readFileSync(join(projectDir, MANIFEST), "utf-8"));
+  } catch {
+    return none;
+  }
+  if (!isObject(m)) return none;
+  const generatedAllow = Array.isArray(m.generatedAllow)
+    ? m.generatedAllow.filter((x): x is string => typeof x === "string")
+    : [];
+  if (!isObject(m.files)) return { hashes: null, generatedAllow };
+  const hashes: Record<string, string> = Object.create(null) as Record<string, string>;
+  for (const [k, v] of Object.entries(m.files)) if (typeof v === "string") hashes[k] = v;
+  return { hashes, generatedAllow };
+}
 
 function templatesRoot(): string {
   const thisDir = dirname(fileURLToPath(import.meta.url));
@@ -281,9 +398,9 @@ export function buildHarnessFiles(params: HarnessParams): GeneratedFile[] {
 
   for (const abs of walk(root)) {
     if (basename(abs).startsWith("_")) continue; // generator input, not deployed
-    const rel = relative(root, abs);
+    const rel = relative(root, abs).split(sep).join("/"); // "/" on every OS: manifest keys stay portable
     const content = substitute(readFileSync(abs, "utf-8"), params);
-    files.push({ path: join(".claude", rel), content, action: "create" });
+    files.push({ path: posix.join(".claude", rel), content, action: "create" });
   }
 
   files.push({ path: ".claude/settings.json", content: buildSettings(params), action: "create" });
@@ -299,11 +416,10 @@ export function buildHarnessFiles(params: HarnessParams): GeneratedFile[] {
   });
   files.push({ path: "CLAUDE.md", content: buildClaudeMd(params, root), action: "create" });
   files.push({ path: "CODEMAP.md", content: buildCodemap(params), action: "create" });
-  files.push({
-    path: ".claude/.harness.json",
-    content: JSON.stringify({ templateVersion: toolVersion(), params }, null, 2) + "\n",
-    action: "create",
-  });
+  const hashes: Record<string, string> = {};
+  for (const f of files) if (tracked(f.path)) hashes[f.path] = sha256(f.content);
+  const allow = (JSON.parse(buildSettings(params)) as { permissions: { allow: string[] } }).permissions.allow;
+  files.push({ path: MANIFEST, content: manifestContent(params, hashes, allow), action: "create" });
 
   return files;
 }
@@ -322,10 +438,27 @@ export interface UpdatePlan {
   retiredHooks: string[];
   /** settings.json on disk was not valid JSON: its custom hooks, if any, could not be carried over. */
   settingsUnreadable: boolean;
+  /** The user's own settings.json keys and permission entries carried over (variant A2). */
+  customSettings: string[];
+  /** Harness files the user changed since they were deployed: left as they are (`--force` overwrites). */
+  edited: string[];
+  /** Harness files no longer shipped, untouched since deployment: `update` deletes them. */
+  removed: string[];
+  /** Harness files no longer shipped but changed by the user: left in place. */
+  orphaned: string[];
+  /** The manifest predates file hashes (≤ 0.2): edits cannot be told apart this time. */
+  noHashes: boolean;
 }
 
-/** Classify a freshly built harness against what is on disk. Seed files are never overwritten. */
-export function planUpdate(projectDir: string, files: GeneratedFile[]): UpdatePlan {
+/**
+ * Classify a freshly built harness against what is on disk. Seed files are never overwritten; a harness
+ * file the user changed since deployment (its hash differs from the manifest) is kept unless `force`.
+ */
+export function planUpdate(
+  projectDir: string,
+  files: GeneratedFile[],
+  options: { force?: boolean } = {}
+): UpdatePlan {
   const plan: UpdatePlan = {
     created: [],
     changed: [],
@@ -335,21 +468,20 @@ export function planUpdate(projectDir: string, files: GeneratedFile[]): UpdatePl
     customHooks: [],
     retiredHooks: [],
     settingsUnreadable: false,
+    customSettings: [],
+    edited: [],
+    removed: [],
+    orphaned: [],
+    noHashes: false,
   };
-  for (const built of files) {
-    const full = join(projectDir, built.path);
-    let f = built;
-    if (f.path === ".claude/settings.json" && existsSync(full)) {
-      const merged = keepCustomHooks(readFileSync(full, "utf-8"), f.content);
-      f = { ...f, content: merged.content };
-      plan.customHooks = merged.kept;
-      plan.retiredHooks = merged.retired;
-      plan.settingsUnreadable = merged.unreadable;
-      if (merged.unreadable) {
-        plan.kept.push(f.path); // not ours to overwrite blind: the user fixes the JSON, then updates
-        continue;
-      }
-    }
+  const before = readManifest(projectDir);
+  const recorded = before.hashes;
+  plan.noHashes = recorded === null;
+  const hashes: Record<string, string> = {};
+  let manifest: GeneratedFile | undefined;
+
+  const classify = (f: GeneratedFile): void => {
+    const full = join(projectDir, f.path);
     if (!existsSync(full)) {
       plan.created.push(f.path);
       plan.toWrite.push(f);
@@ -361,6 +493,64 @@ export function planUpdate(projectDir: string, files: GeneratedFile[]): UpdatePl
     } else {
       plan.unchanged++;
     }
+  };
+
+  for (const built of files) {
+    const full = join(projectDir, built.path);
+    let f = built;
+    if (f.path === MANIFEST) {
+      manifest = f;
+      continue;
+    }
+    if (f.path === SETTINGS && existsSync(full)) {
+      const raw = readFileSync(full, "utf-8");
+      const merged = keepCustomHooks(raw, f.content);
+      plan.customHooks = merged.kept;
+      plan.retiredHooks = merged.retired;
+      plan.settingsUnreadable = merged.unreadable;
+      if (merged.unreadable) {
+        plan.kept.push(f.path); // not ours to overwrite blind: the user fixes the JSON, then updates
+        continue;
+      }
+      const settings = keepUserSettings(raw, merged.content, before.generatedAllow);
+      plan.customSettings = settings.kept;
+      f = { ...f, content: settings.content };
+    }
+    if (tracked(f.path)) {
+      const deployed = recorded?.[f.path];
+      const onDisk = existsSync(full) ? readFileSync(full, "utf-8") : null;
+      // Changed since deployment — or, with hashes recorded, a file the harness never deployed here.
+      const yours = recorded !== null && onDisk !== null && onDisk !== f.content &&
+        (deployed === undefined || sha256(onDisk) !== deployed);
+      if (yours && !options.force) {
+        plan.edited.push(f.path);
+        if (deployed) hashes[f.path] = deployed; // still the user's next time
+        continue;
+      }
+      hashes[f.path] = sha256(f.content);
+    }
+    classify(f);
+  }
+
+  if (recorded) {
+    const shipped = new Set(files.map((f) => f.path));
+    for (const [path, deployed] of Object.entries(recorded)) {
+      if (shipped.has(path) || !safeTrackedPath(path)) continue;
+      const full = join(projectDir, path);
+      if (!existsSync(full)) continue;
+      if (!plainFileInHarness(projectDir, path)) {
+        plan.orphaned.push(path); // a symlink or a directory: never deleted by update
+        continue;
+      }
+      if (sha256(readFileSync(full, "utf-8")) === deployed) plan.removed.push(path);
+      else plan.orphaned.push(path);
+    }
+  }
+
+  if (manifest) {
+    const m: unknown = JSON.parse(manifest.content);
+    const built = isObject(m) ? m : {};
+    classify({ ...manifest, content: manifestContent(built.params, hashes, built.generatedAllow) });
   }
   return plan;
 }
@@ -384,6 +574,19 @@ export async function writeHarnessFiles(
     await writeFile(full, f.content, "utf-8");
     if (isExecutable(f.path)) await chmod(full, 0o755);
     log.success(f.path);
+  }
+}
+
+/** Delete harness files that are no longer shipped (only paths `planUpdate` put in `removed`). */
+export async function removeHarnessFiles(projectDir: string, paths: string[]): Promise<void> {
+  for (const p of paths) {
+    try {
+      await unlink(join(projectDir, p));
+      log.success(`removed ${p}`);
+    } catch (e) {
+      // The new manifest no longer lists it, so say so now — a later update will not see it again.
+      log.warn(`could not remove ${p} (${e instanceof Error ? e.message : String(e)}) — delete it by hand`);
+    }
   }
 }
 
