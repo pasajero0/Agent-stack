@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   bash,
@@ -334,14 +334,21 @@ describe("guard-file: secret reads", () => {
   });
 
   it.each([".claude/tmp/S1/TASKS.JSON", ".Claude/tmp/s1/tasks.json"])(
-    "blocks a case-disguised write to an existing tasks.json: %s",
+    "a case-disguised write to an existing tasks.json is blocked where it is the same file: %s",
     (rel) => {
       write(dir, ".claude/tmp/s1/tasks.json", "{}");
-      // A valid fresh plan, so only the "already exists" check — matched case-insensitively — can block it.
+      // A valid fresh plan, so only the "already exists" check can block it. On a case-insensitive disk
+      // (macOS, Windows) the disguised path is the existing file → blocked; on a case-sensitive one (Linux
+      // CI) it is a different, new file → a fresh plan is allowed.
+      const sameFile = existsSync(join(dir, rel));
       const plan = JSON.stringify({ tasks: [{ id: "T1", passes: false }] });
       const r = runHook(dir, "guard-file.sh", writeTool(rel, plan));
-      expect(r.code).toBe(2);
-      expect(r.stderr).toContain("updated only by .claude/bin/verify");
+      if (sameFile) {
+        expect(r.code).toBe(2);
+        expect(r.stderr).toContain("updated only by .claude/bin/verify");
+      } else {
+        expect(r.code).toBe(0);
+      }
     }
   );
 
