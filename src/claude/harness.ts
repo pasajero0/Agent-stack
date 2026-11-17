@@ -33,6 +33,8 @@ const HOOKS_BLOCK: HooksBlock = {
       matcher: "Edit|Write|MultiEdit|NotebookEdit",
       hooks: [hook("guard-file.sh"), hook("spec-gate.sh"), hook("cheat-guard.sh"), hook("arch-guard.sh")],
     },
+    // Reading a secret file asks first: what lands in the context can leak through any later call.
+    { matcher: "Read|Grep", hooks: [hook("guard-file.sh")] },
   ],
   SessionStart: [{ hooks: [hook("session-start-context.sh")] }],
   Stop: [{ hooks: [hook("stop-flag-reflect.sh"), hook("evidence-gate.sh")] }],

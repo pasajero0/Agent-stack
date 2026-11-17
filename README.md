@@ -29,8 +29,10 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 ├── settings.json          # hook registration + permission allow-list
 ├── settings.local.json    # read-deny for build/generated noise (yours after generate)
 ├── hooks/                 # deterministic shell hooks, run outside the model
-│   ├── guard-bash.sh        # block git push (in any form), foreign package managers; installs: ask / deny
-│   ├── guard-file.sh        # protect the harness itself, generated files, lockfiles, tasks.json; confirm .env
+│   ├── guard-bash.sh        # block git push (in any form), foreign package managers; installs, download-
+│   │                        #   and-run (npx, dlx, curl | sh) and reading secrets: ask / deny
+│   ├── guard-file.sh        # protect the harness itself, generated files, lockfiles, tasks.json; confirm
+│   │                        #   editing .env; reading env files and keys: ask / deny
 │   ├── spec-gate.sh         # the spec leads the code: first spec merged, later changes committed first
 │   ├── cheat-guard.sh       # block edits that add .skip/.only, @ts-ignore, eslint-disable, any, …
 │   ├── arch-guard.sh        # block new imports across layer boundaries set in gates.json
@@ -145,16 +147,15 @@ The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — gua
   whether it helped.
 - **Hook output is a prompt-injection surface.** SessionStart injects branch names and commit messages, the
   lint hook quotes file content and runs repo-controlled config. Treat that text as data.
+- **Secrets:** reading an env file or a private key (Read, Grep, or `cat`/`grep`/`source` in Bash) asks first,
+  but a command that does not name the file (`cat $(ls -a | grep env)`, a script) is not caught.
 - **Known gaps** (security review of 0.3, fixes planned):
-  - reading secrets is not blocked — only *editing* a `.env` file asks first; `cat .env` and Read of keys pass;
   - the network is not restricted (`curl`, `gh gist`, WebFetch) — turn on Claude Code's `/sandbox`;
-  - "download and run" (`npx`, `pnpm dlx`, `curl … | sh`) is not treated as an install;
-  - guard-file matches the path as written, so `.claude/./hooks/…` or a different letter case slips past it;
   - irreversible commands (`rm -rf`, `git reset --hard`) are left to Claude Code's own permission prompt;
-  - tool results (web pages, MCP output) are not checked for injected instructions.
-- **The MCP catalog is not maintained:** entries run `npx -y` without a pinned version, `server-github` is
-  archived upstream, and the `fetch` entry is not the official server (that one is Python, `uvx
-  mcp-server-fetch`). Check an entry before `mcp install`.
+  - tool results (web pages, MCP output) are not checked for injected instructions;
+  - agent prompts, skills, CI workflows and `package.json` scripts are editable without a prompt.
+- **The MCP catalog is not maintained:** most entries run `npx -y` without a pinned version, and
+  `server-github` is archived upstream. Check an entry before `mcp install`.
 
 ## Experimental parts
 

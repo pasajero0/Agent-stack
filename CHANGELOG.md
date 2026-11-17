@@ -58,6 +58,25 @@ Fixes and changes from the first real trial (lex-poc, 10 sessions), and a way to
 - `stagePattern` is explained in the README with branch → spec path examples, including a feature-name
   pattern. The default stays `A0`.
 
+### Security
+
+From a security review of the harness; the rest of its findings are listed under Limits in the README.
+
+- **Reading secrets asks first.** A Read or Grep of an env file (`.env`, `.env.local`, … — not `.env.example`),
+  a private key (`*.pem`, `*.key`, `id_rsa`, …) or `.aws/credentials`, and a shell command that reads one
+  (`cat .env`, `grep KEY .env`, `source .env`), ask for confirmation; in autonomous mode they are blocked.
+  guard-file is now also registered for `Read|Grep` — `update` adds it.
+- **Download-and-run counts as an install:** `npx`, `pnpm dlx`, `yarn dlx`, `bunx`, `npm exec`, `uvx`,
+  `uv tool run`, `pipx run`, `go run …@version`, `deno run <url>` and `curl … | sh` ask first (blocked in
+  autonomous mode). `npx tsc` and the like pass when the binary is already in `node_modules/.bin`, and
+  `curl … | python3 -m json.tool` is data, not code. The list lives in guard-bash, not in `gates.json`, so it
+  reaches existing repos.
+- **The harness protects itself whatever the path looks like:** `.claude/./hooks/…`, `.claude//hooks/…`,
+  `.claude/new/../hooks/…` and `.Claude/Hooks/…` (the same file on a case-insensitive disk) are blocked; so
+  is writing a stage's `TASKS.JSON` in another letter case.
+- **The `fetch` MCP server is the official one** (`uvx mcp-server-fetch`, needs uv; no longer selected by
+  default). The old entry ran an npm package of that name, which the MCP project does not publish.
+
 ### Fixes
 
 - **A repository with no commits** no longer blocks the scaffold: `spec-gate` stays open until the first

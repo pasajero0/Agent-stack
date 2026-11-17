@@ -39,6 +39,21 @@ repo_is_empty() {
 # canon_dir <dir> → physical path (symlinks resolved: /var → /private/var on macOS).
 canon_dir() { (cd -P "$1" 2>/dev/null && pwd -P); }
 
+# lex_norm <abs path> → the same path with empty, `.` and `..` segments folded by text. Used for the part
+# of a path that does not exist yet, which `cd -P` cannot resolve: `.claude/new/../hooks/x` → `.claude/hooks/x`.
+lex_norm() {
+  local seg out="" parts
+  IFS=/ read -r -a parts <<<"$1"
+  for seg in ${parts[@]+"${parts[@]}"}; do
+    case "$seg" in
+      ''|.) ;;
+      ..) out=${out%/*} ;;
+      *) out="$out/$seg" ;;
+    esac
+  done
+  printf '%s' "${out:-/}"
+}
+
 # rel_path <path> → path relative to the project root, both sides symlink-resolved, so a file_path
 # under /private/var still matches a project dir under /var. Paths outside the project stay absolute.
 rel_path() {
@@ -51,13 +66,46 @@ rel_path() {
     rest="$(basename "$dir")/$rest"
     dir=$(dirname "$dir")
   done
-  full="$(canon_dir "$dir")/$rest"
-  full=${full#//}
+  full=$(lex_norm "$(canon_dir "$dir")/$rest")
   root=$(canon_dir "$PROJECT_DIR")
   case "$full" in
     "$root"/*) printf '%s' "${full#"$root"/}" ;;
     *) printf '%s' "$full" ;;
   esac
+}
+
+# is_secret_path <path> [word] — true for files that usually hold credentials: env files (not their
+# .example/.sample/.template/.dist copies), private keys, cloud credentials. Case-insensitive.
+# With `word` (a word of a shell command, maybe not a path): an extension-only name (*.key, *.pem, …) counts
+# only when the file exists, so `grep "event.key" src` is not a secret read.
+is_secret_path() {
+  local p=$1 base hit=1 nocase=0
+  base=${p##*/}
+  shopt -q nocasematch && nocase=1
+  shopt -s nocasematch
+  case "$base" in
+    .env.example|.env.sample|.env.template|.env.dist|.env.*.example|.env.*.sample|.env.*.template) ;;
+    .env|.env.*|id_rsa|id_dsa|id_ecdsa|id_ed25519) hit=0 ;;
+    *.pem|*.key|*.p12|*.pfx)
+      if [ "${2:-}" != word ] || [ -f "$p" ] || [ -f "$PROJECT_DIR/$p" ]; then hit=0; fi ;;
+    *)
+      case "$p" in .aws/credentials|*/.aws/credentials) hit=0 ;; esac ;;
+  esac
+  [ "$nocase" = 1 ] || shopt -u nocasematch
+  return "$hit"
+}
+
+# decide_ask <reason> — ask the human in interactive mode; in autonomous mode nobody is there to ask,
+# so block with the same reason and say where the decision goes.
+decide_ask() {
+  if [ "$(gate_get '.mode')" = "autonomous" ]; then
+    echo "Blocked: $1 Autonomous mode cannot ask — record it under NEEDS HUMAN DECISION and move on." >&2
+    exit 2
+  fi
+  jq -n --arg r "$1" '{
+    hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: $r }
+  }'
+  exit 0
 }
 
 # glob_match_any <path> — true if the path matches any case-glob read from stdin.

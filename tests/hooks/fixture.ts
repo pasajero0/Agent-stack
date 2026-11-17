@@ -118,3 +118,5 @@ export const writeTool = (file_path: string, content = "x") => ({
   tool_name: "Write",
   tool_input: { file_path, content },
 });
+export const readTool = (file_path: string) => ({ tool_name: "Read", tool_input: { file_path } });
+export const grepTool = (path: string, pattern = "x") => ({ tool_name: "Grep", tool_input: { pattern, path } });
