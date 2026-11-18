@@ -70,6 +70,9 @@ export async function roleCall<T>(
     if (fuseReached(run)) return { kind: "fuse", midCall: false };
     run.calls += 1;
     writeRun(ctx.projectDir, run);
+    const limit = run.fuse !== "off" && "calls" in run.fuse ? `/${run.fuse.calls}` : "";
+    ctx.out(`-> ${run.next} · ${role} · ${model} · call ${run.calls}${limit} ...`);
+    const started = Date.now();
     const o = await callClaude(spec(ctx, target, model), {
       cwd: ctx.projectDir,
       prompt,
@@ -82,6 +85,7 @@ export async function roleCall<T>(
       signal: ctx.signal,
     });
     run.costUsd += o.costUsd;
+    ctx.out(`   ${o.kind} in ${Math.round((Date.now() - started) / 1000)}s`);
     switch (o.kind) {
       case "aborted":
         throw new Interrupted();
