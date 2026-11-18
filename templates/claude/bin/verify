@@ -88,7 +88,7 @@ while IFS= read -r id; do
     echo "FAIL $id (exit $rc, failed $fails time(s)) — $cmd"
     [ -n "$out" ] && printf '%s\n' "$out" | tail -n 20 | sed 's/^/    /'
     [ "${fails:-0}" -ge 2 ] 2>/dev/null &&
-      echo "    → $id failed twice: escalate to a stronger model tier (see /plan)."
+      echo "    → $id failed twice: escalate — by hand, move it one tier up; under the driver a retry runs on Opus (see /plan)."
   fi
 done <<<"$ids"
 

@@ -26,7 +26,8 @@ Each stage of work goes through these steps; hooks enforce the ones marked 🔒.
    every AC → a task with a `verify` command and a tier.
    🔒 The spec leads the code: a requirement change is first a committed `spec: …` with a "## Changes"
    entry, then tests and code — in the same branch and MR (spec-gate checks the order).
-4. **Red tests first** — the **test-writer** subagent writes failing tests named `"<stage> AC-n: …"`.
+4. **Tests first, inside the task** — every task ends green: the **test-writer** subagent (or the implementer)
+   writes the failing tests named `"<stage> AC-n: …"` first, then the code makes them pass; no test-only tasks.
    🔒 `.claude/bin/trace` links criteria and tests: a criterion without a test, or a test for a criterion
    the spec does not have (feature drift), keeps `STATUS: DONE` blocked (a light spec is not traced).
    🔒 cheat-guard blocks adding skipped tests or suppressed checks (`.skip`, `@ts-ignore`, `any`, …).
@@ -77,7 +78,8 @@ context — so do trivial things directly and delegate when it buys a cheaper mo
 | tests from acceptance criteria | test-writer | sonnet |
 | spec review, code review, task analysis | spec-reviewer, code-reviewer, task-analyzer | opus |
 
-A task that fails `verify` twice moves one tier up.
+Every task ends green. By hand, a task that fails `verify` twice moves one tier up; under the driver
+(`agent-stack run`), a retry runs on Opus.
 
 ## Multi-step migrations
 

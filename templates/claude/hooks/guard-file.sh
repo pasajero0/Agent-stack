@@ -34,6 +34,14 @@ case "$rel_lc" in
     ;;
 esac
 
+# The driver's run folder (run file, lock, call records): the spec-gate and evidence-gate bypasses trust it.
+case "$rel_lc" in
+  .claude/tmp/runs/*|*/.claude/tmp/runs/*)
+    echo "Blocked: $rel is in the run folder — only the driver (agent-stack run) writes there." >&2
+    exit 2
+    ;;
+esac
+
 # A stage plan: only .claude/bin/verify updates `passes`. A new plan may be written, all tasks unproven.
 case "$rel_lc" in
   .claude/tmp/*/tasks.json)

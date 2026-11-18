@@ -9,6 +9,7 @@
 #     (.claude/tmp/<stage>/tasks.json), so verify and evidence-gate have something to check.
 # openPaths (docs, *.md, .claude/) stay open. gates.json → specGate: strict (default) | stage | off.
 # A repository with no commits yet is open too: there is nothing to merge a spec into before the scaffold.
+# So is a live quick run of the driver on this branch (gates-lib: driver_run_on_branch).
 set -euo pipefail
 . "$(dirname "$0")/gates-lib.sh"
 require_jq
@@ -26,6 +27,9 @@ gate_list '.openPaths' | glob_match_any "$rel" && exit 0
 
 # Bootstrap: an empty repository has no base branch to read a spec from — the scaffold comes first.
 repo_is_empty && exit 0
+
+# A quick fix run by the driver has no stage spec or plan: open only while that run is live on this branch.
+driver_run_on_branch quick && exit 0
 
 deny() {
   echo "Blocked by spec-gate ($rel): $1" >&2

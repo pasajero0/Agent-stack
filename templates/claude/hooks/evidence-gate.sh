@@ -7,6 +7,7 @@
 #                code-health SLO do not line up.
 #   autonomous:  also blocks stopping while any task is not passing, unless the agent reports
 #                STATUS: BLOCKED or NEEDS HUMAN DECISION.
+# Silent under a live driver run on this branch (gates-lib: driver_run_on_branch): the driver decides.
 # Never blocks twice in a row (stop_hook_active): one nudge, then the human sees the real state.
 # onFailure does not apply to Stop hooks, so this script fails open on bad input instead of crashing.
 set -uo pipefail
@@ -14,6 +15,8 @@ set -uo pipefail
 
 input=$(cat)
 [ "$(gate_get '.evidenceGate')" = "true" ] || exit 0
+# Under a live driver run on this branch the driver runs verify itself and decides the result.
+driver_run_on_branch && exit 0
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ] && exit 0
 tasks=$(tasks_file)
 

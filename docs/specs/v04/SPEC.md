@@ -575,6 +575,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **Push, PR, merge and `git fetch`:** these are the human's (D2).
 - **Bash forging the run file:** this is the known guard-file gap (README "Limits"). Both bypasses (AC-18,
   AC-26) also need `AGENT_STACK_RUN` and a live run on the current branch.
+  - Caveat: while a run is live, a nested `AGENT_STACK_RUN=<id> claude -p …` started from Bash gets the
+    bypass in that nested process. This is within the known Bash gap.
 
 ## How to verify
 
