@@ -33,7 +33,7 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 │   │                        #   and-run (npx, dlx, curl | sh) and reading secrets: ask / deny
 │   ├── guard-file.sh        # protect the harness itself, generated files, lockfiles, tasks.json; confirm
 │   │                        #   editing .env; reading env files and keys: ask / deny
-│   ├── spec-gate.sh         # the spec leads the code: first spec merged, later changes committed first
+│   ├── spec-gate.sh         # the spec leads the code: first spec merged, later changes committed first, then /plan
 │   ├── cheat-guard.sh       # block edits that add .skip/.only, @ts-ignore, eslint-disable, any, …
 │   ├── arch-guard.sh        # block new imports across layer boundaries set in gates.json
 │   ├── evidence-gate.sh     # Stop: no "STATUS: DONE" while a task fails or without EVIDENCE
@@ -55,10 +55,11 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 
 ## The workflow
 
-Hooks enforce three points of it: no code before the spec is merged (**spec-gate**), no skipped tests or
-suppressed checks (**cheat-guard**), no "done" that the task results contradict (**evidence-gate**). The
-order of the other steps is kept by skills, which the model may skip: in the first trial `/plan` was never
-called. Keeping the whole order outside the model is the next step for this project.
+Hooks enforce four points of it: no code before the spec is merged and the plan is written
+(**spec-gate**), no skipped tests or suppressed checks (**cheat-guard**), no "done" without evidence or
+against the task results (**evidence-gate**). The order of the other steps is kept by skills, which the model
+may skip. Keeping the whole order outside the model is the next step for this project
+([ADR 0001](docs/adr/0001-pipeline-driver.md)).
 
 1. **`/grill`** — the agent interviews you in numbered rounds, each question with a recommended answer,
    until no decision is open. Decisions become ADRs (**`/adr`**), edge cases go into the spec.
@@ -70,7 +71,8 @@ called. Keeping the whole order outside the model is the next step for this proj
    item with the command that proves it; no review, not traced to tests.
 3. **`/plan <stage>`** on a branch named after the stage (`A0-ingest` — the gates read the stage from it):
    `.claude/tmp/<stage>/tasks.json`, every criterion → a task with a `verify` command and a tier (S/M/L)
-   that picks the implementer's model.
+   that picks the implementer's model. Until it exists **spec-gate** keeps code closed: in the first trial
+   `/plan` was never called, and nothing checked the "done".
    **Requirements change?** The spec changes first, in the same branch: a `spec: …` commit with a
    "## Changes" entry, then tests and code. spec-gate keeps code closed while the spec has uncommitted
    edits or an unexplained change — so history always shows the spec before the code it explains.
@@ -78,7 +80,8 @@ called. Keeping the whole order outside the model is the next step for this proj
 5. **One task at a time** by the **implementer** subagent; **`.claude/bin/verify`** is the only thing that
    marks a task as passing.
 6. **Report** with STATUS / DONE / NOT DONE / EVIDENCE / RISKS / NEEDS HUMAN DECISION.
-   **evidence-gate** blocks a "done" that the task results contradict.
+   **evidence-gate** blocks a "done" without EVIDENCE (with or without a task list), and one that the task
+   results contradict.
 
 ## Drift — measured like a service
 
@@ -165,7 +168,7 @@ weekly summaries is removed in a later version.
 
 | Part | What the trial showed |
 | --- | --- |
-| `/plan` → `tasks.json` → `bin/verify` → `evidence-gate` | no `tasks.json` written; `evidence-gate` ran 218 times, stopped nothing |
+| `/plan` → `tasks.json` → `bin/verify` → `evidence-gate` | no `tasks.json` written; `evidence-gate` ran 218 times, stopped nothing. Since 0.4 spec-gate waits for `tasks.json`, so the chain is no longer optional |
 | `task-analyzer`, `pattern-scout` subagents | never called |
 | `spec-reviewer` subagent | called once (~47k tokens), result discarded |
 | `/grill`, `/migration`, `/mr-description` skills | never called |

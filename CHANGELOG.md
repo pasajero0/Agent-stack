@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased (0.4)
+
+### Upgrading from 0.3
+
+- **After `update`, code on a stage branch waits for `/plan`.** spec-gate now also needs
+  `.claude/tmp/<stage>/tasks.json`. A stage you were already coding without a plan stops at the next edit
+  with "Run /plan first". Run `/plan`, or set `specGate: "off"` in `gates.json` to opt out.
+
+### Gates
+
+- **spec-gate: no code without a plan.** After the spec checks pass, code edits wait for the stage's
+  `tasks.json`. In the first trial `/plan` was never called, so `verify` and `evidence-gate` had nothing to
+  check. Docs, `.claude/` and other `openPaths` stay open, so `/plan` can write the file.
+- **evidence-gate: no "done" without evidence, task list or not.** `STATUS: DONE` without an `EVIDENCE`
+  section is blocked outside a stage too (still once per stop, and only with `evidenceGate: true`).
+- **session-start names the next step** on a stage branch with no task list: `/spec` if the spec is not
+  merged yet, `/plan` if it is.
+
+### Docs
+
+- [ADR 0001](docs/adr/0001-pipeline-driver.md): a driver program, `agent-stack run`, will hold the pipeline
+  order. Not built yet.
+
 ## 0.3.0 — from the first trial
 
 Fixes and changes from the first real trial (lex-poc, 10 sessions), and a way to see what the harness does.

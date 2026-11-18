@@ -37,8 +37,15 @@ function mergeSpec(dir: string, body = SPEC_V1): void {
   git(dir, "commit", "-q", "-m", "spec: A0");
 }
 
-/** Start work on a stage: the stage comes from the branch name. */
-const setStage = (dir: string, stage: string) => git(dir, "checkout", "-q", "-b", `${stage}-work`);
+/** /plan's output for a stage: code waits for it once the spec is merged. */
+const planStage = (dir: string, stage: string) =>
+  write(dir, `.claude/tmp/${stage}/tasks.json`, JSON.stringify({ stage, tasks: [] }));
+
+/** Start work on a planned stage: the stage comes from the branch name. */
+const setStage = (dir: string, stage: string) => {
+  git(dir, "checkout", "-q", "-b", `${stage}-work`);
+  planStage(dir, stage);
+};
 const codeEdit = (dir: string) => edit(join(dir, "src/app.ts"));
 
 describe("spec-gate", () => {
@@ -139,6 +146,7 @@ describe("spec-gate", () => {
     git(jira, "add", "docs");
     git(jira, "commit", "-q", "-m", "spec: PAY-12");
     git(jira, "checkout", "-q", "-b", "feature/PAY-12-refunds");
+    planStage(jira, "PAY-12");
     patchGates(jira, { stagePattern: "^([A-Z]+-[0-9]+)" });
     expect(runHook(jira, "spec-gate.sh", codeEdit(jira)).code).toBe(0);
 
@@ -148,6 +156,50 @@ describe("spec-gate", () => {
     patchGates(loose, { specGate: "off" });
     setStage(loose, "A0");
     expect(runHook(loose, "spec-gate.sh", codeEdit(loose)).code).toBe(0);
+  });
+
+  describe("plan check", () => {
+    it("A0 plan: merged spec, stage branch, no tasks.json → code waits for /plan; docs and tasks.json stay open", () => {
+      const dir = repo();
+      mergeSpec(dir);
+      git(dir, "checkout", "-q", "-b", "A0-work");
+      const r = runHook(dir, "spec-gate.sh", codeEdit(dir));
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("Run /plan A0 first");
+      expect(r.stderr).toContain(".claude/tmp/A0/tasks.json");
+      for (const open of [".claude/tmp/A0/tasks.json", "README.md", "docs/adr/0001-x.md"]) {
+        expect(runHook(dir, "spec-gate.sh", edit(join(dir, open))).code).toBe(0);
+      }
+      planStage(dir, "A0");
+      expect(runHook(dir, "spec-gate.sh", codeEdit(dir)).code).toBe(0);
+    });
+
+    it("A0 plan: specGate off ignores the missing tasks.json", () => {
+      const dir = repo();
+      mergeSpec(dir);
+      git(dir, "checkout", "-q", "-b", "A0-work");
+      patchGates(dir, { specGate: "off" });
+      expect(runHook(dir, "spec-gate.sh", codeEdit(dir)).code).toBe(0);
+    });
+
+    it("A0 plan: the plan file stays writable when openPaths leave .claude/ closed", () => {
+      const dir = repo();
+      mergeSpec(dir);
+      git(dir, "checkout", "-q", "-b", "A0-work");
+      patchGates(dir, { openPaths: ["docs/*", "*.md"] });
+      expect(runHook(dir, "spec-gate.sh", writeTool(join(dir, ".claude/tmp/A0/tasks.json"))).code).toBe(0);
+      expect(runHook(dir, "spec-gate.sh", writeTool(join(dir, ".claude/tmp/B1/tasks.json"))).code).toBe(2);
+      expect(runHook(dir, "spec-gate.sh", codeEdit(dir)).code).toBe(2);
+    });
+
+    it("A0 plan: the spec checks come before the plan check", () => {
+      const dir = repo();
+      git(dir, "checkout", "-q", "-b", "A0-work");
+      const r = runHook(dir, "spec-gate.sh", codeEdit(dir));
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("not merged");
+      expect(r.stderr).not.toContain("/plan");
+    });
   });
 
   it("stays open without a gates.json (harness from an older version)", () => {
@@ -282,6 +334,8 @@ describe("guard-file on tasks.json", () => {
     expect(runHook(dir, "guard-file.sh", writeTool(path, plan(false))).code).toBe(0);
     expect(runHook(dir, "guard-file.sh", writeTool(path, plan(true))).code).toBe(2);
     expect(runHook(dir, "guard-file.sh", writeTool(path, "not json")).code).toBe(2);
+    // An empty plan would open spec-gate with nothing to verify.
+    expect(runHook(dir, "guard-file.sh", writeTool(path, JSON.stringify({ tasks: [] }))).code).toBe(2);
   });
 
   it("blocks editing an existing plan — only verify updates it", () => {
@@ -328,6 +382,24 @@ describe("session-start-context", () => {
     expect(r.stdout).toContain("No commits yet: spec-gate stays open");
   });
 
+  it("A0 hints: a stage branch without tasks.json names the next step, /spec or /plan", () => {
+    const dir = repo();
+    git(dir, "checkout", "-q", "-b", "A0-work");
+    const startup = () =>
+      runHook(dir, "session-start-context.sh", { session_id: "t", cwd: dir, source: "startup" });
+    let r = startup();
+    expect(r.stdout).toContain("no merged spec yet. Next: /spec");
+    expect(r.stdout).not.toContain("Next: /plan");
+
+    git(dir, "checkout", "-q", "main");
+    mergeSpec(dir);
+    git(dir, "checkout", "-q", "A0-work");
+    git(dir, "merge", "-q", "main");
+    r = startup();
+    expect(r.stdout).toContain("spec merged, no tasks.json yet. Next: /plan");
+    expect(r.stdout).not.toContain("Next: /spec");
+  });
+
   it("warns about a hook file that is not registered or not executable", () => {
     const dir = repo();
     write(dir, ".claude/hooks/docs-guard.sh", "#!/usr/bin/env bash\nexit 0\n");
@@ -360,9 +432,20 @@ describe("evidence-gate", () => {
   });
   const decision = (r: { stdout: string }) => (r.stdout ? JSON.parse(r.stdout).decision : undefined);
 
-  it("does nothing outside an active stage", () => {
+  it("outside an active stage, asks only for evidence", () => {
     const dir = repo();
-    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE")).stdout).toBe("");
+    expect(decision(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE")))).toBe("block");
+    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE\nEVIDENCE: pnpm test → 12 passed")).stdout).toBe("");
+    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: IN PROGRESS")).stdout).toBe("");
+  });
+
+  it("skipping /plan does not skip the evidence check; an unreadable plan falls back to it", () => {
+    const dir = repo();
+    git(dir, "checkout", "-q", "-b", "A0-work"); // stage branch, no tasks.json
+    expect(decision(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE")))).toBe("block");
+    write(dir, ".claude/tmp/A0/tasks.json", "{}");
+    expect(decision(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE")))).toBe("block");
+    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE\nEVIDENCE: pnpm test → ok")).stdout).toBe("");
   });
 
   it("blocks a DONE claim while a task is not passing", () => {

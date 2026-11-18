@@ -5,6 +5,8 @@
 #  2. Later spec changes ride in the same branch and MR as the code, but ahead of it: while the spec has
 #     uncommitted edits, code is closed; a committed spec that differs from the base must say what
 #     changed under "## Changes". So history always reads "spec: …" before the code it explains.
+#  3. The plan follows the spec: code waits until /plan has broken the spec into tasks
+#     (.claude/tmp/<stage>/tasks.json), so verify and evidence-gate have something to check.
 # openPaths (docs, *.md, .claude/) stay open. gates.json → specGate: strict (default) | stage | off.
 # A repository with no commits yet is open too: there is nothing to merge a spec into before the scaffold.
 set -euo pipefail
@@ -53,5 +55,11 @@ if ! git diff --quiet "$ref" HEAD -- "$spec" 2>/dev/null; then
   [ "$(git show "$ref:$spec" | changes_section)" != "$(git show "HEAD:$spec" | changes_section)" ] ||
     deny "$spec differs from $ref, but its ## Changes section does not say what changed and why. Add the entry, commit it, then the code."
 fi
+
+# The plan itself is always writable — even with openPaths narrowed below .claude/ — or /plan could never
+# open the gate. guard-file checks what a new plan contains.
+plan=".claude/tmp/$stage/tasks.json"
+[ "$rel" = "$plan" ] || [ -f "$PROJECT_DIR/$plan" ] ||
+  deny "stage $stage has no task list yet ($plan). Run /plan $stage first — it breaks the merged spec into tasks with verify commands; the code comes after."
 
 exit 0
