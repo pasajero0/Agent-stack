@@ -6,6 +6,7 @@ import { generateCommand } from "./commands/generate.js";
 import { updateCommand } from "./commands/update.js";
 import { syncCommand } from "./commands/sync.js";
 import { usageCommand } from "./commands/usage.js";
+import { runAction } from "./commands/run.js";
 import { toolVersion } from "./claude/harness.js";
 
 export const program = new Command();
@@ -65,3 +66,14 @@ program
   .option("--json", "Print the report as JSON")
   .option("--save", "Also save the summary to .claude/tmp/usage/<date>.json (counts only, no conversation text)")
   .action(usageCommand);
+
+program
+  .command("run")
+  .description('Drive the pipeline: run quick|task "<description>", or --resume / --status / --cancel a run')
+  .argument("[mode]", "quick or task")
+  .argument("[description]", "what to build or fix")
+  .option("--stage <id>", "stage id the task gate proposes (still validated)")
+  .option("--resume [id]", "continue a waiting or interrupted run (default: the locked one)")
+  .option("--status [id]", "print the run; change nothing")
+  .option("--cancel [id]", "cancel a waiting or interrupted run")
+  .action(runAction);
