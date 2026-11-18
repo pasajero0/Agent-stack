@@ -7,7 +7,7 @@ import { DEFAULT_STAGE_PATTERN } from "../../claude/gates.js";
 import { loadRunConfig } from "../config.js";
 import { RunError } from "../errors.js";
 import { selectPrompter, type Prompter } from "../gate.js";
-import { createBranch, currentBranch, dirtyPaths, headSha } from "../git.js";
+import { branchExists, createBranch, currentBranch, dirtyPaths, headSha } from "../git.js";
 import {
   acquireLock,
   createRunDir,
@@ -146,7 +146,8 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       branch: plan.newBranch ?? branch,
       baseCommit: plan.newBranch ? head : null,
       tasks: plan.tasks,
-      createdBranches: plan.newBranch ? [plan.newBranch] : [],
+      // Filled once the branch exists, so a kill in between leaves no false entry (AC-55).
+      createdBranches: [],
       gates: [],
       answers: [],
       humanDecisions: [],
@@ -165,6 +166,8 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       try {
         refuseDirty(dir, `before creating ${plan.newBranch}`);
         createBranch(dir, plan.newBranch, head);
+        run.createdBranches.push(plan.newBranch);
+        writeRun(dir, run);
       } catch (e) {
         releaseLock(dir);
         rmSync(runDir(dir, id), { recursive: true, force: true });
@@ -173,6 +176,18 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
     }
     return drive(o, cfg, run, mode);
   });
+}
+
+/**
+ * AC-55: a work branch the driver creates (`baseCommit` is set for it) that is missing — a kill between the
+ * run file and the branch — is created from `baseCommit` on a clean tree and recorded in `createdBranches`.
+ * An existing one is left to the branch check: it is checked out by the human, never created again.
+ */
+function restoreRunBranch(dir: string, run: RunFile): void {
+  if (run.baseCommit === null || branchExists(dir, run.branch)) return;
+  refuseDirty(dir, `to create the run's branch ${run.branch} again`);
+  createBranch(dir, run.branch, run.baseCommit);
+  if (!run.createdBranches.includes(run.branch)) run.createdBranches.push(run.branch);
 }
 
 /** Steps whose resume needs a clean tree (AC-49); spec and plan bounds are the mode's `resumeCheck`. */
@@ -196,6 +211,7 @@ export function resumeRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
     const mode = modeSteps(run.mode);
     const { kind, task } = parseNext(run.next);
     if (kind !== "gate:spec-merge") {
+      restoreRunBranch(dir, run);
       const cur = currentBranch(dir);
       if (cur !== run.branch) {
         throw new RunError(`Run ${id} works on branch ${run.branch}, but ${cur ?? "a detached HEAD"} is checked out. Run git switch ${run.branch}, then resume.`, 1);

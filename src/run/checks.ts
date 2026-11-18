@@ -9,6 +9,8 @@ const TAIL_LINES = 50;
 /** A check result plus the last lines of its output. */
 export interface CheckRun extends CheckResult {
   tail: string;
+  /** Set when the signal stopped the check: the step is interrupted, not red. */
+  aborted?: boolean;
 }
 
 function lastLines(text: string): string {
@@ -16,34 +18,44 @@ function lastLines(text: string): string {
   return lines.slice(-TAIL_LINES).join("\n");
 }
 
-/** Run `cmd` through `bash -c`; decide by exit code only. Empty command is skipped. A timeout kills the whole process group. */
-export function runCheck(cmd: string, cwd: string, timeoutMs: number): Promise<CheckRun> {
+/**
+ * Run `cmd` through `bash -c`; decide by exit code only. Empty command is skipped. A timeout or an abort of
+ * `signal` kills the whole process group; an aborted check reports `aborted` (AC-51).
+ */
+export function runCheck(cmd: string, cwd: string, timeoutMs: number, signal?: AbortSignal): Promise<CheckRun> {
   if (cmd.trim() === "") return Promise.resolve({ cmd, exit: 0, skipped: true, tail: "" });
+  if (signal?.aborted) return Promise.resolve({ cmd, exit: 130, skipped: false, tail: "interrupted", aborted: true });
   return new Promise((resolve) => {
     const child = spawn("bash", ["-c", cmd], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
-    let timedOut = false;
+    let stopped: "timeout" | "aborted" | null = null;
     const take = (chunk: Buffer): void => {
       out += chunk.toString("utf8");
     };
     child.stdout.on("data", take);
     child.stderr.on("data", take);
-    const timer = setTimeout(() => {
-      timedOut = true;
+    const stop = (why: "timeout" | "aborted"): void => {
+      if (stopped) return;
+      stopped = why;
       try {
         if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
       } catch {
         child.kill("SIGKILL");
       }
-    }, timeoutMs);
+    };
+    const onAbort = (): void => stop("aborted");
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const timer = setTimeout(() => stop("timeout"), timeoutMs);
     const finish = (exit: number, extra: string): void => {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
       const text = extra ? (out ? `${out}\n${extra}` : extra) : out;
-      resolve({ cmd, exit, skipped: false, tail: lastLines(text) });
+      resolve({ cmd, exit, skipped: false, tail: lastLines(text), ...(stopped === "aborted" ? { aborted: true } : {}) });
     };
     child.on("error", (e) => finish(1, e.message));
     child.on("close", (code) => {
-      if (timedOut) finish(code !== null && code !== 0 ? code : 124, `timed out after ${timeoutMs} ms`);
+      if (stopped === "timeout") finish(code !== null && code !== 0 ? code : 124, `timed out after ${timeoutMs} ms`);
+      else if (stopped === "aborted") finish(code !== null && code !== 0 ? code : 130, "interrupted");
       else finish(code ?? 1, "");
     });
   });

@@ -73,8 +73,11 @@ export interface ModeSteps {
   taskInfo(ctx: Ctx, id: string): TaskInfo;
   /** Commands of the checks step (AC-19, AC-22, AC-25). */
   checkItems(ctx: Ctx, task: RunTask, info: TaskInfo): CheckItem[];
-  /** Whether the green checks are followed by a review (AC-20, AC-25). */
-  needsReview(ctx: Ctx, task: RunTask): boolean;
+  /**
+   * Whether the green checks are followed by a review (AC-20, AC-25). `diffLines` is the task diff size; an
+   * empty diff (0) is reviewed too unless the mode says otherwise (AC-46).
+   */
+  needsReview(ctx: Ctx, task: RunTask, diffLines: number): boolean;
   /** The task base-check hands over to. */
   firstTask(ctx: Ctx): string;
   /** The task after `id`, or null when gate:accept follows. */

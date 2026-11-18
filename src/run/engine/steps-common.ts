@@ -11,6 +11,7 @@ import { RunError } from "../errors.js";
 import {
   commitPaths,
   currentBranch,
+  diffLines,
   git,
   headSha,
   normaliseHeader,
@@ -22,10 +23,11 @@ import { blockingCount, isBlocking, parseImplement, parseReview, type ImplementO
 import { runDir } from "../store.js";
 import type { LimitReason, Next, RunTask } from "../types.js";
 import { judgeCall, roleCall } from "./call.js";
-import { findTask, resumeHint, type CheckItem, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
+import { findTask, Interrupted, resumeHint, type CheckItem, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
 import { taskNext, type StepEvent, type StepKind } from "./transitions.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
+const CONTINUE = "continue from `git status`.";
 
 /** The task of a task step; a `next` without one is an engine bug. */
 function taskOf(ctx: Ctx, id: string | null): RunTask {
@@ -67,7 +69,8 @@ export function lintItems(ctx: Ctx, task: RunTask): CheckItem[] {
 
 /** Runs `test` before any change; red is exit 1 with `next` kept (AC-15, AC-24, AC-41). */
 const baseCheck: StepHandler = async (ctx) => {
-  const r = await runCheck(ctx.cfg.commands.test, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000);
+  const r = await runCheck(ctx.cfg.commands.test, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
+  if (r.aborted) throw new Interrupted();
   if (!r.skipped && r.exit !== 0) {
     throw new RunError(
       `base-check: \`${r.cmd}\` exited ${r.exit} before any change, so the base is red. Fix the base, then ${resumeHint(ctx.run.id)}.\n${r.tail}`,
@@ -94,16 +97,24 @@ function undoGitSideEffects(ctx: Ctx, task: RunTask): string | null {
   const want = ctx.run.branch;
   const notes: string[] = [];
   const branch = currentBranch(dir);
-  if (headSha(dir) !== base) {
+  /**
+   * Soft-resets the checked-out branch to the base when the role committed on top of it. Off the run's branch
+   * a HEAD that does not descend from the base (main in task mode) is left alone: only the switch is undone.
+   */
+  const resetCommits = (onRunBranch: boolean): void => {
+    if (headSha(dir) === base) return;
     if (!git(dir, ["merge-base", "--is-ancestor", base, "HEAD"]).ok) {
+      if (!onRunBranch) return;
       throw new RunError(
         `implement moved HEAD off the task base ${short(base)}; it cannot be reset without losing work. Restore ${want} at ${short(base)} by hand, then ${resumeHint(ctx.run.id)}.`,
         1
       );
     }
     softReset(dir, base);
-    notes.push(`You made a commit; the program soft-reset it to ${short(base)} and kept your edits. Do not commit: the program commits.`);
-  }
+    const note = `You made a commit; the program soft-reset it to ${short(base)} and kept your edits. Do not commit: the program commits.`;
+    if (!notes.includes(note)) notes.push(note);
+  };
+  resetCommits(branch === want);
   if (branch !== want) {
     const r = git(dir, ["checkout", "-q", want]);
     if (!r.ok) {
@@ -113,6 +124,8 @@ function undoGitSideEffects(ctx: Ctx, task: RunTask): string | null {
       );
     }
     notes.push(`You switched to ${branch ?? "a detached HEAD"}; the program returned to ${want} with your edits. Do not branch.`);
+    // A commit made on the run's branch before the switch (AC-43).
+    resetCommits(true);
   }
   return notes.length > 0 ? notes.join("\n") : null;
 }
@@ -127,11 +140,14 @@ const implement: StepHandler = async (ctx, id) => {
   const r = await roleCall(ctx, { role: "implement", commands }, implementModel(info, task), prompt, parseImplement);
   const stray = undoGitSideEffects(ctx, task);
   if (r.kind === "fuse") {
-    if (stray) task.lastFeedback = stray;
+    // A call stopped by error_max_budget_usd left edits, like an interrupted implement (AC-30, AC-35).
+    const why = r.midCall ? `The previous session hit the budget limit. Its edits are kept; ${CONTINUE}` : null;
+    const feedback = [why, stray].filter((s) => s !== null).join("\n");
+    if (feedback !== "") task.lastFeedback = feedback;
     return toLimit(ctx, "fuse", ctx.run.next);
   }
   if (r.kind === "failed") {
-    const why = `The previous attempt ended early: ${r.message}. Its edits are kept; continue from \`git status\`.`;
+    const why = `The previous attempt ended early: ${r.message}. Its edits are kept; ${CONTINUE}`;
     return failAttempt(ctx, task, stray ? `${why}\n${stray}` : why);
   }
   ctx.run.humanDecisions.push(...r.value.needsHumanDecision);
@@ -180,7 +196,11 @@ const checks: StepHandler = async (ctx, id) => {
   const info = ctx.mode.taskInfo(ctx, task.id);
   const items = ctx.mode.checkItems(ctx, task, info);
   const runs: CheckRun[] = [];
-  for (const item of items) runs.push(await runCheck(item.cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000));
+  for (const item of items) {
+    const r = await runCheck(item.cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
+    if (r.aborted) throw new Interrupted();
+    runs.push(r);
+  }
   task.checks = runs.map((r, i) => ({
     cmd: r.cmd.trim() === "" ? `(empty ${items[i]?.label ?? "check"} command)` : r.cmd,
     exit: r.exit,
@@ -191,8 +211,8 @@ const checks: StepHandler = async (ctx, id) => {
     return item && !r.skipped && r.exit !== 0 ? [checkFeedback(ctx, item, r)] : [];
   });
   if (red.length > 0) return failAttempt(ctx, task, red.join("\n\n"));
-  if (taskDiffPaths(ctx.projectDir, baseOf(task)).length === 0) return { type: "commit" };
-  return ctx.mode.needsReview(ctx, task) ? { type: "review" } : { type: "commit" };
+  // The mode decides, an empty diff included: task mode reviews it before commit "empty" (AC-20, AC-46).
+  return ctx.mode.needsReview(ctx, task, diffLines(ctx.projectDir, baseOf(task))) ? { type: "review" } : { type: "commit" };
 };
 
 // ---- review ----

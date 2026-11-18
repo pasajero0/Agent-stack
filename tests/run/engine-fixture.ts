@@ -16,6 +16,30 @@ export const makeFakeExecutable = (): void => chmodSync(FAKE, 0o755);
 
 export type Json = Record<string, unknown>;
 
+export const BRANCH = "quick/fix-the-readme-line";
+export const DESC = "Fix the README line";
+export const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i}`).join("\n") + "\n";
+
+export interface LoggedCall {
+  argv: string[];
+  env: { AGENT_STACK_RUN: string | null };
+}
+
+/** One line of the fake's log, checked rather than cast. */
+function isLoggedCall(v: unknown): v is LoggedCall {
+  if (typeof v !== "object" || v === null || !("argv" in v) || !("env" in v)) return false;
+  const { argv, env } = v;
+  if (!Array.isArray(argv) || !argv.every((a) => typeof a === "string")) return false;
+  if (typeof env !== "object" || env === null || !("AGENT_STACK_RUN" in env)) return false;
+  return env.AGENT_STACK_RUN === null || typeof env.AGENT_STACK_RUN === "string";
+}
+
+function parseLogged(line: string): LoggedCall {
+  const v: unknown = JSON.parse(line);
+  if (!isLoggedCall(v)) throw new Error(`fake-claude log line has an unexpected shape: ${line}`);
+  return v;
+}
+
 export interface Repo {
   dir: string;
   out: string[];
@@ -24,7 +48,7 @@ export interface Repo {
   /** Engine options; `gate` lines become the AGENT_STACK_GATE_INPUT file of this invocation. */
   opts: (o?: { gate?: string[]; pid?: number; signal?: AbortSignal }) => EngineOptions;
   run: () => RunFile;
-  logged: () => Array<{ argv: string[]; env: { AGENT_STACK_RUN: string | null } }>;
+  logged: () => LoggedCall[];
 }
 
 let clock = 0;
@@ -82,7 +106,7 @@ export function repo(gates: { test?: string; lint?: string; run?: Json; extra?: 
         ? readFileSync(logPath, "utf8")
             .trim()
             .split("\n")
-            .map((l) => JSON.parse(l) as { argv: string[]; env: { AGENT_STACK_RUN: string | null } })
+            .map(parseLogged)
         : [],
   };
 }

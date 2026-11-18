@@ -14,8 +14,8 @@ export type CallTarget = { role: "implement"; commands: CallCommands } | { role:
 
 export type RoleResult<T> =
   | { kind: "ok"; value: T }
-  /** The fuse is reached (before the call, or the call hit `error_max_budget_usd`). */
-  | { kind: "fuse" }
+  /** The fuse is reached: before the call, or the call hit `error_max_budget_usd` (`midCall`, its edits stay). */
+  | { kind: "fuse"; midCall: boolean }
   /** max turns, error during execution, or the step timeout: the reason goes to feedback. */
   | { kind: "failed"; message: string };
 
@@ -67,7 +67,7 @@ export async function roleCall<T>(
   const role = target.role;
   let mismatch = "";
   for (let round = 0; round < 2; round++) {
-    if (fuseReached(run)) return { kind: "fuse" };
+    if (fuseReached(run)) return { kind: "fuse", midCall: false };
     run.calls += 1;
     writeRun(ctx.projectDir, run);
     const o = await callClaude(spec(ctx, target, model), {
@@ -91,7 +91,7 @@ export async function roleCall<T>(
           1
         );
       case "budget":
-        return { kind: "fuse" };
+        return { kind: "fuse", midCall: true };
       case "turns":
       case "exec-error":
       case "timeout":
@@ -125,7 +125,7 @@ export async function judgeCall<T>(
   role: Exclude<Role, "implement">,
   prompt: (feedback: string | null) => string,
   parse: (v: unknown) => T | string
-): Promise<{ kind: "ok"; value: T } | { kind: "fuse" }> {
+): Promise<Exclude<RoleResult<T>, { kind: "failed" }>> {
   let feedback: string | null = null;
   for (let round = 0; round < 2; round++) {
     const r: RoleResult<T> = await roleCall(ctx, { role }, "opus", prompt(feedback), parse);

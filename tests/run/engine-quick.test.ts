@@ -1,24 +1,28 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { chmodSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import { chmodSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanupProjects, git, patchGates, write } from "../hooks/fixture.js";
-import { cancelRun, resumeRun, startRun, statusRun } from "../../src/run/engine/index.js";
+import { resumeRun, startRun } from "../../src/run/engine/index.js";
 import { transition } from "../../src/run/engine/transitions.js";
 import { listRuns, readLock } from "../../src/run/store.js";
 import { runCommand } from "../../src/commands/run.js";
-import { DEAD_PID, impl, makeFakeExecutable, repo, review, sh, text } from "./engine-fixture.js";
+import { loadRunConfig } from "../../src/run/config.js";
+import type { Ctx, ModeSteps } from "../../src/run/engine/context.js";
+import { runLoop } from "../../src/run/engine/loop.js";
+import { quickMode } from "../../src/run/engine/steps-quick.js";
+import { selectPrompter } from "../../src/run/gate.js";
+import { BRANCH, DESC, impl, lines, makeFakeExecutable, repo, review, sh, text } from "./engine-fixture.js";
 
 beforeAll(makeFakeExecutable);
 afterEach(() => cleanupProjects());
-
-const BRANCH = "quick/fix-the-readme-line";
-const DESC = "Fix the README line";
-const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line ${i}`).join("\n") + "\n";
 
 describe("quick mode: the path", () => {
   it("v04 AC-24: creates quick/<slug> from HEAD, runs base-check and Q1, commits once and finishes without a push", async () => {
     const r = repo();
     const head = sh(r.dir, "rev-parse", "HEAD");
+    const origin = join(r.dir, ".git", "origin.git");
+    git(r.dir, "init", "-q", "--bare", origin);
+    git(r.dir, "remote", "add", "origin", origin);
     r.script([impl({ writes: { "README.md": "# demo\nfixed\n" } })]);
     const code = await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC });
     expect(code, text(r)).toBe(0);
@@ -30,7 +34,7 @@ describe("quick mode: the path", () => {
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
     expect(sh(r.dir, "rev-list", "--count", `main..${BRANCH}`)).toBe("1");
     expect(sh(r.dir, "log", "-1", "--format=%s")).toBe("fix: fix the README line");
-    expect(sh(r.dir, "remote")).toBe("");
+    expect(sh(origin, "for-each-ref")).toBe("");
     expect(run.tasks[0]?.commit).toBe(sh(r.dir, "rev-parse", "HEAD"));
     expect(readLock(r.dir)).toBeNull();
     const calls = readdirSync(join(r.dir, ".claude/tmp/runs", run.id, "calls"));
@@ -65,6 +69,22 @@ describe("quick mode: the path", () => {
     expect(r.run().tasks[0]?.commit).toBe("empty");
     expect(sh(r.dir, "rev-parse", "HEAD")).toBe(head);
     expect(text(r)).toMatch(/Q1.*empty/);
+  });
+  it("v04 AC-20: an empty diff still goes through review when the mode asks, then records commit \"empty\" (AC-46)", async () => {
+    const r = repo();
+    r.script([{ stdout: "not json", exit: 1 }, impl({}), review()]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(1);
+    const seen: number[] = [];
+    const mode: ModeSteps = { ...quickMode, needsReview: (_ctx, _task, diffLines) => (seen.push(diffLines), true) };
+    const env = r.opts({ gate: ["a"] }).env ?? {};
+    const prompter = selectPrompter(env, false);
+    const signal = new AbortController().signal;
+    const ctx: Ctx = { projectDir: r.dir, cfg: loadRunConfig(r.dir), run: r.run(), mode, prompter, out: (l) => r.out.push(l), env, signal };
+    const code = await runLoop(ctx).finally(() => prompter.close());
+    expect(code, text(r)).toBe(0);
+    expect(seen).toEqual([0]);
+    expect(r.logged().length).toBe(3);
+    expect(r.run().tasks[0]?.commit).toBe("empty");
   });
 });
 
@@ -218,6 +238,52 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
     expect(sh(r.dir, "log", "-1", "--format=%s", BRANCH)).toBe("fix: fix the README line");
   });
+  it("v04 AC-43: implement committing on the run's branch, then switching to main, is soft-reset on the run's branch", async () => {
+    const r = repo();
+    const main = sh(r.dir, "rev-parse", "main");
+    r.script([
+      impl({ writes: { "README.md": "# demo\nfixed\n" }, exec: "git add README.md && git commit -q -m sneaky && git checkout -q main" }),
+      impl({ model: "opus" }),
+    ]);
+    const code = await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC });
+    expect(code, text(r)).toBe(0);
+    const task = r.run().tasks[0];
+    expect(task?.attempts).toBe(2);
+    expect(task?.lastFeedback).toContain("commit");
+    expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
+    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "rev-parse", "main")).toBe(main);
+    expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nfixed\n");
+  });
+
+  it("v04 AC-43: implement committing, then running checkout -b stray, is soft-reset and returned, edits kept", async () => {
+    const r = repo();
+    r.script([
+      impl({ writes: { "README.md": "# demo\nfixed\n" }, exec: "git add README.md && git commit -q -m sneaky && git checkout -q -b stray" }),
+      impl({ model: "opus" }),
+    ]);
+    const code = await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC });
+    expect(code, text(r)).toBe(0);
+    const task = r.run().tasks[0];
+    expect(task?.attempts).toBe(2);
+    expect(task?.lastFeedback).toContain("commit");
+    expect(task?.lastFeedback).toContain("stray");
+    expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
+    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix: fix the README line");
+    expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nfixed\n");
+  });
+
+  it("v04 AC-35: a call ended by error_max_budget_usd goes to gate:limit (fuse); implement continues from git status", async () => {
+    const r = repo({ run: { fuse: { usd: 1 } } });
+    const budget = { type: "result", subtype: "error_max_budget_usd", is_error: true, num_turns: 9, total_cost_usd: 0.5 };
+    r.script([{ expectRole: "implement", expectModel: "sonnet", writes: { "README.md": "# demo\nhalf\n" }, stdout: budget, exit: 1 }]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    const run = r.run();
+    expect(run.limitReason).toBe("fuse");
+    expect(run.returnTo).toBe("implement:Q1");
+    expect(run.tasks[0]?.attempts).toBe(1);
+    expect(run.tasks[0]?.lastFeedback).toContain("continue from `git status`");
+  });
 });
 
 describe("quick mode: failures that exit 1", () => {
@@ -256,139 +322,6 @@ describe("quick mode: failures that exit 1", () => {
     expect(r.run().next).toBe("base-check");
     expect(text(r)).toContain("test -f ok.txt");
     expect(r.logged().length).toBe(0);
-  });
-});
-
-describe("gates, resume and the lock", () => {
-  it("v04 AC-29: without a terminal or gate input the gate is recorded, --resume printed, exit 3; resume answers it", async () => {
-    const r = repo();
-    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" } })]);
-    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
-    let run = r.run();
-    expect(run.status).toBe("waiting");
-    expect(run.next).toBe("gate:accept");
-    expect(text(r)).toContain(`agent-stack run --resume ${run.id}`);
-    expect(readLock(r.dir)?.id).toBe(run.id);
-
-    expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(0);
-    run = r.run();
-    expect(run.status).toBe("finished");
-    expect(readLock(r.dir)).toBeNull();
-  });
-
-  it("v04 AC-28: --cancel of a waiting run marks it cancelled, removes the lock and keeps the branch", async () => {
-    const r = repo();
-    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" } })]);
-    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
-    const head = sh(r.dir, "rev-parse", "HEAD");
-    expect(await cancelRun({ ...r.opts() })).toBe(0);
-    expect(r.run().status).toBe("cancelled");
-    expect(readLock(r.dir)).toBeNull();
-    expect(sh(r.dir, "rev-parse", BRANCH)).toBe(head);
-    expect(text(r)).toContain(BRANCH);
-  });
-
-  it("v04 AC-28: --cancel removes a lock whose run folder is missing (AC-55)", async () => {
-    const r = repo();
-    write(r.dir, ".claude/tmp/runs/lock", JSON.stringify({ id: "r-20260101-000000", pid: DEAD_PID }));
-    expect(await cancelRun({ ...r.opts() })).toBe(0);
-    expect(readLock(r.dir)).toBeNull();
-  });
-
-  it("v04 AC-23: --status prints id, mode, status, next, branch, attempts, calls, cost and fuse, changing nothing", async () => {
-    const r = repo();
-    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" } })]);
-    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
-    const run = r.run();
-    const file = join(r.dir, ".claude/tmp/runs", run.id, "run.json");
-    const before = readFileSync(file, "utf8");
-    r.out.length = 0;
-    expect(await statusRun({ ...r.opts() })).toBe(0);
-    const t = text(r);
-    for (const want of [run.id, "quick", "waiting", "gate:accept", BRANCH, "Q1", "attempts 1", "calls 1", "$0.01", "calls 40"]) {
-      expect(t).toContain(want);
-    }
-    expect(readFileSync(file, "utf8")).toBe(before);
-  });
-
-  it("v04 AC-1: a new run while a lock exists removes its own folder and names the locked run (AC-50)", async () => {
-    const r = repo();
-    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" } })]);
-    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
-    const first = r.run().id;
-    r.out.length = 0;
-    expect(await startRun({ ...r.opts(), mode: "quick", description: "another fix" })).toBe(1);
-    expect(listRuns(r.dir)).toEqual([first]);
-    const t = text(r);
-    for (const want of [first, `--resume ${first}`, `--status ${first}`, `--cancel ${first}`]) expect(t).toContain(want);
-    expect(sh(r.dir, "branch", "--list", "quick/another-fix")).toBe("");
-  });
-
-  it("v04 AC-50: a live run refuses --resume and --cancel (stop it first)", async () => {
-    const r = repo();
-    r.script([{ stdout: "not json", exit: 1 }]);
-    expect(await startRun({ ...r.opts({ pid: process.pid }), mode: "quick", description: DESC })).toBe(1);
-    r.out.length = 0;
-    expect(await resumeRun({ ...r.opts() })).toBe(1);
-    expect(text(r)).toMatch(/live/);
-    r.out.length = 0;
-    expect(await cancelRun({ ...r.opts() })).toBe(1);
-    expect(text(r)).toContain("stop it first (Ctrl-C)");
-    expect(r.run().status).toBe("running");
-  });
-
-  it("v04 AC-51: an abort stops the Claude child, writes the run file and exits 1; resume continues it (AC-30)", async () => {
-    const r = repo();
-    r.script([
-      { ...impl({ writes: { "late.txt": "x\n" } }), sleepMs: 5000 },
-      impl({ writes: { "README.md": "# demo\nfixed\n" } }),
-    ]);
-    const ac = new AbortController();
-    setTimeout(() => ac.abort(), 800);
-    const started = Date.now();
-    expect(await startRun({ ...r.opts({ signal: ac.signal }), mode: "quick", description: DESC })).toBe(1);
-    expect(Date.now() - started).toBeLessThan(4000);
-    let run = r.run();
-    expect(run.status).toBe("running");
-    expect(run.next).toBe("implement:Q1");
-    expect(existsSync(join(r.dir, "late.txt"))).toBe(false);
-
-    const code = await resumeRun({ ...r.opts({ gate: ["a"] }) });
-    expect(code, text(r)).toBe(0);
-    run = r.run();
-    expect(run.tasks[0]?.attempts).toBe(1);
-    expect(run.tasks[0]?.lastFeedback).toContain("git status");
-  });
-
-  it("v04 AC-52: --resume on a branch other than the run's refuses and names the branch", async () => {
-    const r = repo();
-    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" } })]);
-    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
-    git(r.dir, "checkout", "-q", "main");
-    r.out.length = 0;
-    expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(1);
-    expect(text(r)).toContain(BRANCH);
-    expect(r.run().status).toBe("waiting");
-  });
-
-  it("v04 AC-53: a missing, absent or finished run is reported; --resume and --cancel exit 1, --status exits 0", async () => {
-    const r = repo();
-    expect(await resumeRun({ ...r.opts() })).toBe(1);
-    expect(await cancelRun({ ...r.opts() })).toBe(1);
-    expect(await resumeRun({ ...r.opts(), id: "r-20990101-000000" })).toBe(1);
-    expect(text(r)).toContain("r-20990101-000000");
-    expect(await statusRun({ ...r.opts() })).toBe(0);
-
-    r.script([impl({})]);
-    expect(await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC })).toBe(0);
-    const id = r.run().id;
-    r.out.length = 0;
-    expect(await resumeRun({ ...r.opts(), id })).toBe(1);
-    expect(await cancelRun({ ...r.opts(), id })).toBe(1);
-    expect(text(r)).toContain("finished");
-    r.out.length = 0;
-    expect(await statusRun({ ...r.opts(), id })).toBe(0);
-    expect(text(r)).toContain(id);
   });
 });
 

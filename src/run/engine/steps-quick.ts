@@ -3,10 +3,10 @@
  * Spec: docs/specs/v04/SPEC.md, "Quick mode" table, AC-24, AC-25, AC-54.
  */
 import { RunError } from "../errors.js";
-import { branchExists, diffLines, slugify } from "../git.js";
+import { branchExists, slugify } from "../git.js";
 import { newTask, type ModeSteps } from "./context.js";
 import { fixComment } from "./gates.js";
-import { baseOf, lintItems } from "./steps-common.js";
+import { lintItems } from "./steps-common.js";
 
 export const quickMode: ModeSteps = {
   maxAttempts: 2,
@@ -36,9 +36,9 @@ export const quickMode: ModeSteps = {
     return [{ label: "test", cmd: ctx.cfg.commands.test }, ...lintItems(ctx, task)];
   },
 
-  /** Review only above `quickReviewLines` (AC-25). */
-  needsReview(ctx, task) {
-    return diffLines(ctx.projectDir, baseOf(task)) > ctx.cfg.quickReviewLines;
+  /** Review only above `quickReviewLines` (AC-25), so never for an empty diff. */
+  needsReview(ctx, _task, diffLines) {
+    return diffLines > ctx.cfg.quickReviewLines;
   },
 
   firstTask: () => "Q1",
