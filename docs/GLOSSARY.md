@@ -73,8 +73,14 @@ it here first.
   attempt runs on Opus.
 - **Limit gate** — where a run stops when attempts run out, review findings stop shrinking, or the fuse
   blows: one more attempt (on Opus), raise the fuse (only when the fuse blew), or cancel.
-- **Fuse** — the run-wide cost cap (`run.fuseUsd`). Not a budget: it stops a run that went wrong. On a
-  subscription the dollars are a measure of work, not money.
+- **Fuse** — the run-wide cap (`run.fuse`). It is not a budget: it stops a run that went wrong. It comes in
+  three kinds:
+  - **calls**, the default: Claude calls per run. It fits a subscription, where what runs out is the usage
+    limit, not money.
+  - **usd**: for API billing.
+  - **off**.
+
+  Turns per call and attempts per task apply whatever the kind.
 - **Feedback** — what sends a run back to implement: the failing command and its output, review findings,
   the human's comment.
 

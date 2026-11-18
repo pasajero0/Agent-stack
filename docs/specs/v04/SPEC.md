@@ -51,7 +51,12 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
 - **Every task ends green.** The test is written first *inside* the task, seen to fail, then the code
   makes it pass. There are no test-only tasks.
 - **One run per repo.** A waiting or interrupted run blocks a new one; `--cancel` frees it.
-- **Every call** gets the remaining fuse as its `--max-budget-usd`.
+- **The run fuse has three kinds.**
+  - Calls: at most N Claude calls per run. This is the default, and it fits a subscription.
+  - Dollars: for API billing. Every call also gets what is left as its `--max-budget-usd`.
+  - Off.
+
+  Turns per call, attempts per task and the review-loop stop apply whatever the kind.
 
 ## Terms
 
@@ -189,16 +194,24 @@ When the file runs out, the gate behaves as AC-29: it is recorded, and the drive
 - **plan-approve** and **accept**: `a` approve, `r` reject (a comment follows), `c` cancel.
 - **limit**:
   - reasons attempts, blocked or review loop: `r` retry, `c` cancel;
-  - reason fuse: `f <usd>` sets a new fuse for this run (it must be above the cost so far), `c` cancel.
+  - reason fuse: `f <n>` sets a new limit for this run, in the fuse's own unit (calls or dollars); it must be
+    above what is used so far. `c` cancels.
 
 **`.claude/gates.json` → `run`**
 
 This key is optional. Its defaults are in code, because `update` never rewrites `gates.json`. Timeouts
-accept fractions. `fuseUsd: 0` turns the fuse off.
+accept fractions.
 
 ```json
-{ "run": { "maxTurns": 60, "fuseUsd": 25, "stepTimeoutMin": 30, "checkTimeoutMin": 15, "quickReviewLines": 120 } }
+{ "run": { "maxTurns": 60, "fuse": { "calls": 40 }, "stepTimeoutMin": 30, "checkTimeoutMin": 15, "quickReviewLines": 120 } }
 ```
+
+`fuse` takes one of three forms:
+- `{ "calls": <n> }`, the default with n = 40;
+- `{ "usd": <n> }`;
+- `"off"`.
+
+Any other value is refused when a run starts, with code 1.
 
 **Run file (`run.json`)**
 
@@ -219,18 +232,19 @@ accept fractions. `fuseUsd: 0` turns the fuse off.
 | `gates` | `{ gate, at, decision, comment }[]` |
 | `answers` | `{ question, answer }[]` |
 | `humanDecisions` | `string[]`, shown at the next gate |
-| `costUsd`, `fuseUsd` | number |
+| `costUsd` | number, the sum of `total_cost_usd`; always recorded, whatever the fuse |
+| `calls` | number of Claude calls made |
+| `fuse` | `{ calls: n }` \| `{ usd: n }` \| `"off"`, copied from config at start; raised at gate:limit |
 
 **How Claude Code is invoked**
 
 The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwise `claude`. Every call:
-- gets `-p --output-format json --max-turns <maxTurns> --max-budget-usd <fuse left> --model <model>
-  --json-schema <role schema>`;
+- gets `-p --output-format json --max-turns <maxTurns> --model <model> --json-schema <role schema>`, plus
+  `--max-budget-usd <dollars left>` only with a dollar fuse;
 - gets the role prompt on stdin;
 - gets `AGENT_STACK_RUN` in its environment;
 - never gets `--bare`, `bypassPermissions`, `--dangerously-skip-permissions` or `disableAllHooks`.
 
-With the fuse off, `--max-budget-usd` is left out.
 
 | Role | Model | `--tools` | `--permission-mode` | `--allowedTools` |
 | --- | --- | --- | --- | --- |
@@ -408,7 +422,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - the id, mode, status and `next`;
   - the branch;
   - the attempts per task;
-  - the cost and the fuse.
+  - the calls made, the cost, and the fuse.
 
   It SHALL change nothing and exit 0.
 
@@ -452,8 +466,12 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     have 3 attempts; quick mode and its fix tasks have 2.
 - **AC-34:** IF the review blocks, THEN THE SYSTEM SHALL return to implement with the blocking items as
   feedback, as a new attempt or gate:limit (partner of AC-20).
-- **AC-35:** IF `costUsd` reaches `fuseUsd` (when above 0), or a call ends with `error_max_budget_usd`, THEN
-  THE SYSTEM SHALL go to gate:limit, reason "fuse", before any further call (partner of AC-2).
+- **AC-35:** IF the fuse is reached, THEN THE SYSTEM SHALL go to gate:limit, reason "fuse", before any
+  further call (partner of AC-2). The fuse is reached when:
+  - with `calls`, `calls` equals the limit;
+  - with `usd`, `costUsd` reaches the limit, or a call ends with `error_max_budget_usd`.
+
+  With `"off"` there is no fuse step.
   - The interrupted step counts no attempt, and its edits stay for the step after the fuse is raised.
 - **AC-36:** IF a call ends with no result JSON (and the driver did not kill it), or with `is_error` and
   `num_turns` 0, THEN THE SYSTEM SHALL
@@ -537,8 +555,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   finishes in under 10 s on the CI runner (GitHub `ubuntu-latest`). The driver makes no model calls of its
   own.
 - **Turns:** each call is capped at `maxTurns` (default 60).
-- **Fuse:** the run-wide cap is `fuseUsd` (default 25, counted by `total_cost_usd`). Each call gets what is
-  left.
+- **Fuse:** by default 40 Claude calls per run. A dollar fuse counts by `total_cost_usd`, and each call gets
+  what is left. `"off"` leaves only the per-call turns and the per-task attempts.
 - **Crash safety:** a kill at any point leaves a run that `--resume` continues (AC-3, AC-30, AC-51).
 - **No new runtime dependencies:** only Node's standard library and the existing `execa` wrapper
   (`src/utils/shell.ts`). The wrapper is extended with stdin, a timeout and kill.

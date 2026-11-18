@@ -86,7 +86,11 @@ at fixed gates. The stage order and the engine follow Purple Flow; the safety mo
 **Safety invariants of the driver.**
 - Hooks stay on: no `--bare`, no `bypassPermissions`, no `disableAllHooks`.
 - Read-only roles get read-only tools (`--tools`).
-- Every run has `--max-budget-usd` and `--max-turns`.
+- Every call has `--max-turns`, and every task has an attempt limit — always.
+- The run-wide fuse is chosen per project:
+  - calls per run, the default, which fits a subscription;
+  - dollars, for API billing, also passed to each call as `--max-budget-usd`;
+  - off.
 - A hook's `ask` inside a headless run is a denial. The agent reports it as NEEDS HUMAN DECISION and the
   driver shows it at the next gate.
 
