@@ -1,0 +1,98 @@
+/** Shared types of the pipeline driver (`agent-stack run`). Spec: docs/specs/v04/SPEC.md. */
+
+export type Mode = "task" | "quick";
+
+export type RunStatus = "running" | "waiting" | "finished" | "cancelled";
+
+export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse";
+
+/** Roles the driver calls Claude in. */
+export type Role = "clarify" | "spec" | "plan" | "implement" | "review";
+
+/** The step a run is at. `implement:<task>`, `checks:<task>`, `review:<task>`, `commit:<task>` carry a task id. */
+export type Next =
+  | "clarify"
+  | "gate:answers"
+  | "spec"
+  | "gate:spec-merge"
+  | "plan"
+  | "gate:plan-approve"
+  | "base-check"
+  | "gate:accept"
+  | "gate:limit"
+  | `implement:${string}`
+  | `checks:${string}`
+  | `review:${string}`
+  | `commit:${string}`;
+
+/** `{calls: n}`, `{usd: n}` or `"off"`. */
+export type Fuse = { calls: number } | { usd: number } | "off";
+
+export interface CheckResult {
+  cmd: string;
+  exit: number;
+  skipped: boolean;
+}
+
+export interface RunTask {
+  id: string;
+  taskBase: string | null;
+  attempts: number;
+  blockingCount: number | null;
+  lastFeedback: string | null;
+  checks: CheckResult[];
+  notes: string[];
+  /** sha, `"empty"` for an empty diff, or null before the commit. */
+  commit: string | null;
+}
+
+export interface GateRecord {
+  gate: string;
+  at: string;
+  decision: string;
+  comment: string | null;
+}
+
+export interface AnswerRecord {
+  question: string;
+  answer: string;
+}
+
+export interface RunFile {
+  id: string;
+  description: string;
+  mode: Mode;
+  status: RunStatus;
+  next: Next;
+  returnTo: Next | null;
+  limitReason: LimitReason | null;
+  /** Clarify output (questions, size, stage, split); null until clarify returns. */
+  proposal: unknown;
+  stage: string | null;
+  size: "task" | "story" | "epic" | null;
+  branch: string;
+  baseCommit: string | null;
+  tasks: RunTask[];
+  createdBranches: string[];
+  gates: GateRecord[];
+  answers: AnswerRecord[];
+  humanDecisions: string[];
+  costUsd: number;
+  calls: number;
+  fuse: Fuse;
+}
+
+/** gates.json values the driver needs, with the `run` key's defaults filled in. */
+export interface RunConfig {
+  maxTurns: number;
+  fuse: Fuse;
+  stepTimeoutMin: number;
+  checkTimeoutMin: number;
+  quickReviewLines: number;
+  commands: { test: string; lint: string };
+  lintMatch: string[];
+  specsDir: string;
+  adrDir: string;
+  baseBranch: string;
+  stagePattern: string;
+}
