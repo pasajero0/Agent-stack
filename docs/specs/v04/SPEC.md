@@ -225,6 +225,7 @@ Any other value is refused when a run starts, with code 1.
 | `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| null |
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
+| `stagePrefill` | the `--stage` id that gate:answers proposes, or null |
 | `branch` | the branch the run expects to be on |
 | `baseCommit` | sha, set when the run's work branch is created |
 | `tasks` | `{ id, taskBase, attempts, blockingCount, lastFeedback, checks: {cmd, exit, skipped}[], notes: string[], commit: sha \| "empty" \| null }[]` |
@@ -570,6 +571,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   log, and a 5-round limit.
 - **"Accept as is"** at gate:limit.
 - **A custom `stagePattern` in task mode** (AC-54).
+- **Plan-role writes under another `.claude/tmp/<other>/`:** the plan role's bounds (AC-12) cannot see them,
+  because git does not track `.claude/tmp/`.
 - **Worktree per run and parallel runs.** They wait for 2.W1–2.W7.
 - **The browser check** (7.11, with V9) **and lessons after a run** (7.12).
 - **Push, PR, merge and `git fetch`:** these are the human's (D2).

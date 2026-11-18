@@ -60,7 +60,8 @@ export interface StartPlan {
   tasks: RunTask[];
   /** A work branch the driver creates from HEAD right after the lock (quick/<slug>); null for none. */
   newBranch: string | null;
-  stage: string | null;
+  /** `--stage`: the stage id gate:answers proposes (task mode); the confirmed id is `run.stage`. */
+  stagePrefill: string | null;
 }
 
 export interface ModeSteps {
@@ -82,8 +83,6 @@ export interface ModeSteps {
   firstTask(ctx: Ctx): string;
   /** The task after `id`, or null when gate:accept follows. */
   nextTaskAfter(ctx: Ctx, id: string): string | null;
-  /** Extra resume refusals for mode steps (AC-49: spec/plan bounds); may be absent. */
-  resumeCheck?(ctx: Ctx): void;
 }
 
 /** Thrown when the signal aborts a call or a gate; the loop writes the run and exits 1 (AC-51). */

@@ -3,7 +3,7 @@
  * AC-31, AC-32, AC-46, AC-56. Task-mode gates (T9) reuse `ask`, `recordGate` and `showDecisions`.
  */
 import { diffStat, git } from "../git.js";
-import type { RunFile } from "../types.js";
+import type { GateRecord, RunFile } from "../types.js";
 import { fuseText } from "./call.js";
 import { Interrupted, newTask, type Ctx, type StepHandler } from "./context.js";
 import { parseNext, type StepEvent } from "./transitions.js";
@@ -25,8 +25,8 @@ export async function ask(ctx: Ctx, prompt: string): Promise<string | null> {
   }
 }
 
-export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null): void {
-  ctx.run.gates.push({ gate, at: new Date().toISOString(), decision, comment });
+export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256"> = {}): void {
+  ctx.run.gates.push({ gate, at: new Date().toISOString(), decision, comment, ...extra });
   // Shown at this gate; a decision clears them (AC-32).
   ctx.run.humanDecisions = [];
 }

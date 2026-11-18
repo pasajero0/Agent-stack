@@ -86,6 +86,9 @@ function obj(o: Obj, key: string, allowNull: boolean): Obj {
   return v;
 }
 
+/** A repo-relative directory as the driver compares paths: no leading `./`, no trailing `/`. */
+const dirPath = (p: string): string => p.replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+
 /** Reads `.claude/gates.json` and fills the `run` defaults. An invalid value is a `RunError` (exit 1). */
 export function loadRunConfig(projectDir: string): RunConfig {
   const path = join(projectDir, ".claude", "gates.json");
@@ -109,8 +112,8 @@ export function loadRunConfig(projectDir: string): RunConfig {
     quickReviewLines: positiveInt(run, "quickReviewLines", DEFAULTS.quickReviewLines),
     commands: { test: str(cmds, "test", "", "commands.test"), lint: str(cmds, "lint", "", "commands.lint") },
     lintMatch: strings(parsed, "lintMatch"),
-    specsDir: str(parsed, "specsDir", DEFAULTS.specsDir),
-    adrDir: str(parsed, "adrDir", DEFAULTS.adrDir),
+    specsDir: dirPath(str(parsed, "specsDir", DEFAULTS.specsDir)),
+    adrDir: dirPath(str(parsed, "adrDir", DEFAULTS.adrDir)),
     baseBranch: str(parsed, "baseBranch", DEFAULTS.baseBranch),
     stagePattern: str(parsed, "stagePattern", DEFAULT_STAGE_PATTERN),
   };

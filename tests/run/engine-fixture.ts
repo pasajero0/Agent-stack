@@ -23,12 +23,15 @@ export const lines = (n: number): string => Array.from({ length: n }, (_, i) => 
 export interface LoggedCall {
   argv: string[];
   env: { AGENT_STACK_RUN: string | null };
+  /** The prompt, or its first and last 2000 chars when longer than 4000. */
+  prompt: string;
 }
 
 /** One line of the fake's log, checked rather than cast. */
 function isLoggedCall(v: unknown): v is LoggedCall {
-  if (typeof v !== "object" || v === null || !("argv" in v) || !("env" in v)) return false;
-  const { argv, env } = v;
+  if (typeof v !== "object" || v === null || !("argv" in v) || !("env" in v) || !("prompt" in v)) return false;
+  const { argv, env, prompt } = v;
+  if (typeof prompt !== "string") return false;
   if (!Array.isArray(argv) || !argv.every((a) => typeof a === "string")) return false;
   if (typeof env !== "object" || env === null || !("AGENT_STACK_RUN" in env)) return false;
   return env.AGENT_STACK_RUN === null || typeof env.AGENT_STACK_RUN === "string";

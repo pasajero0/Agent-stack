@@ -20,7 +20,7 @@ export const quickMode: ModeSteps = {
         1
       );
     }
-    return { next: "base-check", tasks: [newTask("Q1")], newBranch: name, stage: null };
+    return { next: "base-check", tasks: [newTask("Q1")], newBranch: name, stagePrefill: null };
   },
 
   taskInfo(ctx, id) {

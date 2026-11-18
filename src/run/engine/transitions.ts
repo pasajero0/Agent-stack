@@ -39,7 +39,15 @@ export type EventType =
   | "reject" // gate:accept reject; `task` is the new fix task
   | "cancel"
   | "resume" // gate:limit retry or raise
-  | "no-input"; // a gate without input: not in the table; the loop sets waiting and exits 3 (AC-29)
+  | "no-input" // a gate without input: not in the table; the loop sets waiting and exits 3 (AC-29)
+  // ---- task mode only ----
+  | "clarified" // clarify: valid output stored as proposal
+  | "answered" // gate:answers: size task/story and a valid stage id confirmed
+  | "epic" // gate:answers: size epic confirmed, split.md written
+  | "spec-done" // spec: SPEC.md in bounds and committed on spec/<stage>
+  | "merged" // gate:spec-merge: the spec is on the base ref, <stage>-<slug> created
+  | "planned" // plan: a valid plan in bounds
+  | "approve"; // gate:plan-approve: approved (its reject reuses "reject")
 
 export interface StepEvent {
   type: EventType;
@@ -81,7 +89,15 @@ export const TABLE: readonly Row[] = [
   { from: ["commit"], event: "committed-last", to: "gate:accept", ac: "AC-21, AC-25" },
   { from: ["gate:accept"], event: "accept", to: "finished", ac: "AC-22" },
   { from: ["gate:accept"], event: "reject", to: "implement:<event>", ac: "AC-22" },
-  // ---- task mode only (T9): clarify, gate:answers, spec, gate:spec-merge, plan, gate:plan-approve ----
+  // ---- task mode only: clarify, gate:answers, spec, gate:spec-merge, plan, gate:plan-approve ----
+  { from: ["clarify"], event: "clarified", to: "gate:answers", ac: "AC-6" },
+  { from: ["gate:answers"], event: "answered", to: "spec", ac: "AC-7, AC-8" },
+  { from: ["gate:answers"], event: "epic", to: "finished", ac: "AC-9" },
+  { from: ["spec"], event: "spec-done", to: "gate:spec-merge", ac: "AC-10" },
+  { from: ["gate:spec-merge"], event: "merged", to: "plan", ac: "AC-11" },
+  { from: ["plan"], event: "planned", to: "gate:plan-approve", ac: "AC-12, AC-13" },
+  { from: ["gate:plan-approve"], event: "approve", to: "base-check", ac: "AC-14" },
+  { from: ["gate:plan-approve"], event: "reject", to: "plan", ac: "AC-14" },
   // ---- from any step ----
   { from: GATES, event: "cancel", to: "cancelled", ac: "AC-28" },
   { from: TASK_STEPS, event: "retry", to: "implement:<same>", ac: "AC-33, AC-34, AC-38, AC-42, AC-43" },

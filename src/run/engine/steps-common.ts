@@ -2,7 +2,7 @@
  * Steps both modes share: base-check, implement, checks, review, commit. Spec: docs/specs/v04/SPEC.md,
  * AC-15/16/19/20/24/25, and the unhappy path AC-33/34/36..39/41..43/46/55.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { lintRuns, runCheck, verifyTail, type CheckRun } from "../checks.js";
 import type { Model } from "../claude.js";
@@ -21,9 +21,10 @@ import {
 import { implementPrompt, reviewPrompt } from "../prompts.js";
 import { blockingCount, isBlocking, parseImplement, parseReview, type ImplementOutput, type ReviewOutput } from "../schemas.js";
 import { runDir } from "../store.js";
-import type { LimitReason, Next, RunTask } from "../types.js";
+import type { LimitReason, Next, Role, RunTask } from "../types.js";
 import { judgeCall, roleCall } from "./call.js";
 import { findTask, Interrupted, resumeHint, type CheckItem, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
+import { requireClean } from "./role-bounds.js";
 import { taskNext, type StepEvent, type StepKind } from "./transitions.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
@@ -67,8 +68,12 @@ export function lintItems(ctx: Ctx, task: RunTask): CheckItem[] {
 
 // ---- base-check ----
 
-/** Runs `test` before any change; red is exit 1 with `next` kept (AC-15, AC-24, AC-41). */
+/**
+ * Runs `test` on the clean tree before any change; red is exit 1 with `next` kept (AC-15, AC-24, AC-41). A
+ * change made while gate:plan-approve waited is refused here, so it does not slip into the first task's diff.
+ */
 const baseCheck: StepHandler = async (ctx) => {
+  requireClean(ctx.projectDir, "before base-check");
   const r = await runCheck(ctx.cfg.commands.test, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
   if (r.aborted) throw new Interrupted();
   if (!r.skipped && r.exit !== 0) {
@@ -159,27 +164,39 @@ const implement: StepHandler = async (ctx, id) => {
   return { type: "done" };
 };
 
-/** The newest implement call's output: the DONE that checks, review and commit act on. */
-export function lastImplement(ctx: Ctx): ImplementOutput {
+/**
+ * The output of the newest `calls/<n>-<role>.json`, or null when there is none, it is not valid, or (with
+ * `newerThan`, epoch ms) it was written at or before that time.
+ */
+export function lastCallOutput<T>(ctx: Ctx, role: Role, parse: (v: unknown) => T | string, newerThan: number | null = null): T | null {
   const dir = join(runDir(ctx.projectDir, ctx.run.id), "calls");
+  const pattern = new RegExp(`^(\\d+)-${role}\\.json$`);
   let best = -1;
-  for (const name of readdirSync(dir)) {
-    const m = /^(\d+)-implement\.json$/.exec(name);
+  for (const name of existsSync(dir) ? readdirSync(dir) : []) {
+    const m = pattern.exec(name);
     if (m) best = Math.max(best, Number(m[1]));
   }
-  const fail = (): never => {
-    throw new RunError(`No valid implement output in ${dir}; the run cannot go on. Cancel it: agent-stack run --cancel ${ctx.run.id}.`, 1);
-  };
-  if (best < 0) return fail();
+  if (best < 0) return null;
+  const file = join(dir, `${best}-${role}.json`);
+  if (newerThan !== null && statSync(file).mtimeMs <= newerThan) return null;
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(join(dir, `${best}-implement.json`), "utf8"));
+    raw = JSON.parse(readFileSync(file, "utf8"));
   } catch {
-    return fail();
+    return null;
   }
-  const result = isObj(raw) && isObj(raw.result) ? raw.result.structured_output : undefined;
-  const out = parseImplement(result);
-  return typeof out === "string" ? fail() : out;
+  const out = parse(isObj(raw) && isObj(raw.result) ? raw.result.structured_output : undefined);
+  return typeof out === "string" ? null : out;
+}
+
+/** The newest implement call's output: the DONE that checks, review and commit act on. */
+export function lastImplement(ctx: Ctx): ImplementOutput {
+  const out = lastCallOutput(ctx, "implement", parseImplement);
+  if (out === null) {
+    const dir = join(runDir(ctx.projectDir, ctx.run.id), "calls");
+    throw new RunError(`No valid implement output in ${dir}; the run cannot go on. Cancel it: agent-stack run --cancel ${ctx.run.id}.`, 1);
+  }
+  return out;
 }
 
 // ---- checks ----

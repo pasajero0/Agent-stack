@@ -51,6 +51,8 @@ export interface GateRecord {
   at: string;
   decision: string;
   comment: string | null;
+  /** A plan-approve reject: the sha256 of the rejected tasks.json, so a leftover copy is known exactly (AC-14). */
+  planSha256?: string;
 }
 
 export interface AnswerRecord {
@@ -68,7 +70,10 @@ export interface RunFile {
   limitReason: LimitReason | null;
   /** Clarify output (questions, size, stage, split); null until clarify returns. */
   proposal: unknown;
+  /** The confirmed stage id; null until gate:answers confirms one (and for an epic or a quick run). */
   stage: string | null;
+  /** `--stage`: the stage id gate:answers proposes, or null. */
+  stagePrefill: string | null;
   size: "task" | "story" | "epic" | null;
   branch: string;
   baseCommit: string | null;

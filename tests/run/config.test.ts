@@ -61,6 +61,11 @@ describe("loadRunConfig", () => {
     });
   });
 
+  it("normalises specsDir and adrDir: no leading ./, no trailing /", () => {
+    writeGates({ specsDir: "./docs/specs/", adrDir: "docs/adr//" });
+    expect(loadRunConfig(dir)).toMatchObject({ specsDir: "docs/specs", adrDir: "docs/adr" });
+  });
+
   it("treats run: null as no run key", () => {
     writeGates({ run: null });
     expect(loadRunConfig(dir)).toEqual(DEFAULTS);

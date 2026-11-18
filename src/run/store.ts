@@ -154,7 +154,11 @@ function task(v: unknown, f: string): RunTask {
 
 function gate(v: unknown, f: string): GateRecord {
   const o = obj(v, f);
-  return { gate: str(o.gate, f), at: str(o.at, f), decision: str(o.decision, f), comment: strOrNull(o.comment, f) };
+  const g: GateRecord = { gate: str(o.gate, f), at: str(o.at, f), decision: str(o.decision, f), comment: strOrNull(o.comment, f) };
+  if (o.planSha256 !== undefined) {
+    g.planSha256 = typeof o.planSha256 === "string" && /^[0-9a-f]{64}$/.test(o.planSha256) ? o.planSha256 : bad(`${f}.planSha256`);
+  }
+  return g;
 }
 
 function answer(v: unknown, f: string): AnswerRecord {
@@ -177,6 +181,7 @@ function toRunFile(v: unknown, id: string): RunFile {
     limitReason: o.limitReason === null ? null : oneOf(LIMITS, o.limitReason, "limitReason"),
     proposal: o.proposal === null || isObj(o.proposal) ? o.proposal : bad("proposal"),
     stage: strOrNull(o.stage, "stage"),
+    stagePrefill: strOrNull(o.stagePrefill, "stagePrefill"),
     size: o.size === null ? null : oneOf(SIZES, o.size, "size"),
     branch: str(o.branch, "branch"),
     baseCommit: strOrNull(o.baseCommit, "baseCommit"),

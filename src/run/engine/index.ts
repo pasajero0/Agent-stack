@@ -1,6 +1,6 @@
 /**
  * Engine entry points: start, resume, cancel, status. Spec: docs/specs/v04/SPEC.md, "CLI", AC-1, AC-23,
- * AC-28..30, AC-49..55. Modes plug in through `MODES`; task mode (T9) is registered there.
+ * AC-28..30, AC-49..55. Modes plug in through `MODES`.
  */
 import { rmSync } from "node:fs";
 import { DEFAULT_STAGE_PATTERN } from "../../claude/gates.js";
@@ -28,12 +28,12 @@ import { findTask, type Ctx, type ModeSteps } from "./context.js";
 import { cancelledText } from "./gates.js";
 import { runLoop, type ExitCode } from "./loop.js";
 import { quickMode } from "./steps-quick.js";
+import { taskMode } from "./steps-task.js";
 import { parseNext } from "./transitions.js";
 
 export type { ExitCode } from "./loop.js";
 
-/** Task mode is null until T9 registers its steps. */
-const MODES: Record<Mode, ModeSteps | null> = { quick: quickMode, task: null };
+const MODES: Record<Mode, ModeSteps | null> = { quick: quickMode, task: taskMode };
 
 export interface EngineOptions {
   projectDir: string;
@@ -141,7 +141,8 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       returnTo: null,
       limitReason: null,
       proposal: null,
-      stage: plan.stage,
+      stage: null,
+      stagePrefill: plan.stagePrefill,
       size: null,
       branch: plan.newBranch ?? branch,
       baseCommit: plan.newBranch ? head : null,
@@ -190,7 +191,7 @@ function restoreRunBranch(dir: string, run: RunFile): void {
   if (!run.createdBranches.includes(run.branch)) run.createdBranches.push(run.branch);
 }
 
-/** Steps whose resume needs a clean tree (AC-49); spec and plan bounds are the mode's `resumeCheck`. */
+/** Steps whose resume needs a clean tree (AC-49); spec and plan check their bounds when they start. */
 const CLEAN_ON_RESUME = new Set(["gate:spec-merge", "gate:plan-approve", "base-check"]);
 
 const INTERRUPTED_FEEDBACK = "The previous session was interrupted; continue from `git status`.";
@@ -220,7 +221,6 @@ export function resumeRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
     if (CLEAN_ON_RESUME.has(kind)) refuseDirty(dir, `to resume at ${run.next}`);
     const interrupted = run.status === "running";
     return drive(o, cfg, run, mode, (ctx) => {
-      mode.resumeCheck?.(ctx);
       const pid = o.pid ?? process.pid;
       if (lock) takeOverLock(dir, id, pid, lock);
       else if (!acquireLock(dir, id, pid)) throw lockRefusal(dir);
