@@ -34,14 +34,15 @@ Code headless one stage at a time. It runs the checks itself and decides by exit
 at fixed gates. The stage order and the engine follow Purple Flow; the safety model stays ours.
 
 **Engine.**
-- One state file per run, `.claude/tmp/<stage>/run.json`: `mode`, `next`, `attempts`, `feedback`, `gates[]`,
-  `baseCommit`, `session`. The agent cannot edit it; guard-file protects it like `tasks.json`.
+- One state file per run, `.claude/tmp/runs/<run id>/run.json` (a quick run has no stage): `mode`, `next`, `attempts`, `feedback`, `gates[]`,
+  `baseCommit` (full list in the v04 spec). The agent cannot edit it; guard-file protects it like `tasks.json`.
 - An explicit transition table, not transitions scattered over the stages (Purple Flow scatters them;
   agent's inference).
 - Every way back (red checks, blocking review, human rejection) writes `feedback` and returns to implement.
 - Attempts are limited: quick 2, others 3. When they run out, or review findings stop shrinking, the run
   stops at a ✋ `limit` gate.
-- An infrastructure failure (quota, timeout) does not use up an attempt.
+- An infrastructure failure (API, quota, auth — the call did no work) does not use up an attempt. A call that
+  times out or runs out of turns after working does: its edits are kept for the next attempt.
 - Resume after a crash continues from `git status` and `tasks.json`.
 
 **Modes in v1.**
@@ -55,8 +56,8 @@ at fixed gates. The stage order and the engine follow Purple Flow; the safety mo
 
 - **There is no separate "big task" mode.** The task mode's clarify stage sizes the work as task, story or
   epic and proposes the split. The human confirms it at the first gate.
-  - task: one `tasks.json`, a light spec.
-  - story: one stage spec with several tasks.
+  - task: a full spec with one or two tasks. The light spec stays for setup work with nothing to see.
+  - story: a full spec with several tasks.
   - epic: several stages, each its own spec, branch and run.
 - "Auto" mode selection is left for later.
 
@@ -77,7 +78,9 @@ at fixed gates. The stage order and the engine follow Purple Flow; the safety mo
 
 **Review.**
 - One reviewer, two verdicts: spec compliance and quality (Superpowers, June 2026).
-- The reviewer gets the task, the executor's report as unverified claims, and the diff `BASE..HEAD`.
+- The reviewer runs after every task. It gets the task, the executor's report as unverified claims, and the
+  task's own diff (from HEAD before the task; the driver commits after the review passes).
+- Every task ends green: its test is written first inside the task. There are no test-only tasks.
 - It runs on Claude with a fresh context, on a model no weaker than the executor's and never haiku (D1).
 
 **Safety invariants of the driver.**
@@ -118,7 +121,7 @@ at fixed gates. The stage order and the engine follow Purple Flow; the safety mo
 - **Follow-ups:**
   - Specs for the driver by parts: engine + quick/task; bug + refactor; baseline compare; review.
   - The plain-session gates (no `tasks.json` → no code; no fresh `verify` → no "done").
-  - How quick and bug runs pass spec-gate without a full spec: the run mode is read from `run.json`, which only
-    the driver writes (agent's inference — to settle in the engine spec).
+  - How quick and bug runs pass spec-gate without a full spec: settled in `docs/specs/v04/SPEC.md` (AC-26) —
+    only the driver's own calls (`AGENT_STACK_RUN` naming a live run on the current branch) get the bypass.
   - Browser check (7.11) together with V9, later.
   - Worktree per run after 2.W1–2.W7.
