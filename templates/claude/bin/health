@@ -7,6 +7,8 @@
 # Built-in, any stack:   maxFileLines     — longest changed code file   (slo.maxFileLines)
 #                        newDependencies  — added to package.json / requirements.txt / go.mod
 #                                           since the base branch       (slo.newDependencies)
+#                        misplacedDocs    — changed Markdown outside docsLayout; report only, never
+#                                           breaks (empty docsLayout = not measured)
 # Project commands:      gates.json → health: [{ "name", "command" ({files} = changed code files),
 #                        "max" }] — the command prints one number, e.g. functions over complexity 10.
 # null limit = report only. Each run appends a line to .claude/tmp/health.jsonl (the time series).
@@ -29,9 +31,9 @@ ref=$(base_ref)
 
 # Changed on this branch: committed since the base, staged / unstaged, and new untracked files.
 changed=$({
-  [ -n "$ref" ] && git diff --name-only --diff-filter=ACMR "$ref"...HEAD 2>/dev/null
-  git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null
-  git ls-files -o --exclude-standard
+  [ -n "$ref" ] && git -c core.quotepath=false diff --name-only --diff-filter=ACMR "$ref"...HEAD 2>/dev/null
+  git -c core.quotepath=false diff --name-only --diff-filter=ACMR HEAD 2>/dev/null
+  git -c core.quotepath=false ls-files -o --exclude-standard
 } | sort -u)
 
 # Code = changed files that are not docs/open paths, generated files or tests.
@@ -84,6 +86,20 @@ for manifest in package.json requirements.txt go.mod; do
 done
 new_dep_count=$(printf '%s' "$new_deps" | wc -w | tr -d ' ')
 
+# --- built-in: Markdown outside the doc layout (gates.json → docsLayout; report only) ---
+docs_layout=$(gate_list '.docsLayout')
+misplaced=""
+if [ -n "$docs_layout" ]; then
+  while IFS= read -r f; do
+    case "$f" in */*.[mM][dD]) ;; *) continue ;; esac # Markdown at the repo root always fits
+    [ -f "$f" ] || continue
+    printf '%s\n' "$docs_layout" | glob_match_any "$f" && continue
+    misplaced="$misplaced$f
+"
+  done <<<"$changed"
+fi
+misplaced_count=$(printf '%s' "$misplaced" | sed '/^$/d' | wc -l | tr -d ' ')
+
 # --- report + SLO check ---
 broken=""
 json='{}'
@@ -112,6 +128,12 @@ record() { # name value limit detail
 limit_max_lines=$(gate_get '.slo.maxFileLines')
 record maxFileLines "$max_lines" "$limit_max_lines" "${max_file}"
 record newDependencies "$new_dep_count" "$(gate_get '.slo.newDependencies')" "$new_deps"
+if [ -n "$docs_layout" ]; then
+  # Never a limit: the layout is a convention, so a misplaced doc is a hint, not a broken SLO.
+  hint=""
+  [ "$misplaced_count" -gt 0 ] && hint="$(printf '%s' "$misplaced" | sed '/^$/d' | sed 's/.*/"&"/' | tr '\n' ' ')— move them, or add the place to docsLayout (and an ADR)"
+  record misplacedDocs "$misplaced_count" "" "$hint"
+fi
 
 if [ "$quick" = no ]; then
   # Project commands get the changed code files (narrowed to lintMatch when set), shell-quoted.

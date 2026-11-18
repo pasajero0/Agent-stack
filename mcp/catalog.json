@@ -16,10 +16,11 @@
     "name": "fetch",
     "package": "mcp-server-fetch",
     "displayName": "Fetch",
-    "description": "HTTP fetch — retrieve web content as markdown",
+    "description": "HTTP fetch — retrieve web content as markdown (official Python server; needs uv)",
     "transport": "stdio",
-    "command": "npx",
-    "args": ["-y", "mcp-server-fetch"]
+    "command": "uvx",
+    "args": ["mcp-server-fetch"],
+    "optional": true
   },
   {
     "name": "memory",

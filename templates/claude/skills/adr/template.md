@@ -1,8 +1,10 @@
 # NNNN. <Decision title>
 
-- **Status:** Proposed <!-- Accepted when its MR is merged · Superseded by NNNN -->
-- **Date:** YYYY-MM-DD
-- **Stage / spec:** <stage id, link to SPEC.md if any>
+- **Status:** Proposed <!-- Accepted once a human merges it (MR, or a local merge into the base branch) · Superseded by NNNN -->
+- **Decided:** YYYY-MM-DD <!-- when the decision was taken; "unknown" if it predates the record -->
+- **Recorded:** YYYY-MM-DD <!-- the day this file was written -->
+- **Applies to:** <stage ids with links to their SPEC.md, or "All stages (project-wide decision)">
+- **Supersedes:** <NNNN, if any>
 
 ## Context
 
@@ -13,6 +15,8 @@
 <What we do, in one or two sentences. Active voice: "We store readings in …">
 
 ## Alternatives considered
+
+<!-- Mark anything the human did not say with "(agent's inference)". -->
 
 | Option | Why not (what it would cost us) |
 | --- | --- |

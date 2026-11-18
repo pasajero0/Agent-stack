@@ -13,7 +13,11 @@ describe("buildHarnessFiles", () => {
     expect(gates.protectedGlobs).toContain("*pnpm-lock.yaml");
     expect(gates.baseBranch).toBe("main");
     expect(gates.mode).toBe("interactive");
-    expect(byPath(".claude/hooks/guard-bash.sh")!.content).not.toContain("pnpm");
+    // The one exception: RUNNERS, the fixed list of download-and-run commands of every ecosystem — the
+    // same in any repo, and kept in the hook because `update` never rewrites gates.json.
+    const guardBash = byPath(".claude/hooks/guard-bash.sh")!.content;
+    expect(guardBash).toMatch(/^RUNNERS=.*pnpm/m);
+    expect(guardBash.replace(/^RUNNERS=.*$/m, "")).not.toContain("pnpm");
   });
 
   it("emits a JS-free gate config for a non-JS stack", () => {
@@ -33,9 +37,12 @@ describe("buildHarnessFiles", () => {
   it("builds settings.json in the correct Claude Code schema", () => {
     const s = JSON.parse(byPath(".claude/settings.json")!.content);
     expect(s.hooks.PreToolUse[0].matcher).toBe("Bash");
-    expect(s.hooks.PreToolUse[0].hooks[0].command).toContain(
-      "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh"
-    );
+    expect(s.hooks.PreToolUse[0].hooks[0].command).toBe('"$CLAUDE_PROJECT_DIR"/.claude/hooks/guard-bash.sh');
+    const readGuard = s.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Read|Grep");
+    expect(readGuard.hooks[0].command).toBe('"$CLAUDE_PROJECT_DIR"/.claude/hooks/guard-file.sh');
+    const commands = JSON.stringify(s.hooks).match(/"command":"[^"\\]*(\\"[^"\\]*)*"/g) ?? [];
+    expect(commands.length).toBeGreaterThan(0);
+    for (const c of commands) expect(c).toContain('\\"$CLAUDE_PROJECT_DIR\\"/'); // a space in the path cannot split it
     expect(s.permissions.allow).toContain("Bash(pnpm typecheck:*)");
   });
 
@@ -68,6 +75,12 @@ describe("buildHarnessFiles", () => {
     }
     expect(byPath(".claude/skills/spec/template.md")!.content).toContain("IF <invalid input");
     expect(byPath(".claude/skills/adr/template.md")!.content).toContain("Alternatives considered");
+    expect(byPath(".claude/skills/spec/light-template.md")!.content).toContain("light: true");
+    expect(byPath(".claude/skills/adr/template.md")!.content).toContain("**Applies to:**");
+    const codemap = byPath("CODEMAP.md")!.content;
+    expect(codemap).toContain("## Specs");
+    expect(codemap).toContain("docs/specs/");
+    expect(codemap).not.toContain("`src/`");
   });
 
   it("gives every subagent a model and an effort level (routing)", () => {

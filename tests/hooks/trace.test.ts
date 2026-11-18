@@ -54,6 +54,20 @@ describe("trace", () => {
     expect(r.out).toContain("3/3");
   });
 
+  it("does not ask a light spec for tests; light: outside the frontmatter does not count", () => {
+    const dir = stageRepo();
+    write(dir, "docs/specs/A0/SPEC.md", "---\nstage: A0\nlight: true\n---\n- **AC-1:** build passes. Check: `pnpm build`\n");
+    let r = trace(dir);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("light spec");
+    write(dir, "docs/specs/A0/SPEC.md", "---\r\nstage: A0\r\nlight: true\r\n---\r\n- **AC-1:** x\r\n");
+    expect(trace(dir).code).toBe(0); // CRLF line endings
+    write(dir, "docs/specs/A0/SPEC.md", SPEC + "light: true\n");
+    r = trace(dir);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("missing tests");
+  });
+
   it("cannot run without a stage or a spec", () => {
     const dir = stageRepo();
     expect(trace(dir, "B7").code).toBe(2);

@@ -5,6 +5,7 @@ import { mcpCommand } from "./commands/mcp.js";
 import { generateCommand } from "./commands/generate.js";
 import { updateCommand } from "./commands/update.js";
 import { syncCommand } from "./commands/sync.js";
+import { usageCommand } from "./commands/usage.js";
 import { toolVersion } from "./claude/harness.js";
 
 export const program = new Command();
@@ -48,9 +49,19 @@ program
   .command("update")
   .description("Update an existing harness to the current version (keeps seed files, rules/ and tmp/)")
   .option("--dry-run", "Show what would change without writing")
+  .option("-f, --force", "Also overwrite harness files you changed since they were deployed")
   .action(updateCommand);
 
 program
   .command("sync")
   .description("Detect Claude Code and generate or update the harness")
   .action(syncCommand);
+
+program
+  .command("usage")
+  .description("Report what the harness did in this project's Claude Code session logs")
+  .option("--days <n>", "Only count the last n days")
+  .option("--logs <dir>", "Read logs from this directory instead of ~/.claude/projects/<project>")
+  .option("--json", "Print the report as JSON")
+  .option("--save", "Also save the summary to .claude/tmp/usage/<date>.json (counts only, no conversation text)")
+  .action(usageCommand);

@@ -12,6 +12,7 @@ export const TS_PARAMS: HarnessParams = {
   lockfile: "pnpm-lock.yaml",
   generatedGlobs: "*/dist/*|dist/*|*.d.ts|*.map",
   docsDir: "docs/",
+  monorepo: false,
   mainBranch: "main",
   forgeCli: "gh",
   commands: ["pnpm typecheck", "pnpm test"],
@@ -30,6 +31,7 @@ export const PY_PARAMS: HarnessParams = {
   lockfile: "uv.lock",
   generatedGlobs: "*/__pycache__/*|*.pyc",
   docsDir: "docs/",
+  monorepo: false,
   mainBranch: "main",
   forgeCli: "gh",
   commands: ["uv run pytest"],
@@ -116,3 +118,5 @@ export const writeTool = (file_path: string, content = "x") => ({
   tool_name: "Write",
   tool_input: { file_path, content },
 });
+export const readTool = (file_path: string) => ({ tool_name: "Read", tool_input: { file_path } });
+export const grepTool = (path: string, pattern = "x") => ({ tool_name: "Grep", tool_input: { pattern, path } });

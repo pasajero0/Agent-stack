@@ -8,14 +8,19 @@ argument-hint: "<stage id, e.g. A0>"
 ## Preconditions
 
 - The spec is merged: `git cat-file -e origin/<base>:<specsDir>/$ARGUMENTS/SPEC.md` succeeds (`git fetch`
-  first; `baseBranch` and `specsDir` are in `.claude/gates.json`). If not — stop: no plan before the merge.
+  first), or — when there is no `origin/<base>` — the same with the local `<base>`. That is the branch
+  spec-gate reads. `baseBranch` and `specsDir` are in `.claude/gates.json`. If not — stop: no plan before
+  the merge.
 - Read the merged spec in full, and the ADRs it links.
 
 ## Steps
 
-1. **Work on a stage branch:** update the base branch, then `git checkout -b $ARGUMENTS-<short-name>`.
-   The stage comes from the branch name (`stagePattern` in `.claude/gates.json`) — that is what opens the
+1. **Work on a stage branch:** update the base branch, then create a branch whose name `stagePattern` (in
+   `.claude/gates.json`) maps to this stage — `$ARGUMENTS-<short-name>` with the default pattern,
+   `f-$ARGUMENTS` with the feature-name one. The stage comes from the branch name — that is what opens the
    spec-gate for this stage and nothing else.
+   **Light spec** (`light: true`): no test tasks — each task's `verify` is the `Check:` command of its ACs,
+   and the last task runs them all.
 2. **Write `.claude/tmp/$ARGUMENTS/tasks.json`** (the file can be written once — after that only
    `.claude/bin/verify` updates it; to re-plan, `rm` it and write a new one):
 

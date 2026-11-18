@@ -23,6 +23,7 @@ two sources:
 ### Step 1: Find architecture documentation
 
 Search for architecture docs in this order:
+- `{{DOCS_DIR}}architecture/` (every `*.md` in it, `overview.md` first)
 - `{{DOCS_DIR}}architecture.md`
 - `{{DOCS_DIR}}README.md`
 - `ARCHITECTURE.md`

@@ -16,6 +16,7 @@ export interface HarnessParams {
   lockfile: string; // pnpm-lock.yaml | uv.lock | go.sum | Cargo.lock | ...
   generatedGlobs: string; // case-glob of build output, e.g. "*/dist/*|dist/*|*.d.ts|*.map"
   docsDir: string; // "docs/"
+  monorepo: boolean; // workspaces or apps/ / packages/ — gets the default docs layout
   mainBranch: string; // main | master | ...
   forgeCli: string; // gh | glab
   commands: string[]; // verification commands to allow-list, e.g. ["pnpm typecheck", "pnpm test"]
@@ -112,7 +113,22 @@ function makeTarget(dir: string, target: string): boolean {
   return new RegExp(`^${target}:`, "m").test(readText(dir, "Makefile"));
 }
 
-type StackFacts = Omit<HarnessParams, "stack" | "docsDir" | "mainBranch" | "forgeCli">;
+type StackFacts = Omit<HarnessParams, "stack" | "docsDir" | "monorepo" | "mainBranch" | "forgeCli">;
+
+/** Several apps or packages in one repo: a workspace file, or an `apps/` / `packages/` folder. */
+export function detectMonorepo(dir: string): boolean {
+  const has = (f: string) => existsSync(join(dir, f));
+  if (["pnpm-workspace.yaml", "go.work", "apps", "packages"].some(has)) return true;
+  if (/^\[workspace\]/m.test(readText(dir, "Cargo.toml"))) return true;
+  try {
+    const pkg: unknown = JSON.parse(readText(dir, "package.json"));
+    if (typeof pkg !== "object" || pkg === null || !("workspaces" in pkg)) return false;
+    const ws = pkg.workspaces;
+    return Array.isArray(ws) ? ws.length > 0 : typeof ws === "object" && ws !== null;
+  } catch {
+    return false;
+  }
+}
 
 function nodeFacts(dir: string): StackFacts {
   const { packageManager: pm, lockfile } = detectPackageManager(dir);
@@ -246,6 +262,7 @@ export async function detectHarnessParams(dir: string): Promise<HarnessParams> {
     stack,
     ...detectStackFacts(dir, stack),
     docsDir: "docs/",
+    monorepo: detectMonorepo(dir),
     mainBranch,
     forgeCli,
   };

@@ -4,13 +4,17 @@ stage: <stage id>
 
 # <Stage title>
 
-## Goal
+## Purpose
 
-<One sentence: what the user can do after this stage that they cannot do now.>
+<What the user can do after this stage that they cannot do now, and what already exists.>
 
-## Context
+## Decisions
 
-<What already exists. Links to ADRs (`docs/adr/NNNN-…`) and earlier specs.>
+<The ADRs behind this stage. A criterion that follows from one cites it: (ADR-NNNN).>
+
+| ADR | Decided | What it means here |
+| --- | --- | --- |
+| [NNNN](../../adr/NNNN-title.md) | YYYY-MM-DD or unknown | <one line> |
 
 ## Terms
 
@@ -24,7 +28,8 @@ stage: <stage id>
 
 ## Contract
 
-<API shape, types, events, CLI flags — whatever the outside world sees. Not the implementation.>
+<API shape, types, events, CLI flags — whatever the outside world sees. Not the implementation.
+If the shapes live in a contract package, name them here; fields are described only there.>
 
 ## Acceptance criteria (EARS)
 
@@ -36,9 +41,13 @@ stage: <stage id>
 | Unwanted | `IF <condition>, THEN THE SYSTEM SHALL …` |
 | Option | `WHERE <feature is enabled>, THE SYSTEM SHALL …` |
 
+<!-- A stage that spans parts (Backend and Frontend, api and web) groups the three headings below under a
+     heading per part: "### Backend" → "#### Happy path" … AC ids run on through all parts, so each stays
+     unique in this file. One part only: keep the headings as they are. -->
+
 ### Happy path
 
-- **AC-1:** WHEN <trigger>, THE SYSTEM SHALL <observable outcome>.
+- **AC-1:** WHEN <trigger>, THE SYSTEM SHALL <observable outcome> (ADR-NNNN).
 
 ### Unhappy path
 
@@ -64,4 +73,4 @@ stage: <stage id>
 
 ## Changes
 
-<Empty for the first version. Later: date — what changed in this spec and why (each change is its own MR).>
+<Empty for the first version. Later: date — what changed in this spec and why (link the ADR if a decision changed).>
