@@ -20,8 +20,20 @@
 
 ### Docs
 
-- [ADR 0001](docs/adr/0001-pipeline-driver.md): a driver program, `agent-stack run`, will hold the pipeline
-  order. Not built yet.
+- [ADR 0001](docs/adr/0001-pipeline-driver.md): a driver program, `agent-stack run`, holds the pipeline
+  order.
+
+### Driver (experimental)
+
+- **`agent-stack run`**: `quick "<fix>"` and `task "<what to build>"` modes; `--resume`, `--status`,
+  `--cancel`. Exit codes 0 / 3 (waiting) / 1. Tested only with a fake `claude`.
+- **Gates:** answers, spec merge, plan approval, accept and limit, from the terminal. The driver makes the
+  branches and commits (headers pass commitlint), runs the checks, and never pushes or merges.
+- **Fuse:** `gates.json` -> `run`, three kinds: calls (default 40), dollars, or off.
+- **Resume:** a waiting or interrupted run continues from its run file; one run per repo.
+- **Hooks:** spec-gate's quick-mode bypass and evidence-gate's silence apply only to a live driver run on the
+  run's branch; guard-file protects the run folder; path checks follow symlinks.
+- **/plan skill:** every task ends green; the test is written first inside the task, no test-only tasks.
 
 ## 0.3.0 — from the first trial
 

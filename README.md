@@ -58,8 +58,9 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 Hooks enforce four points of it: no code before the spec is merged and the plan is written
 (**spec-gate**), no skipped tests or suppressed checks (**cheat-guard**), no "done" without evidence or
 against the task results (**evidence-gate**). The order of the other steps is kept by skills, which the model
-may skip. Keeping the whole order outside the model is the next step for this project
-([ADR 0001](docs/adr/0001-pipeline-driver.md)).
+may skip. Keeping the whole order outside the model is the job of the driver, `agent-stack run`
+([ADR 0001](docs/adr/0001-pipeline-driver.md)); it exists as an experimental first part, see
+[Driving the pipeline](#driving-the-pipeline-agent-stack-run-experimental).
 
 1. **`/grill`** — the agent interviews you in numbered rounds, each question with a recommended answer,
    until no decision is open. Decisions become ADRs (**`/adr`**), edge cases go into the spec.
@@ -135,6 +136,69 @@ The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — gua
 | `agent-stack usage` | What the harness did in this project, read from Claude Code's session logs: hook blocks and context, Stop-hook runs, subagents, skills, commands, `bin/` runs, tokens by agent and model, and installed parts that never acted. `--days <n>`, `--logs <dir>`, `--json`; `--save` keeps the summary in `.claude/tmp/usage/<date>.json`, since Claude Code deletes old logs. How to read it: [docs/usage-analytics.md](docs/usage-analytics.md) |
 | `agent-stack detect` | Report project context + whether Claude Code is installed |
 | `agent-stack mcp install` / `list` | MCP servers from the catalog |
+| `agent-stack run` | Experimental pipeline driver: `quick` / `task` modes, `--resume`, `--status`, `--cancel`. See [Driving the pipeline](#driving-the-pipeline-agent-stack-run-experimental) |
+
+## Driving the pipeline: `agent-stack run` (experimental)
+
+A program holds the step order, so the model cannot skip `/plan`. The program creates the branches, makes
+every commit, runs the checks itself and stops for you at fixed gates. The model only reads and edits files
+inside the step it is given. Design: [ADR 0001](docs/adr/0001-pipeline-driver.md), spec:
+[docs/specs/v04/SPEC.md](docs/specs/v04/SPEC.md), terms: [docs/GLOSSARY.md](docs/GLOSSARY.md).
+
+```text
+agent-stack run quick "<description>"                  a small fix
+agent-stack run task [--stage <id>] "<description>"    a spec, a plan and one or two tasks
+agent-stack run --resume [<run id>]                    continue a waiting or interrupted run
+agent-stack run --status [<run id>]                    print the run; change nothing
+agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
+```
+
+**Quick mode.** Creates `quick/<slug>` from HEAD, runs your test command on it (it must pass), then one
+implement call. The driver runs the checks (the test command, plus lint on changed files). A diff above
+`quickReviewLines` is also reviewed. Then the driver commits (`<type>: <subject>`) and stops at the accept gate.
+
+**Task mode.**
+1. *Clarify* (Opus): up to 5 questions with recommended answers, a size (task, story, epic) and a stage id.
+   **You decide** at gate `answers`: accept or change each answer, the size and the stage id. An epic ends
+   here with a proposed split in `split.md`.
+2. *Spec* (Opus) on a new `spec/<stage>` branch. The driver commits it and stops with exit 3.
+   **You decide** by reviewing and merging that branch into the base branch yourself.
+3. `--resume` creates `<stage>-<slug>` and runs *plan* (Opus). **You decide** at gate `plan-approve`: approve,
+   or reject with a comment (the plan is redone). Each task's `verify` command is allowed to the model
+   as written, so read the plan table.
+4. The driver runs your test command once, then per task: implement, checks (the task's `verify` plus lint),
+   review on that task's diff, commit `<type>(<stage>): <subject>`. A red check or a blocking review goes
+   back to implement with the feedback, up to the attempt limit.
+5. **You decide** at gate `accept`: accept (the run finishes) or reject with a comment, which adds a fix task.
+
+**Gates.** At a terminal, answers are read from the prompt; `c` cancels at any gate. With no terminal the run
+is recorded as waiting and exits. A gate `limit` appears when attempts run out, a task is BLOCKED, the review
+loop does not improve, or the fuse is reached: `r` retries, `f <n>` raises the fuse, `c` cancels.
+
+**Exit codes.** `0`: finished, cancelled or `--status`. `3`: waiting at the spec-merge gate, or at any gate
+without a terminal. `1`: a refusal or an error; the message says what to do.
+
+**Config.** The optional `run` key of `.claude/gates.json` (defaults live in code, so `update` need not touch it):
+
+```json
+{ "run": { "maxTurns": 60, "fuse": { "calls": 40 }, "stepTimeoutMin": 30, "checkTimeoutMin": 15, "quickReviewLines": 120 } }
+```
+
+`fuse` is one of three kinds: `{ "calls": <n> }` (the default, 40; fits a subscription), `{ "usd": <n> }`
+(for API billing; every call also gets what is left as its `--max-budget-usd`), or `"off"`.
+Turns per call, attempts per task and the review-loop stop apply whatever the kind.
+
+**Hooks stay on.** Claude is never started with `--bare`, `bypassPermissions` or `disableAllHooks`. Two hooks
+step aside only for a live driver run on the run's own branch: spec-gate (quick mode) and evidence-gate.
+**Nothing is pushed or merged**: you push, and you merge the spec yourself.
+Each call is logged in `.claude/tmp/runs/<run id>/calls/` (argv, exit code, result; never the prompt).
+
+**Limits of this part.**
+- Experimental: it has been run end to end only with a fake `claude`, not yet with the real one.
+- One run per repo; a waiting or interrupted run blocks a new one until `--cancel`.
+- Bug and refactor modes come later.
+- Bash can forge the run file (known gap): a model that writes `.claude/tmp/runs/<id>/run.json` through Bash
+  can make a hook believe a driver run is live. Do not run it on a repo you do not trust the model with.
 
 ## Limits — read before trusting it
 
