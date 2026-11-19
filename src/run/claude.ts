@@ -107,6 +107,23 @@ function implementAllowed(c: CallCommands): string[] {
   return out;
 }
 
+/** implement's allowed shell commands in words, from the same list as its `--allowedTools` (AC-4). */
+export function allowedCommandLines(c: CallCommands): string[] {
+  const prefixes: string[] = [];
+  const exact: string[] = [];
+  for (const e of implementAllowed(c)) {
+    const inner = e.slice("Bash(".length, -1);
+    if (inner.endsWith(":*")) prefixes.push(inner.slice(0, -2));
+    else exact.push(inner);
+  }
+  const git = prefixes.filter((p) => p.startsWith("git "));
+  return [
+    ...prefixes.filter((p) => !p.startsWith("git ")).map((p) => `- \`${p}\` (any arguments)`),
+    ...(git.length > 0 ? [`- ${git.map((g) => `\`${g}\``).join(", ")} (any arguments)`] : []),
+    ...exact.map((x) => `- \`${x}\` (exactly)`),
+  ];
+}
+
 /**
  * The argv (without the binary) for one call. Never `--bare`, a bypass mode or `disableAllHooks` (AC-2); only
  * the project's MCP servers, settings and CLAUDE.md (AC-58).

@@ -73,7 +73,7 @@ describe("role prompts", () => {
     expect(first(clarifyPrompt({ description: "d" }))).toBe("# Role: clarify");
     expect(first(specPrompt(spec, { stage: "A1", title: "t", description: "d", answers: [] }))).toBe("# Role: spec");
     expect(first(planPrompt(plan, { stage: "A1", title: "t" }))).toBe("# Role: plan");
-    expect(first(implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null }))).toBe("# Role: implement");
+    expect(first(implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } }))).toBe("# Role: implement");
     expect(first(reviewPrompt({ taskId: "T1", taskDesc: "d", criteria: [], diff: "", report: "" }))).toBe("# Role: review");
   });
 
@@ -125,15 +125,26 @@ describe("role prompts", () => {
       taskDesc: "do it",
       criteria: ["- **AC-1:** x"],
       feedback: "lint failed",
+      commands: { test: "", lint: "", verify: "" },
     });
     expect(p).toContain("FROM THE PROGRAM");
     expect(p).toContain("lint failed");
     expect(p).toContain("- **AC-1:** x");
     expect(p).toMatch(/failing test first/);
     expect(p).toMatch(/do not commit/);
-    expect(implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null })).not.toContain(
+    expect(implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } })).not.toContain(
       "FROM THE PROGRAM"
     );
+  });
+
+  it("v04 AC-4: implement lists the shell commands it may run, from the same list as --allowedTools", () => {
+    const commands = { test: "npm test", lint: "", verify: ".claude/bin/trace && npm test -- --test-name-pattern A2" };
+    const p = implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands });
+    expect(p).toContain("- `npm test` (any arguments)");
+    expect(p).toContain("- `git status`, `git diff`, `git log`, `git show` (any arguments)");
+    expect(p).toContain("- `.claude/bin/trace && npm test -- --test-name-pattern A2` (exactly)");
+    expect(p).toMatch(/anything else is denied, so do not try it/i);
+    expect(p).not.toContain("lint");
   });
 
   it("v04 AC-4: review labels the report UNVERIFIED CLAIMS FROM THE IMPLEMENTER", () => {

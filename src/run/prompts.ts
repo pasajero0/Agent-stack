@@ -1,6 +1,7 @@
 /** Prompt builders for the driver's roles. Spec: docs/specs/v04/SPEC.md, "Role prompts". */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { allowedCommandLines, type CallCommands } from "./claude.js";
 import { RunError } from "./errors.js";
 import type { AnswerRecord } from "./types.js";
 
@@ -81,6 +82,8 @@ export function implementPrompt(p: {
   taskDesc: string;
   criteria: string[];
   feedback: string | null;
+  /** The commands its `--allowedTools` is built from; the prompt lists the same (AC-4). */
+  commands: CallCommands;
 }): string {
   const lines = [
     "# Role: implement",
@@ -96,6 +99,10 @@ export function implementPrompt(p: {
   lines.push(
     "",
     "Write the failing test first, see it fail, then the code; touch only this task; do not commit, branch or edit `tasks.json`.",
+    "",
+    "Shell commands you may run (anything else is denied, so do not try it):",
+    ...allowedCommandLines(p.commands),
+    "",
     "End with a report of what you did."
   );
   return lines.join("\n");

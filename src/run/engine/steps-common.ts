@@ -140,8 +140,8 @@ const implement: StepHandler = async (ctx, id) => {
   const info = ctx.mode.taskInfo(ctx, task.id);
   if (task.taskBase === null) task.taskBase = headSha(ctx.projectDir);
   if (task.attempts === 0) task.attempts = 1;
-  const prompt = implementPrompt({ taskId: task.id, taskDesc: info.desc, criteria: info.criteria, feedback: task.lastFeedback });
   const commands = { test: ctx.cfg.commands.test, lint: ctx.cfg.commands.lint, verify: info.verify };
+  const prompt = implementPrompt({ taskId: task.id, taskDesc: info.desc, criteria: info.criteria, feedback: task.lastFeedback, commands });
   const r = await roleCall(ctx, { role: "implement", commands }, implementModel(info, task), prompt, parseImplement);
   const stray = undoGitSideEffects(ctx, task);
   if (r.kind === "fuse") {
