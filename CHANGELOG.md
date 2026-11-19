@@ -37,8 +37,8 @@
 ### Driver (experimental)
 
 - **`agent-stack run`**: `quick "<fix>"` and `task "<what to build>"` modes; `--resume`, `--status`,
-  `--cancel`. Exit codes 0 / 3 (waiting) / 1. Tested with a fake `claude`, plus three manual runs with the
-  real one (two task, one quick).
+  `--cancel`. Exit codes 0 / 3 (waiting) / 1. Tested with a fake `claude`, plus five manual runs with the
+  real one (three task, one of them with two tasks; two quick).
 - **Gates:** answers, spec merge, plan approval, accept and limit, from the terminal. The driver makes the
   branches and commits (headers pass commitlint), runs the checks, and never pushes or merges.
 - **Fuse:** `gates.json` -> `run`, three kinds: calls (default 40), dollars, or off.

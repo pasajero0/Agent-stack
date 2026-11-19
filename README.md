@@ -209,8 +209,8 @@ claude.ai connectors (Gmail, Drive and so on), auto-memory and the git status sn
 vars. Besides privacy, this is the cost: the connectors alone added about 150k tokens to every turn.
 
 **Limits of this part.**
-- Experimental: three manual runs with the real `claude` (one quick fix, two one-task stages); the rest is tested
-  with a fake `claude`.
+- Experimental: five manual runs with the real `claude` (two quick fixes, two one-task stages, one two-task
+  stage); the rest is tested with a fake `claude`.
 - **`/plan` needs a person in a plain session.** Claude Code guards `.claude/` itself, even with an allow rule,
   so writing `tasks.json` asks for approval. With no one to approve (a headless or autonomous session), `/plan`
   cannot write it; use `agent-stack run task`, where the driver writes the plan.
