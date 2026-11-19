@@ -77,7 +77,7 @@ describe("task mode: AC-49, the human's changes before the spec and plan roles",
 
   it("v04 AC-49: a resume at plan with a change outside .claude/tmp/ is refused, and the change is kept", async () => {
     const r = repo();
-    await toSpecMerge(r, [plan({ writes: {} }), plan({ writes: {} }), plan()]);
+    await toSpecMerge(r, [plan({ tasks: [] }), plan({ tasks: [] }), plan()]);
     mergeSpec(r);
     expect(await resumeRun({ ...r.opts() })).toBe(1);
     expect(r.run().next).toBe("plan");
@@ -108,7 +108,7 @@ describe("task mode: a leftover tasks.json at plan", () => {
     // A kill after the plan call: its tasks.json and its call record are there, the run file is not updated.
     write(r.dir, TASKS_PATH, tasksJson(TWO_TASKS));
     const call = (needs: string[]) =>
-      JSON.stringify({ argv: [], exitCode: 0, result: { structured_output: { summary: "s", needsHumanDecision: needs } } });
+      JSON.stringify({ argv: [], exitCode: 0, result: { structured_output: { summary: "s", tasks: [], needsHumanDecision: needs } } });
     const calls = join(".claude/tmp/runs", r.run().id, "calls");
     write(r.dir, join(calls, "1-plan.json"), call(["an older decision"]));
     write(r.dir, join(calls, "3-plan.json"), call(["the leftover's decision"]));
@@ -122,7 +122,7 @@ describe("task mode: a leftover tasks.json at plan", () => {
   it("v04 AC-14: a kill after the reject is written but before tasks.json is deleted re-runs plan with the comment", async () => {
     const r = repo();
     const one = tasksJson([{ id: "T1", ac: ["AC-1", "AC-2"] }]);
-    await toPlanApprove(r, [plan(), plan({ writes: { [TASKS_PATH]: one } })]);
+    await toPlanApprove(r, [plan(), plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"] }] })]);
     const past = new Date(Date.now() - 60_000);
     utimesSync(join(r.dir, TASKS_PATH), past, past);
     const reject = { gate: "gate:plan-approve", at: new Date().toISOString(), decision: "reject", comment: "one task only" };
@@ -132,7 +132,7 @@ describe("task mode: a leftover tasks.json at plan", () => {
     expect(r.run().next).toBe("gate:plan-approve");
     expect(r.logged().length).toBe(4);
     expect(r.logged()[3]?.prompt).toContain("one task only");
-    expect(readFileSync(join(r.dir, TASKS_PATH), "utf8")).toBe(one);
+    expect(JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"))).toEqual(JSON.parse(one));
   });
 });
 
@@ -244,7 +244,7 @@ describe("task mode: re-review fixes at plan (branch, leftover decisions, reject
   it("v04 AC-14: the rejected plan is recognised by its sha256 even when its mtime is newer than the reject", async () => {
     const r = repo();
     const one = tasksJson([{ id: "T1", ac: ["AC-1", "AC-2"] }]);
-    await toPlanApprove(r, [plan(), plan({ writes: { [TASKS_PATH]: one } })]);
+    await toPlanApprove(r, [plan(), plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"] }] })]);
     const rejected = readFileSync(join(r.dir, TASKS_PATH), "utf8");
     const at = new Date(Date.now() - 60_000).toISOString();
     const reject = { gate: "gate:plan-approve", at, decision: "reject", comment: "one task only", planSha256: sha256(rejected) };
@@ -253,7 +253,7 @@ describe("task mode: re-review fixes at plan (branch, leftover decisions, reject
     expect(await resumeRun({ ...r.opts() })).toBe(3);
     expect(r.logged().length).toBe(4);
     expect(r.logged()[3]?.prompt).toContain("one task only");
-    expect(readFileSync(join(r.dir, TASKS_PATH), "utf8")).toBe(one);
+    expect(JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"))).toEqual(JSON.parse(one));
   });
 
   it("v04 AC-14: a leftover whose sha256 differs from the rejected plan's is kept even when its mtime is older than the reject", async () => {

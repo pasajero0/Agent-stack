@@ -40,6 +40,31 @@ export function showDecisions(ctx: Ctx): void {
 
 export const NO_INPUT: StepEvent = { type: "no-input" };
 
+/** A comment after `r`: the rest of the line, or the next non-empty answer; null for no input. */
+export async function comment(ctx: Ctx, answer: string): Promise<string | null> {
+  let c = answer.slice(1).trim();
+  while (c === "") {
+    const a = await ask(ctx, "What should change? ");
+    if (a === null) return null;
+    c = a.trim();
+  }
+  return c;
+}
+
+/**
+ * The human's comment from the newest gate:limit (decision) retry: the spec or plan role gets it as "FROM THE
+ * HUMAN" (AC-57). A fuse raise after it is skipped, so the answer survives a fuse stop; any other gate ends it.
+ */
+export function humanFeedback(run: RunFile): string | null {
+  for (let i = run.gates.length - 1; i >= 0; i--) {
+    const g = run.gates[i];
+    if (g === undefined || g.gate !== "gate:limit") return null;
+    if (g.decision === "raise") continue;
+    return g.decision === "retry" && g.comment ? `FROM THE HUMAN: ${g.comment}` : null;
+  }
+  return null;
+}
+
 const cost = (run: RunFile): string => `cost $${run.costUsd.toFixed(4)} over ${run.calls} calls (fuse ${fuseText(run.fuse)})`;
 
 /** Commands that were skipped because they are empty (AC-56). */
@@ -105,14 +130,10 @@ export const acceptGate: StepHandler = async (ctx) => {
       return { type: "cancel" };
     }
     if (s === "r" || s.startsWith("r ")) {
-      let comment = s.slice(1).trim();
-      while (comment === "") {
-        const c = await ask(ctx, "What should change? ");
-        if (c === null) return NO_INPUT;
-        comment = c.trim();
-      }
-      recordGate(ctx, "gate:accept", "reject", comment);
-      return { type: "reject", task: newFixTask(ctx, comment) };
+      const c = await comment(ctx, s);
+      if (c === null) return NO_INPUT;
+      recordGate(ctx, "gate:accept", "reject", c);
+      return { type: "reject", task: newFixTask(ctx, c) };
     }
     ctx.out("Answer a (approve), r (reject, then a comment) or c (cancel).");
   }
@@ -134,7 +155,9 @@ function limitSummary(ctx: Ctx): void {
   ctx.out(
     run.limitReason === "fuse"
       ? "f <n> sets a new fuse limit for this run (in its own unit, above what is used), c cancel"
-      : "r retry (on Opus), c cancel"
+      : run.limitReason === "decision"
+        ? "r retry (your answer follows; the role gets it), c cancel"
+        : "r retry (on Opus), c cancel"
   );
 }
 
@@ -171,6 +194,13 @@ export const limitGate: StepHandler = async (ctx) => {
       }
       run.fuse = f;
       recordGate(ctx, "gate:limit", "raise", s.slice(1).trim());
+      return { type: "resume" };
+    }
+    if (run.limitReason === "decision" && (s === "r" || s.startsWith("r "))) {
+      // AC-57: the answer goes to the role; attempts and the fuse are unchanged.
+      const c = await comment(ctx, s);
+      if (c === null) return NO_INPUT;
+      recordGate(ctx, "gate:limit", "retry", c);
       return { type: "resume" };
     }
     if (s === "r") {

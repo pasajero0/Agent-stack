@@ -81,7 +81,7 @@ type Obj = Record<string, unknown>;
 
 const STATUSES: readonly RunStatus[] = ["running", "waiting", "finished", "cancelled"];
 const MODES: readonly Mode[] = ["task", "quick"];
-const LIMITS: readonly LimitReason[] = ["attempts", "blocked", "review-loop", "fuse"];
+const LIMITS: readonly LimitReason[] = ["attempts", "blocked", "review-loop", "fuse", "decision"];
 const SIZES = ["task", "story", "epic"] as const;
 const FIXED_NEXT = [
   "clarify",

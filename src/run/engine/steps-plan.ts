@@ -2,7 +2,8 @@
  * Task mode: the plan step and gate:plan-approve. Spec: docs/specs/v04/SPEC.md, "Task mode" table, "Valid
  * plan", AC-12, AC-13, AC-14, AC-40, AC-45.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { RunError } from "../errors.js";
 import { headSha } from "../git.js";
 import { isRisky, planPrompt } from "../prompts.js";
@@ -11,8 +12,8 @@ import { writeRun } from "../store.js";
 import type { GateRecord, RunFile } from "../types.js";
 import { judgeCall } from "./call.js";
 import { newTask, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
-import { ask, NO_INPUT, recordGate, showDecisions } from "./gates.js";
-import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, stageTmp, tasksPath, type PlanTask } from "./plan-file.js";
+import { ask, comment, humanFeedback, NO_INPUT, recordGate, showDecisions } from "./gates.js";
+import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, tasksPath, type PlanTask } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, withFeedback, type RoleMark } from "./role-bounds.js";
 import { implementModel, lastCallOutput, toLimit } from "./steps-common.js";
 import { proposalOf, stageOf } from "./steps-spec.js";
@@ -57,7 +58,17 @@ function keepLeftover(ctx: Ctx, stage: string, specMd: string): boolean {
   return false;
 }
 
-/** Runs the plan role and checks a valid plan in bounds (AC-12); a violation is undone and re-run once (AC-40, AC-45). */
+/** Writes the checked plan as `tasks.json` (AC-12): the role has no write tool, since Claude Code guards `.claude/`. */
+function writePlan(file: string, stage: string, tasks: PlanTask[]): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const out = tasks.map((t) => ({ id: t.id, ac: t.ac, tier: t.tier, desc: t.desc, verify: t.verify, passes: false }));
+  writeFileSync(file, JSON.stringify({ stage, tasks: out }, null, 2) + "\n");
+}
+
+/**
+ * Runs the plan role, checks its tasks as a valid plan in bounds and writes them (AC-12). A violation is undone
+ * and re-run once (AC-40, AC-45); a role that asks for a decision instead goes to gate:limit (AC-57).
+ */
 const planStep: StepHandler = async (ctx) => {
   const { run, cfg } = ctx;
   const dir = ctx.projectDir;
@@ -68,45 +79,43 @@ const planStep: StepHandler = async (ctx) => {
   const stage = stageOf(run);
   const specMd = readSpec(dir, cfg, stage);
   const file = tasksPath(dir, stage);
-  const read = (): string => (existsSync(file) ? readFileSync(file, "utf8") : "");
   if (keepLeftover(ctx, stage, specMd)) return { type: "planned" };
   const mark: RoleMark = { head: headSha(dir), branch: run.branch };
   const base = planPrompt(dir, { stage, title: proposalOf(run).stage.title, comment: lastReject(run)?.comment ?? null });
+  const human = humanFeedback(run);
   let feedback: string | null = null;
   let last: string[] = [];
   for (let round = 0; round < 2; round++) {
-    const r = await guardRole(ctx, mark, () => judgeCall(ctx, "plan", (fb) => withFeedback(base, [feedback, fb]), parsePlanOut));
+    // AC-32: the denials of a call that is undone are dropped.
+    const kept = run.humanDecisions.length;
+    const r = await guardRole(ctx, mark, () => judgeCall(ctx, "plan", (fb) => withFeedback(base, [human, feedback, fb]), parsePlanOut));
     if (r.kind === "fuse") {
       undoGit(ctx, mark);
       return toLimit(ctx, "fuse", "plan");
     }
     const { problems, outside } = checkRole(ctx, mark, () => false);
-    const text = read();
-    const plan = text === "" ? `${stageTmp(stage)}/tasks.json was not written` : parsePlan(text, specMd);
-    if (typeof plan === "string") problems.push(plan);
-    if (problems.length === 0) {
+    const plan = parsePlan(JSON.stringify({ stage, tasks: r.value.tasks }), specMd);
+    // The role returns `tasks` and never sees the file, so the error names its output (it was told not to write).
+    if (typeof plan === "string") problems.push(plan.replace("tasks.json needs a non-empty tasks array", "your tasks output must be a non-empty array"));
+    if (problems.length === 0 && typeof plan !== "string") {
+      writePlan(file, stage, plan);
       run.humanDecisions.push(...r.value.needsHumanDecision);
       return { type: "planned" };
     }
     undoOutside(ctx, mark, outside);
     deletePlan(dir, stage);
+    if (typeof plan === "string" && r.value.needsHumanDecision.length > 0) {
+      // AC-57: the role asks instead of planning; a blind re-run would ask again.
+      run.humanDecisions.push(...r.value.needsHumanDecision);
+      return toLimit(ctx, "decision", "plan");
+    }
+    run.humanDecisions.length = kept;
     last = problems;
     feedback = boundsFeedback("plan", problems);
     ctx.out(`plan: ${problems.join("; ")}.${round === 0 ? " Undone; running plan once more." : ""}`);
   }
   throw new RunError(`The plan role failed twice (${last.join("; ")}). The run stays at plan; ${resumeHint(run.id)} tries again.`, 1);
 };
-
-/** A comment after `r`: the rest of the line, or the next non-empty answer; null for no input. */
-async function comment(ctx: Ctx, answer: string): Promise<string | null> {
-  let c = answer.slice(1).trim();
-  while (c === "") {
-    const a = await ask(ctx, "What should change? ");
-    if (a === null) return null;
-    c = a.trim();
-  }
-  return c;
-}
 
 /** Shows each task with its criteria, tier, risky mark, model and verify (AC-12, AC-13); approve, reject or cancel (AC-14). */
 const planApproveGate: StepHandler = async (ctx) => {

@@ -61,9 +61,11 @@ export function planPrompt(projectDir: string, p: { stage: string; title: string
   const lines = [
     "# Role: plan",
     "",
-    "The driver has merged the spec and created the branch. You must not run verify, commit or implement; write only the plan and tasks.json.",
+    "The driver has merged the spec and created the branch. You must not run verify, commit or implement, and you change no files.",
     "",
     "The spec is merged and the branch exists: skip the precondition and step 1; do not run verify, commit or implement.",
+    "",
+    "Do not write tasks.json: return the tasks in your output (`tasks`); the program writes the file.",
     "",
     "Rule: **every task ends green**: its test is written first inside the task and its verify passes when the task is done; no test-only tasks.",
   ];

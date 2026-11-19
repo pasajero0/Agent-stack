@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildArgs, callClaude, callScope, PROJECT_ONLY_ENV, type CallSpec, type CallIo, type CallScope } from "../../src/run/claude.js";
+import { buildArgs, callClaude, callScope, DENIAL_MAX, denialLine, PROJECT_ONLY_ENV, type CallSpec, type CallIo, type CallScope } from "../../src/run/claude.js";
 import type { Role } from "../../src/run/types.js";
 
 type Commands = { test: string; lint: string; verify: string };
@@ -162,6 +162,17 @@ describe("buildArgs", () => {
       CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
       CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: "1",
     });
+  });
+});
+
+describe("denialLine", () => {
+  it("v04 AC-32: a denial is one line with the tool and its path or command, cut to 120 characters", () => {
+    expect(denialLine({ tool_name: "Write", tool_input: { file_path: "/r/a.json", content: "x".repeat(500) } })).toBe("permission denied: Write /r/a.json");
+    expect(denialLine({ tool_name: "Bash", tool_input: { command: "rm -rf\n  x" } })).toBe("permission denied: Bash rm -rf x");
+    const long = denialLine({ tool_name: "Write", tool_input: { file_path: `/${"p".repeat(300)}` } });
+    expect(long).toHaveLength(DENIAL_MAX);
+    expect(long.startsWith("permission denied: Write /ppp")).toBe(true);
+    expect(long.endsWith("…")).toBe(true);
   });
 });
 

@@ -8,13 +8,14 @@ import {
   clarify,
   mergeSpec,
   plan,
+  planTasks,
   spec,
   SPEC_BRANCH,
   TASK_DESC,
   TASKS_PATH,
-  tasksJson,
   toPlanApprove,
   toSpecMerge,
+  TWO_TASKS,
   twoTasksDone,
   WORK_BRANCH,
 } from "./engine-task-fixture.js";
@@ -57,10 +58,9 @@ describe("task mode: plan and gate:plan-approve", () => {
 
   it("v04 AC-14: reject at gate:plan-approve deletes tasks.json and verify.log and re-runs plan with the comment", async () => {
     const r = repo();
-    // The fake writes before it runs exec, so the second plan copies its tasks.json after checking the deletion.
-    const again = `test ! -f ${TASKS_PATH} && test ! -f .claude/tmp/B1/verify.log && cp .git/plan2.json ${TASKS_PATH}`;
-    write(r.dir, ".git/plan2.json", tasksJson([{ id: "T1", ac: ["AC-1", "AC-2"] }]));
-    await toPlanApprove(r, [plan(), plan({ writes: {}, exec: again })]);
+    // The second plan call fails (no result) unless the reject deleted tasks.json and verify.log first.
+    const deleted = `test ! -f ${TASKS_PATH} && test ! -f .claude/tmp/B1/verify.log`;
+    await toPlanApprove(r, [plan(), plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"] }], exec: deleted })]);
     write(r.dir, ".claude/tmp/B1/verify.log", "old\n");
     const code = await resumeRun({ ...r.opts({ gate: ["r", "split T1 in two", "c"] }) });
     expect(code, text(r)).toBe(0);
@@ -79,8 +79,7 @@ describe("task mode: plan and gate:plan-approve", () => {
 
   it("v04 AC-45: a plan that does not cover every criterion is deleted and re-run once with the error", async () => {
     const r = repo();
-    const partial = tasksJson([{ id: "T1", ac: ["AC-1"] }]);
-    await toPlanApprove(r, [plan({ writes: { [TASKS_PATH]: partial } }), plan()]);
+    await toPlanApprove(r, [plan({ tasks: [{ id: "T1", ac: ["AC-1"] }] }), plan()]);
     expect(r.run().next).toBe("gate:plan-approve");
     expect(r.logged().length).toBe(4);
     const tasks: unknown = JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"));
@@ -89,11 +88,11 @@ describe("task mode: plan and gate:plan-approve", () => {
 
   it("v04 AC-45: an invalid plan twice exits 1 at plan and leaves no tasks.json", async () => {
     const r = repo();
-    const bad = tasksJson([
+    const bad = [
       { id: "Q1", ac: ["AC-1"] },
       { id: "T2", ac: ["AC-2"] },
-    ]);
-    await toSpecMerge(r, [plan({ writes: { [TASKS_PATH]: bad } }), plan({ writes: { [TASKS_PATH]: "{}" } })]);
+    ];
+    await toSpecMerge(r, [plan({ tasks: bad }), plan({ tasks: [] })]);
     mergeSpec(r);
     expect(await resumeRun({ ...r.opts() })).toBe(1);
     expect(r.run().next).toBe("plan");
@@ -103,11 +102,11 @@ describe("task mode: plan and gate:plan-approve", () => {
 
   it("v04 AC-45: a task id outside [A-Za-z0-9._-] makes the plan invalid, and plan is re-run once with the error", async () => {
     const r = repo();
-    const bad = tasksJson([
+    const bad = [
       { id: "T1;touch pwned", ac: ["AC-1"] },
       { id: "T2", ac: ["AC-2"] },
-    ]);
-    await toPlanApprove(r, [plan({ writes: { [TASKS_PATH]: bad } }), plan()]);
+    ];
+    await toPlanApprove(r, [plan({ tasks: bad }), plan()]);
     expect(r.run().next).toBe("gate:plan-approve");
     expect(r.logged().length).toBe(4);
     expect(r.logged()[3]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*T1;touch pwned/);
@@ -116,7 +115,7 @@ describe("task mode: plan and gate:plan-approve", () => {
 
   it("v04 AC-40: a plan role that writes outside .claude/tmp/<stage>/ is undone and, the second time, exits 1", async () => {
     const r = repo();
-    const out = (n: number) => plan({ writes: { [TASKS_PATH]: tasksJson([{ id: "T1", ac: ["AC-1", "AC-2"] }]), [`src/x${n}.ts`]: "x\n" } });
+    const out = (n: number) => plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"] }], writes: { [`src/x${n}.ts`]: "x\n" } });
     await toSpecMerge(r, [out(1), out(2)]);
     mergeSpec(r);
     expect(await resumeRun({ ...r.opts() })).toBe(1);
@@ -152,8 +151,7 @@ describe("task mode: plan and gate:plan-approve", () => {
 
   it("v04 AC-45: a task id F<digits> clashes with the fix tasks and makes the plan invalid", async () => {
     const r = repo();
-    const bad = tasksJson([{ id: "F1", ac: ["AC-1", "AC-2"] }]);
-    await toPlanApprove(r, [plan({ writes: { [TASKS_PATH]: bad } }), plan()]);
+    await toPlanApprove(r, [plan({ tasks: [{ id: "F1", ac: ["AC-1", "AC-2"] }] }), plan()]);
     expect(r.logged().length).toBe(4);
     expect(r.logged()[3]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*F1/);
   });
@@ -170,6 +168,68 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(text(r)).toContain("T2 may need a new dependency");
     expect(text(r)).not.toContain("pick a greeting language");
     expect(run.humanDecisions).toEqual(["T2 may need a new dependency"]);
+  });
+
+  it("v04 AC-12: the driver writes the plan role's tasks to tasks.json; the role writes nothing", async () => {
+    const r = repo();
+    await toPlanApprove(r, [plan()]);
+    expect(r.run().next).toBe("gate:plan-approve");
+    const onDisk: unknown = JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"));
+    expect(onDisk).toEqual({ stage: "B1", tasks: planTasks(TWO_TASKS) });
+    expect(r.logged()[2]?.prompt).toMatch(/do not write `?tasks\.json`?/i);
+  });
+
+  it("v04 AC-57: a plan role with no valid plan that asks for a decision stops at gate:limit, not a blind re-run", async () => {
+    const r = repo();
+    await toSpecMerge(r, [plan({ tasks: [], needs: ["Approve writing tasks.json?"] }), plan()]);
+    mergeSpec(r);
+    expect(await resumeRun({ ...r.opts() }), text(r)).toBe(3);
+    expect(r.run()).toMatchObject({ next: "gate:limit", returnTo: "plan", limitReason: "decision" });
+    expect(text(r)).toContain("Approve writing tasks.json?");
+    expect(r.logged().length).toBe(3);
+    expect(existsSync(join(r.dir, TASKS_PATH))).toBe(false);
+  });
+
+  it("v04 AC-57: r at gate:limit (decision) re-runs the role with the human's comment, labelled FROM THE HUMAN", async () => {
+    const r = repo();
+    await toSpecMerge(r, [plan({ tasks: [], needs: ["Approve writing tasks.json?"] }), plan()]);
+    mergeSpec(r);
+    expect(await resumeRun({ ...r.opts({ gate: ["r", "return the tasks in the output"] }) }), text(r)).toBe(3);
+    expect(r.run().next).toBe("gate:plan-approve");
+    expect(r.logged().length).toBe(4);
+    expect(r.logged()[3]?.prompt).toMatch(/FROM THE HUMAN[\s\S]*return the tasks in the output/);
+    expect(r.run().gates.at(-1)).toMatchObject({ gate: "gate:limit", decision: "retry", comment: "return the tasks in the output" });
+  });
+
+  it("v04 AC-57: the human's answer survives a fuse stop between the decision retry and the next plan call", async () => {
+    const r = repo({ run: { fuse: { calls: 3 } } });
+    await toSpecMerge(r, [plan({ tasks: [], needs: ["Which file?"] }), plan()]);
+    mergeSpec(r);
+    expect(await resumeRun({ ...r.opts({ gate: ["r", "use hello.txt", "f 5"] }) }), text(r)).toBe(3);
+    expect(r.run().next).toBe("gate:plan-approve");
+    expect(r.logged().length).toBe(4);
+    expect(r.logged()[3]?.prompt).toContain("FROM THE HUMAN: use hello.txt");
+  });
+
+  it("v04 AC-57: a spec role with no SPEC.md that asks for a decision stops at gate:limit (decision)", async () => {
+    const r = repo();
+    r.script([clarify(), spec({ writes: {}, needs: ["Which greeting language?"] })]);
+    expect(await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC })).toBe(3);
+    expect(r.run()).toMatchObject({ next: "gate:limit", returnTo: "spec", limitReason: "decision" });
+    expect(text(r)).toContain("Which greeting language?");
+    expect(r.logged().length).toBe(2);
+  });
+
+  it("v04 AC-32: a denial is one short line, and the denials of an undone plan call are dropped", async () => {
+    const r = repo();
+    const long = "x".repeat(500);
+    const deny = (path: string) => ({ tool_name: "Write", tool_use_id: "t", tool_input: { file_path: path, content: long } });
+    await toPlanApprove(r, [plan({ tasks: [], denials: [deny("/repo/first.json")] }), plan({ denials: [deny("/repo/second.json")] })]);
+    const t = text(r);
+    expect(t).toContain("permission denied: Write /repo/second.json");
+    expect(t).not.toContain("first.json");
+    expect(t).not.toContain(long.slice(0, 50));
+    for (const d of r.run().humanDecisions) expect(d.length).toBeLessThanOrEqual(120);
   });
 
   it("v04 AC-35: the calls fuse stops before the spec call at gate:limit; raising it returns to spec", async () => {

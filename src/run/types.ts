@@ -4,7 +4,7 @@ export type Mode = "task" | "quick";
 
 export type RunStatus = "running" | "waiting" | "finished" | "cancelled";
 
-export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse";
+export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse" | "decision";
 
 /** Roles the driver calls Claude in. */
 export type Role = "clarify" | "spec" | "plan" | "implement" | "review";

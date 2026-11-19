@@ -48,8 +48,27 @@ export const roleSchemas: Record<Role, RoleSchema> = {
   },
   plan: {
     type: "object",
-    required: ["summary", "needsHumanDecision"],
-    properties: { summary: { type: "string" }, needsHumanDecision: strArray },
+    required: ["summary", "tasks", "needsHumanDecision"],
+    properties: {
+      summary: { type: "string" },
+      // The driver writes these to tasks.json and checks them as a "Valid plan" (AC-12, AC-45).
+      tasks: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["id", "ac", "tier", "desc", "verify", "passes"],
+          properties: {
+            id: { type: "string" },
+            ac: strArray,
+            tier: { enum: ["S", "M", "L"] },
+            desc: { type: "string" },
+            verify: { type: "string" },
+            passes: { const: false },
+          },
+        },
+      },
+      needsHumanDecision: strArray,
+    },
   },
   implement: {
     type: "object",
@@ -118,6 +137,8 @@ export interface SpecOutput {
 
 export interface PlanOutput {
   summary: string;
+  /** Checked as a valid plan by the plan step (parsePlan), not here. */
+  tasks: unknown[];
   needsHumanDecision: string[];
 }
 
@@ -208,6 +229,7 @@ export function validateOutput(role: Role, value: unknown): string | null {
       return isStrArray(value.needsHumanDecision) ? null : "needsHumanDecision must be a string array";
     case "plan":
       if (!isStr(value.summary)) return "summary must be a string";
+      if (!Array.isArray(value.tasks)) return "tasks must be an array";
       return isStrArray(value.needsHumanDecision) ? null : "needsHumanDecision must be a string array";
     case "implement":
       return checkImplement(value);
@@ -271,8 +293,8 @@ export function parseSpecOut(v: unknown): SpecOutput | string {
 export function parsePlanOut(v: unknown): PlanOutput | string {
   const err = validateOutput("plan", v);
   if (err !== null) return err;
-  if (!isObj(v) || !isStr(v.summary)) return "output must be an object";
-  return { summary: v.summary, needsHumanDecision: strings(v.needsHumanDecision) };
+  if (!isObj(v) || !isStr(v.summary) || !Array.isArray(v.tasks)) return "output must be an object";
+  return { summary: v.summary, tasks: v.tasks, needsHumanDecision: strings(v.needsHumanDecision) };
 }
 
 export function parseImplement(v: unknown): ImplementOutput | string {

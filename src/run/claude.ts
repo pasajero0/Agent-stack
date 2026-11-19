@@ -158,13 +158,23 @@ function parseResult(stdout: string): Record<string, unknown> | null {
   }
 }
 
-function denialText(d: unknown): string {
-  if (typeof d === "string") return d;
-  if (isRecord(d)) {
+/** The longest denial line, with its "permission denied: " prefix (AC-32). */
+export const DENIAL_MAX = 120;
+const PREFIX = "permission denied: ";
+
+/** One short line per denial, prefix included: the tool and its file path or command, never the whole input (AC-32). */
+export function denialLine(d: unknown): string {
+  let text: string;
+  if (typeof d === "string") text = d;
+  else if (isRecord(d)) {
     const name = typeof d["tool_name"] === "string" ? d["tool_name"] : "tool";
-    return `${name} ${JSON.stringify(d["tool_input"] ?? {})}`;
-  }
-  return JSON.stringify(d);
+    const input = isRecord(d["tool_input"]) ? d["tool_input"] : {};
+    const target = [input["file_path"], input["command"], input["path"], input["pattern"]].find((v) => typeof v === "string");
+    text = `${name} ${typeof target === "string" ? target : JSON.stringify(input)}`;
+  } else text = JSON.stringify(d);
+  const line = text.replace(/\s+/g, " ").trim();
+  const room = DENIAL_MAX - PREFIX.length;
+  return PREFIX + (line.length <= room ? line : `${line.slice(0, room - 1)}…`);
 }
 
 /** Classifies a parsed result by `subtype`, `is_error` and `num_turns`. */
@@ -199,7 +209,7 @@ export function classify(result: Record<string, unknown>, validate?: (v: unknown
       const err = validate ? validate(output) : null;
       if (err !== null) return { kind: "schema", message: `structured_output does not match: ${err}`, costUsd, turns };
       const raw = result["permission_denials"];
-      const denials = Array.isArray(raw) ? raw.map(denialText) : [];
+      const denials = Array.isArray(raw) ? raw.map(denialLine) : [];
       return { kind: "ok", output, costUsd, denials, turns };
     }
     default:

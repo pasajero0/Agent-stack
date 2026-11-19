@@ -54,11 +54,11 @@ export interface PlanTask {
   verify?: string;
 }
 
-export const tasksJson = (tasks: PlanTask[]): string =>
-  JSON.stringify({
-    stage: STAGE,
-    tasks: tasks.map((t) => ({ id: t.id, ac: t.ac, tier: t.tier ?? "S", desc: t.desc ?? `do ${t.id}`, verify: t.verify ?? "true", passes: false })),
-  });
+/** The tasks as the plan role returns them and as tasks.json holds them. */
+export const planTasks = (tasks: PlanTask[]): Json[] =>
+  tasks.map((t) => ({ id: t.id, ac: t.ac, tier: t.tier ?? "S", desc: t.desc ?? `do ${t.id}`, verify: t.verify ?? "true", passes: false }));
+
+export const tasksJson = (tasks: PlanTask[]): string => JSON.stringify({ stage: STAGE, tasks: planTasks(tasks) });
 
 /** The default plan: T1 makes hello.txt (AC-1), T2 makes bye.txt (AC-2). */
 export const TWO_TASKS: PlanTask[] = [
@@ -66,12 +66,24 @@ export const TWO_TASKS: PlanTask[] = [
   { id: "T2", ac: ["AC-2"], desc: "create the bye file", verify: "test -f bye.txt" },
 ];
 
-export const plan = (o: { tasks?: PlanTask[]; writes?: Record<string, string>; needs?: string[]; exec?: string } = {}): Json => ({
-  expectRole: "plan",
-  writes: o.writes ?? { [TASKS_PATH]: tasksJson(o.tasks ?? TWO_TASKS) },
-  ...(o.exec ? { exec: o.exec } : {}),
-  output: { summary: "the plan", needsHumanDecision: o.needs ?? [] },
-});
+/**
+ * A plan call: it returns its tasks in the output and the driver writes tasks.json (AC-12). `raw` replaces the
+ * tasks with any value; `writes` are files the role changes (out of bounds); `denials` go to permission_denials.
+ */
+export const plan = (
+  o: { tasks?: PlanTask[]; raw?: unknown; writes?: Record<string, string>; needs?: string[]; exec?: string; denials?: Json[] } = {}
+): Json => {
+  const output = { summary: "the plan", tasks: o.raw !== undefined ? o.raw : planTasks(o.tasks ?? TWO_TASKS), needsHumanDecision: o.needs ?? [] };
+  return {
+    expectRole: "plan",
+    writes: o.writes ?? {},
+    ...(o.exec ? { exec: o.exec } : {}),
+    output,
+    ...(o.denials
+      ? { stdout: { type: "result", subtype: "success", is_error: false, num_turns: 3, total_cost_usd: 0.01, permission_denials: o.denials, structured_output: output } }
+      : {}),
+  };
+};
 
 /** implement + review for T1 and T2 of TWO_TASKS. */
 export const twoTasksDone = (): Json[] => [

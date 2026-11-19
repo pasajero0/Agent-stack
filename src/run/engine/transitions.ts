@@ -103,6 +103,7 @@ export const TABLE: readonly Row[] = [
   { from: TASK_STEPS, event: "retry", to: "implement:<same>", ac: "AC-33, AC-34, AC-38, AC-42, AC-43" },
   { from: TASK_STEPS, event: "limit", to: "gate:limit", ac: "AC-33, AC-34, AC-38, AC-39" },
   { from: CALL_STEPS, event: "fuse", to: "gate:limit", ac: "AC-35" },
+  { from: ["spec", "plan"], event: "limit", to: "gate:limit", ac: "AC-57" },
   { from: ["gate:limit"], event: "resume", to: "<returnTo>", ac: "AC-31" },
 ];
 

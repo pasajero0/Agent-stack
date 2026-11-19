@@ -12,7 +12,7 @@ import { writeRun } from "../store.js";
 import type { RunConfig, RunFile } from "../types.js";
 import { judgeCall } from "./call.js";
 import { resumeHint, type Ctx, type StepHandler } from "./context.js";
-import { NO_INPUT, recordGate, showDecisions } from "./gates.js";
+import { humanFeedback, NO_INPUT, recordGate, showDecisions } from "./gates.js";
 import { specPath } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, under, withFeedback, type RoleMark } from "./role-bounds.js";
 import { toLimit } from "./steps-common.js";
@@ -78,25 +78,37 @@ const specStep: StepHandler = async (ctx) => {
   const mark: RoleMark = { head: headSha(dir), branch: name };
   const file = specPath(cfg, stage);
   const base = specPrompt(dir, { stage, title, description: run.description, answers: run.answers });
+  const human = humanFeedback(run);
   let feedback: string | null = null;
   let last: string[] = [];
   for (let round = 0; round < 2; round++) {
-    const r = await guardRole(ctx, mark, () => judgeCall(ctx, "spec", (fb) => withFeedback(base, [feedback, fb]), parseSpecOut));
+    // AC-32: the denials of a call that is undone are dropped.
+    const kept = run.humanDecisions.length;
+    const r = await guardRole(ctx, mark, () => judgeCall(ctx, "spec", (fb) => withFeedback(base, [human, feedback, fb]), parseSpecOut));
     if (r.kind === "fuse") {
       undoGit(ctx, mark);
       return toLimit(ctx, "fuse", "spec");
     }
     const { problems, outside } = checkRole(ctx, mark, inBounds);
-    if (!existsSync(join(dir, file))) problems.push(`${file} does not exist; write the spec there`);
+    const missing = !existsSync(join(dir, file));
+    if (missing) problems.push(`${file} does not exist; write the spec there`);
     if (problems.length === 0) {
-      run.humanDecisions.push(...r.value.needsHumanDecision);
       const c = commitPaths(dir, dirtyPaths(dir).filter(inBounds), header);
       if (!c.ok) {
+        // AC-32: a resume re-runs the spec role, so this call's items would be shown twice.
+        run.humanDecisions.length = kept;
         throw new RunError(`The spec commit was refused:\n${c.output.trim()}\nFix the cause and commit ${file} on ${name} as "${header}", then ${resumeHint(run.id)}.`, 1);
       }
+      run.humanDecisions.push(...r.value.needsHumanDecision);
       return { type: "spec-done" };
     }
     undoOutside(ctx, mark, outside);
+    if (missing && r.value.needsHumanDecision.length > 0) {
+      // AC-57: the role asks instead of writing the spec; a blind re-run would ask again.
+      run.humanDecisions.push(...r.value.needsHumanDecision);
+      return toLimit(ctx, "decision", "spec");
+    }
+    run.humanDecisions.length = kept;
     last = problems;
     feedback = boundsFeedback("spec", problems);
     ctx.out(`spec: ${problems.join("; ")}.${round === 0 ? " Undone; running spec once more." : ""}`);

@@ -109,7 +109,7 @@ export async function roleCall<T>(
           mismatch = value;
           continue;
         }
-        ctx.run.humanDecisions.push(...o.denials.map((d) => `permission denied: ${d}`));
+        ctx.run.humanDecisions.push(...o.denials);
         return { kind: "ok", value };
       }
     }

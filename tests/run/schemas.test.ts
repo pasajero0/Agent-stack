@@ -38,7 +38,7 @@ describe("role schemas", () => {
       })
     ).toBeNull();
     expect(validateOutput("spec", { specPath: "p", summary: "s", needsHumanDecision: [] })).toBeNull();
-    expect(validateOutput("plan", { summary: "s", needsHumanDecision: ["x"] })).toBeNull();
+    expect(validateOutput("plan", { summary: "s", tasks: [], needsHumanDecision: ["x"] })).toBeNull();
     expect(
       validateOutput("implement", {
         status: "DONE",
@@ -55,7 +55,8 @@ describe("role schemas", () => {
     expect(validateOutput("review", review({ spec: "maybe" }))).toMatch(/spec/);
     expect(validateOutput("review", review({ verifyProves: "yes" }))).toMatch(/verifyProves/);
     expect(validateOutput("review", review({ findings: [{ severity: "bad", text: "t" }] }))).toMatch(/findings/);
-    expect(validateOutput("plan", { summary: "s" })).toMatch(/needsHumanDecision/);
+    expect(validateOutput("plan", { summary: "s" })).toMatch(/tasks/);
+    expect(validateOutput("plan", { summary: "s", tasks: [] })).toMatch(/needsHumanDecision/);
     expect(validateOutput("implement", { status: "DONE", report: "r", needsHumanDecision: [] })).toMatch(/commit/);
     expect(
       validateOutput("implement", {
@@ -80,7 +81,7 @@ describe("exact required arrays", () => {
   it("v04 AC-37: roleSchemas.required matches the spec's Role outputs", () => {
     expect(roleSchemas.clarify.required).toEqual(["questions", "size", "stage"]);
     expect(roleSchemas.spec.required).toEqual(["specPath", "summary", "needsHumanDecision"]);
-    expect(roleSchemas.plan.required).toEqual(["summary", "needsHumanDecision"]);
+    expect(roleSchemas.plan.required).toEqual(["summary", "tasks", "needsHumanDecision"]);
     expect(roleSchemas.implement.required).toEqual(["status", "report", "commit", "needsHumanDecision"]);
     expect(roleSchemas.review.required).toEqual(["spec", "quality", "verifyProves", "findings"]);
   });
@@ -127,7 +128,8 @@ describe("typed parse functions", () => {
       needsHumanDecision: ["x"],
     });
     expect(typeof parseSpecOut({ summary: "s" })).toBe("string");
-    expect(parsePlanOut({ summary: "s", needsHumanDecision: [] })).toEqual({ summary: "s", needsHumanDecision: [] });
+    const task = { id: "T1", ac: ["AC-1"], tier: "S", desc: "d", verify: "true", passes: false };
+    expect(parsePlanOut({ summary: "s", tasks: [task], needsHumanDecision: [] })).toEqual({ summary: "s", tasks: [task], needsHumanDecision: [] });
     expect(typeof parsePlanOut(5)).toBe("string");
   });
 
