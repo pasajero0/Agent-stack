@@ -17,7 +17,7 @@ export function loadSkill(projectDir: string, name: string, args: string): strin
     .join(args);
 }
 
-export function clarifyPrompt(p: { description: string }): string {
+export function clarifyPrompt(p: { description: string; used: string[] }): string {
   return [
     "# Role: clarify",
     "",
@@ -29,6 +29,8 @@ export function clarifyPrompt(p: { description: string }): string {
     "- Ask at most 5 questions, each with a recommended answer.",
     "- Size the work: task, story or epic.",
     "- Propose a stage id and title; for an epic, a split into stages (id and goal each).",
+    "- A stage id is letters then digits, like A1, and is not one already in use.",
+    `- Ids already in use: ${p.used.length > 0 ? p.used.join(", ") : "none"}.`,
   ].join("\n");
 }
 
@@ -101,6 +103,7 @@ export function implementPrompt(p: {
   lines.push(
     "",
     "Write the failing test first, see it fail, then the code; touch only this task; do not commit, branch or edit `tasks.json`.",
+    "A change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report.",
     "",
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),

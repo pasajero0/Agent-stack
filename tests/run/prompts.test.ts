@@ -54,14 +54,26 @@ describe("loadSkill", () => {
 
 describe("role prompts", () => {
   it("v04 AC-4: clarify asks at most 5 questions and says what not to do", () => {
-    const p = clarifyPrompt({ description: "add login" });
+    const p = clarifyPrompt({ description: "add login", used: [] });
     expect(p).toContain("add login");
     expect(p).toMatch(/at most 5/);
     expect(p).toMatch(/must not/i);
   });
 
+  it("v04 AC-48: clarify gets the stage-id rule and the ids already in use", () => {
+    const p = clarifyPrompt({ description: "d", used: ["A1", "A2"] });
+    expect(p).toContain("letters then digits, like A1");
+    expect(p).toContain("Ids already in use: A1, A2");
+    expect(clarifyPrompt({ description: "d", used: [] })).toContain("Ids already in use: none");
+  });
+
+  it("v04 AC-4: implement needs no test for a change to documentation only", () => {
+    const p = implementPrompt({ taskId: "Q1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } });
+    expect(p).toMatch(/documentation only \(Markdown, comments, no behaviour\) needs no test; say so in the report/);
+  });
+
   it("v04 AC-4: clarify does not claim a branch exists", () => {
-    const p = clarifyPrompt({ description: "d" });
+    const p = clarifyPrompt({ description: "d", used: [] });
     expect(p).toContain("The driver has created the run.");
     expect(p).not.toContain("its branch");
   });
@@ -70,7 +82,7 @@ describe("role prompts", () => {
     const first = (t: string): string => t.split("\n").find((l) => l.trim() !== "") ?? "";
     const spec = project("spec", "S");
     const plan = project("plan", "P");
-    expect(first(clarifyPrompt({ description: "d" }))).toBe("# Role: clarify");
+    expect(first(clarifyPrompt({ description: "d", used: [] }))).toBe("# Role: clarify");
     expect(first(specPrompt(spec, { stage: "A1", title: "t", description: "d", answers: [] }))).toBe("# Role: spec");
     expect(first(planPrompt(plan, { stage: "A1", title: "t" }))).toBe("# Role: plan");
     expect(first(implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } }))).toBe("# Role: implement");

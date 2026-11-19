@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { cleanupProjects, git, write } from "../hooks/fixture.js";
 import { resumeRun, startRun } from "../../src/run/engine/index.js";
 import { transition } from "../../src/run/engine/transitions.js";
+import { offeredStageId } from "../../src/run/engine/steps-task.js";
 import { readLock } from "../../src/run/store.js";
 import { impl, makeFakeExecutable, repo, review, sh, text } from "./engine-fixture.js";
 import {
@@ -178,26 +179,57 @@ describe("task mode: clarify, answers and the spec", () => {
     git(r.dir, "commit", "-q", "-m", "docs: old spec");
     git(r.dir, "branch", "spec/B2");
     r.script([clarify(), spec({ stage: "B3" })]);
-    const code = await startRun({ ...r.opts({ gate: ["", "", "", "greeting", "B2", "B3"] }), mode: "task", description: TASK_DESC });
+    // The proposal B1 is taken, so B3 is offered (B2 is a branch); "greeting" and B2 fail; Enter takes B3.
+    const code = await startRun({ ...r.opts({ gate: ["", "", "greeting", "B2", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
     const t = text(r);
     expect(t).toContain("docs/specs/B1");
-    expect(t).toMatch(/greeting.*pattern|pattern.*greeting/);
+    expect(t).toContain("Stage id greeting cannot be used: it must be letters then digits, like A1");
+    expect(t).not.toContain("maps \"greeting-x\"");
     expect(t).toContain("spec/B2");
+    expect(t).toContain("Stage id [B3]");
+    expect(t).not.toContain("Stage id [B1]");
     const run = r.run();
     expect(run.stage).toBe("B3");
     expect(run.next).toBe("gate:spec-merge");
     expect(run.gates.filter((g) => g.gate === "gate:answers").length).toBe(1);
   });
 
+  it("v04 AC-48: a proposal that fails AC-7 is not the default; Enter takes the offered free id", async () => {
+    const r = repo();
+    r.script([clarify({ id: "greet" }), spec({ stage: "A1" })]);
+    const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
+    expect(code, text(r)).toBe(3);
+    expect(text(r)).toContain("Stage id greet cannot be used: it must be letters then digits, like A1");
+    expect(text(r)).toContain("Stage id [A1]");
+    expect(r.run().stage).toBe("A1");
+    expect(r.logged()[0]?.prompt).toContain("Ids already in use: none");
+  });
+
+  it("v04 AC-48: a typo after a valid proposal goes back to the proposal, not to the typo", async () => {
+    const r = repo();
+    r.script([clarify(), spec()]);
+    const code = await startRun({ ...r.opts({ gate: ["", "", "b-1", ""] }), mode: "task", description: TASK_DESC });
+    expect(code, text(r)).toBe(3);
+    expect(text(r).match(/Stage id \[B1\]/g)?.length).toBe(2);
+    expect(r.run().stage).toBe("B1");
+  });
+
+  it("v04 AC-48: the offered id takes the letters of the id in use with the highest number", () => {
+    expect(offeredStageId([])).toBe("A1");
+    expect(offeredStageId(["B1", "B2", "A7"])).toBe("A8");
+    expect(offeredStageId(["v04", "notes"])).toBe("v05"); // the number keeps its width
+  });
+
   it("v04 AC-7: --stage pre-fills the stage id, and it is still validated", async () => {
     const r = repo();
     git(r.dir, "branch", "spec/C7");
     r.script([clarify(), spec({ stage: "C8" })]);
-    const code = await startRun({ ...r.opts({ gate: ["", "", "", "C8"] }), mode: "task", description: TASK_DESC, stage: "C7" });
+    const code = await startRun({ ...r.opts({ gate: ["", "", "C8"] }), mode: "task", description: TASK_DESC, stage: "C7" });
     expect(code, text(r)).toBe(3);
-    expect(text(r)).toContain("[C7]");
+    expect(text(r)).toContain("Stage id C7 cannot be used");
     expect(text(r)).toContain("spec/C7");
+    expect(text(r)).not.toContain("[C7]"); // a failed id is never the default (AC-48)
     expect(r.run().stage).toBe("C8");
     expect(r.run().stagePrefill).toBe("C7");
   });

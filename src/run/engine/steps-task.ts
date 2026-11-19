@@ -6,7 +6,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { RunError } from "../errors.js";
-import { baseRef, branchExists, existsOnRef } from "../git.js";
+import { baseRef, branchExists, existsOnRef, git } from "../git.js";
 import { clarifyPrompt } from "../prompts.js";
 import { parseClarify, type ClarifyOutput } from "../schemas.js";
 import { runDir } from "../store.js";
@@ -23,8 +23,47 @@ import type { StepEvent } from "./transitions.js";
 
 const isFix = (id: string): boolean => /^F\d+$/.test(id);
 
+/** Stage ids in use: spec folders on the base ref and `spec/*` branches, sorted (AC-48). */
+export function usedStageIds(ctx: Ctx): string[] {
+  const dir = ctx.projectDir;
+  const base = baseRef(dir, ctx.cfg.baseBranch);
+  const lines = (out: string): string[] => out.split("\n").map((l) => l.trim()).filter((l) => l !== "");
+  const tree = git(dir, ["ls-tree", "--name-only", `${base}:${ctx.cfg.specsDir}`]);
+  const branches = git(dir, ["for-each-ref", "--format=%(refname:lstrip=3)", "refs/heads/spec/"]);
+  return [...new Set([...(tree.ok ? lines(tree.stdout) : []), ...lines(branches.stdout)])].sort();
+}
+
+/**
+ * The id the gate offers when no proposal passes AC-7 (AC-48): the letters of the id in use with the highest
+ * number, and the next number in the same width; `A1` when none is in use.
+ */
+export function offeredStageId(used: string[]): string {
+  let best: { letters: string; n: number; width: number } | null = null;
+  for (const id of used) {
+    const m = /^([A-Za-z]+)([0-9]+)$/.exec(id);
+    if (!m || m[1] === undefined || m[2] === undefined) continue;
+    const n = Number(m[2]);
+    if (best === null || n > best.n) best = { letters: m[1], n, width: m[2].length };
+  }
+  if (best === null) return "A1";
+  return `${best.letters}${String(best.n + 1).padStart(best.width, "0")}`;
+}
+
+/** A free id that passes AC-7, counting up from the offered one. */
+function freeStageId(ctx: Ctx, used: string[]): string {
+  const first = offeredStageId(used);
+  const m = /^([A-Za-z]+)([0-9]+)$/.exec(first);
+  const letters = m?.[1] ?? "A";
+  const width = m?.[2]?.length ?? 1;
+  for (let n = Number(m?.[2] ?? 1), i = 0; i < 1000; n++, i++) {
+    const id = `${letters}${String(n).padStart(width, "0")}`;
+    if (stageIdProblem(ctx, id) === null) return id;
+  }
+  throw new RunError("No free stage id found; type one at the gate.", 1);
+}
+
 const clarify: StepHandler = async (ctx) => {
-  const base = clarifyPrompt({ description: ctx.run.description });
+  const base = clarifyPrompt({ description: ctx.run.description, used: usedStageIds(ctx) });
   const r = await judgeCall(ctx, "clarify", (fb) => withFeedback(base, [fb]), parseClarify);
   if (r.kind === "fuse") return toLimit(ctx, "fuse", "clarify");
   ctx.run.proposal = r.value;
@@ -40,7 +79,7 @@ export function stageIdProblem(ctx: Ctx, id: string): string | null {
   if (!stageIdChars(id)) return 'it may hold only letters, digits, ".", "_" and "-", and not start with "."';
   const m = new RegExp(ctx.cfg.stagePattern).exec(`${id}-x`);
   if (!m || m[1] !== id) {
-    return `the stage pattern ${ctx.cfg.stagePattern} maps "${id}-x" to ${m?.[1] ? `"${m[1]}"` : "no stage"}, not "${id}" (use letters then digits, e.g. B1)`;
+    return "it must be letters then digits, like A1";
   }
   const base = baseRef(dir, ctx.cfg.baseBranch);
   const specDir = `${ctx.cfg.specsDir}/${id}`;
@@ -132,17 +171,27 @@ const answersGate: StepHandler = async (ctx) => {
     recordGate(ctx, "gate:answers", "epic");
     return { type: "epic" };
   }
+  // AC-48: the default is always a valid id, so Enter never loops on a failed one.
+  const fallback = stageIdProblem(ctx, p.stage.id) === null ? p.stage.id : freeStageId(ctx, usedStageIds(ctx));
   let id = run.stagePrefill ?? p.stage.id;
+  const first = stageIdProblem(ctx, id);
+  if (first !== null) {
+    ctx.out(`Stage id ${id} cannot be used: ${first}.`);
+    id = fallback;
+  }
   for (;;) {
     ctx.out(`Stage id [${id}]: Enter keeps it, or type a new one`);
     const a = await ask(ctx, "stage> ");
     if (a === null) return NO_INPUT;
     const s = a.trim();
     if (s === "c") return cancel();
-    if (s !== "") id = s;
-    const why = stageIdProblem(ctx, id);
-    if (why === null) break;
-    ctx.out(`Stage id ${id} cannot be used: ${why}. Type another one.`);
+    if (s === "") break;
+    const why = stageIdProblem(ctx, s);
+    if (why === null) {
+      id = s;
+      break;
+    }
+    ctx.out(`Stage id ${s} cannot be used: ${why}. Type another one.`);
   }
   run.answers = answers;
   run.size = size;
