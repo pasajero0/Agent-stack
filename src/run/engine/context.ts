@@ -67,7 +67,7 @@ export interface StartPlan {
 export interface ModeSteps {
   /** Attempts per task, fix tasks included: quick 2, task 3 (AC-25, AC-33). */
   maxAttempts: number;
-  /** Mode-only step handlers; the common ones are in steps-common.ts. */
+  /** Mode-only step handlers; the common ones are registered in steps-common.ts. */
   handlers: Partial<Record<StepKind, StepHandler>>;
   /** Mode refusals (a `RunError`) and the run's initial fields. */
   start(input: StartInput): StartPlan;

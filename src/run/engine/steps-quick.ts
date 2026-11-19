@@ -6,7 +6,7 @@ import { RunError } from "../errors.js";
 import { branchExists, slugify } from "../git.js";
 import { newTask, type ModeSteps } from "./context.js";
 import { fixComment } from "./gates.js";
-import { lintItems } from "./steps-common.js";
+import { lintItems } from "./task-core.js";
 
 export const quickMode: ModeSteps = {
   maxAttempts: 2,

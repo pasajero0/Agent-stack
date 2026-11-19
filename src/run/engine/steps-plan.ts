@@ -15,7 +15,8 @@ import { newTask, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "
 import { ask, comment, humanFeedback, NO_INPUT, recordGate, showDecisions } from "./gates.js";
 import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, tasksPath, type PlanTask } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, withFeedback, type RoleMark } from "./role-bounds.js";
-import { implementModel, lastCallOutput, toLimit } from "./steps-common.js";
+import { implementModel, lastCallOutput } from "./steps-implement.js";
+import { toLimit } from "./task-core.js";
 import { proposalOf, stageOf } from "./steps-spec.js";
 import { transition, type StepEvent } from "./transitions.js";
 

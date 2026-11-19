@@ -16,7 +16,7 @@ import { resumeHint, type Ctx, type ModeSteps, type StepHandler } from "./contex
 import { ask, fixComment, NO_INPUT, recordGate, showDecisions } from "./gates.js";
 import { readPlan, readSpec } from "./plan-file.js";
 import { withFeedback } from "./role-bounds.js";
-import { lintItems, toLimit } from "./steps-common.js";
+import { lintItems, toLimit } from "./task-core.js";
 import { planHandlers, planTaskInfo } from "./steps-plan.js";
 import { proposalOf, specHandlers, stageOf } from "./steps-spec.js";
 import type { StepEvent } from "./transitions.js";

@@ -7,7 +7,7 @@ import { diffStat, dirtyPaths, git } from "../git.js";
 import type { GateRecord, RunFile } from "../types.js";
 import { fuseText } from "./call.js";
 import { Interrupted, newTask, type Ctx, type StepHandler } from "./context.js";
-import { timedOutError } from "./steps-common.js";
+import { timedOutError } from "./task-core.js";
 import { parseNext, taskNext, type StepEvent } from "./transitions.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
