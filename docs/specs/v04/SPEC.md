@@ -289,7 +289,9 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   - the text of its criteria;
   - the last feedback, labelled "FROM THE PROGRAM";
   - "write the failing test first, see it fail, then the code; touch only this task; do not commit,
-    branch or edit `tasks.json`".
+    branch or edit `tasks.json`";
+  - the shell commands it may run, built from the same list as its `--allowedTools`: "anything else is
+    denied, so do not try it".
 - **review**:
   - the task and its criteria;
   - the task diff;
@@ -631,6 +633,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-4 (implement prompt): it lists the allowed shell commands; the role tried
+  `node --test <file>`, which is not on the list, and lost a turn.
 - 2026-11-19 — AC-57: the retried role gets the questions it asked with the answer; a short "yes" meant
   nothing to a fresh session.
 - 2026-11-19 — Gate input (answers): each prompt says what Enter does; an answer meant for the stage id was
