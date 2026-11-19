@@ -24,6 +24,7 @@ import { runDir } from "../store.js";
 import type { LimitReason, Next, Role, RunTask } from "../types.js";
 import { judgeCall, roleCall } from "./call.js";
 import { findTask, Interrupted, resumeHint, type CheckItem, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
+import { testChanges, testChangesText } from "./frozen.js";
 import { requireClean } from "./role-bounds.js";
 import { taskNext, type StepEvent, type StepKind } from "./transitions.js";
 
@@ -256,6 +257,12 @@ export function timedOutError(ctx: Ctx, step: string, r: CheckRun): RunError {
 /** Runs the mode's commands, by exit code only (AC-19); red is a failed attempt (AC-33), a timeout exits 1 (AC-60). */
 const checks: StepHandler = async (ctx, id) => {
   const task = taskOf(ctx, id);
+  // AC-66: a weakened frozen test or a changed check config goes to the human before any check runs.
+  const changed = testChanges(ctx.projectDir, baseOf(task), ctx.cfg.testGlobs).filter((c) => !task.allowedChanges.includes(c));
+  if (changed.length > 0) {
+    task.lastFeedback = testChangesText(changed);
+    return toLimit(ctx, "tests-changed", taskNext("checks", task.id));
+  }
   const info = ctx.mode.taskInfo(ctx, task.id);
   const items = ctx.mode.checkItems(ctx, task, info);
   const runs: CheckRun[] = [];

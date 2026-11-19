@@ -4,7 +4,7 @@ export type Mode = "task" | "quick";
 
 export type RunStatus = "running" | "waiting" | "finished" | "cancelled";
 
-export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse" | "decision" | "test-conflict";
+export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse" | "decision" | "test-conflict" | "tests-changed";
 
 /** Roles the driver calls Claude in. */
 export type Role = "clarify" | "spec" | "plan" | "implement" | "review";
@@ -42,6 +42,8 @@ export interface RunTask {
   lastFeedback: string | null;
   checks: CheckResult[];
   notes: string[];
+  /** Changes to frozen tests or check configs the human allowed at gate:limit (AC-66). */
+  allowedChanges: string[];
   /** sha, `"empty"` for an empty diff, or null before the commit. */
   commit: string | null;
 }
@@ -102,6 +104,8 @@ export interface RunConfig {
   quickReviewLines: number;
   commands: { test: string; lint: string };
   lintMatch: string[];
+  /** Test files (`gates.json → testGlobs`): their tests are frozen at a task's base (AC-66). */
+  testGlobs: string[];
   specsDir: string;
   adrDir: string;
   baseBranch: string;

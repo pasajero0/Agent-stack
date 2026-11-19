@@ -116,6 +116,7 @@ export function repo(gates: { test?: string; lint?: string; run?: Json; extra?: 
 
 export const impl = (o: {
   writes?: Record<string, string>;
+  deletes?: string[];
   model?: "sonnet" | "opus";
   status?: "DONE" | "BLOCKED" | "TEST_CONFLICT";
   conflict?: { test: string; criterion: string; reason: string };
@@ -127,6 +128,7 @@ export const impl = (o: {
   expectRole: "implement",
   expectModel: o.model ?? "sonnet",
   ...(o.writes ? { writes: o.writes } : {}),
+  ...(o.deletes ? { deletes: o.deletes } : {}),
   ...(o.exec ? { exec: o.exec } : {}),
   output: {
     status: o.status ?? "DONE",

@@ -112,6 +112,7 @@ export function loadRunConfig(projectDir: string): RunConfig {
     quickReviewLines: positiveInt(run, "quickReviewLines", DEFAULTS.quickReviewLines),
     commands: { test: str(cmds, "test", "", "commands.test"), lint: str(cmds, "lint", "", "commands.lint") },
     lintMatch: strings(parsed, "lintMatch"),
+    testGlobs: strings(parsed, "testGlobs"),
     specsDir: dirPath(str(parsed, "specsDir", DEFAULTS.specsDir)),
     adrDir: dirPath(str(parsed, "adrDir", DEFAULTS.adrDir)),
     baseBranch: str(parsed, "baseBranch", DEFAULTS.baseBranch),

@@ -37,6 +37,7 @@ const DEFAULTS = {
   quickReviewLines: 120,
   commands: { test: "", lint: "" },
   lintMatch: [],
+  testGlobs: [],
   specsDir: "docs/specs",
   adrDir: "docs/adr",
   baseBranch: "main",
@@ -74,6 +75,13 @@ describe("loadRunConfig", () => {
     expect(loadRunConfig(dir).glossary).toBe("handbook/words.md");
     writeGates({ glossary: "" });
     expect(loadRunConfig(dir).glossary).toBe("");
+  });
+
+  it("v04 AC-66: testGlobs comes from gates.json, empty when absent", () => {
+    writeGates({ testGlobs: ["*.test.*", "tests/*"] });
+    expect(loadRunConfig(dir).testGlobs).toEqual(["*.test.*", "tests/*"]);
+    writeGates({});
+    expect(loadRunConfig(dir).testGlobs).toEqual([]);
   });
 
   it("treats run: null as no run key", () => {

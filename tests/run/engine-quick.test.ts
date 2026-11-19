@@ -226,6 +226,53 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(r.run().next).toBe("implement:Q1");
   });
 
+  it("v04 AC-66: a deleted frozen test stops at gate:limit (tests-changed); a allows it, and gate:accept lists it", async () => {
+    const r = repo();
+    write(r.dir, "tests/readme.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n});\n');
+    git(r.dir, "add", "-A");
+    git(r.dir, "commit", "-q", "-m", "test: readme");
+    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" }, deletes: ["tests/readme.test.ts"] })]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    let run = r.run();
+    expect(run.limitReason).toBe("tests-changed");
+    expect(run.returnTo).toBe("checks:Q1");
+    expect(text(r)).toContain("deleted test file tests/readme.test.ts");
+    expect(text(r)).toMatch(/a allow/);
+
+    const code = await resumeRun({ ...r.opts({ gate: ["a", "a"] }) });
+    expect(code, text(r)).toBe(0);
+    run = r.run();
+    expect(run.status).toBe("finished");
+    expect(run.tasks[0]?.attempts).toBe(1);
+    expect(run.tasks[0]?.allowedChanges).toEqual(["deleted test file tests/readme.test.ts"]);
+    expect(run.gates.map((g) => `${g.gate} ${g.decision}`)).toEqual(["gate:limit allow", "gate:accept accept"]);
+    expect(text(r)).toContain("test change allowed: deleted test file tests/readme.test.ts");
+  });
+
+  it("v04 AC-66: r at gate:limit (tests-changed) is a new attempt on Opus with the list and the comment", async () => {
+    const r = repo();
+    write(r.dir, "tests/readme.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n  expect(2).toBe(2);\n});\n');
+    git(r.dir, "add", "-A");
+    git(r.dir, "commit", "-q", "-m", "test: readme");
+    r.script([
+      impl({ writes: { "README.md": "# demo\nfixed\n", "tests/readme.test.ts": 'it("a", () => {\n  expect(1).toBe(1);\n});\n' } }),
+      impl({ model: "opus", writes: { "tests/readme.test.ts": 'it("a", () => {\n  expect(1).toBe(1);\n  expect(2).toBe(2);\n});\n' } }),
+    ]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    expect(text(r)).toContain("tests/readme.test.ts: assertions 2 → 1");
+    const code = await resumeRun({ ...r.opts({ gate: ["r keep both assertions", "a"] }) });
+    expect(code, text(r)).toBe(0);
+    const run = r.run();
+    expect(run.tasks[0]?.attempts).toBe(2);
+    expect(run.tasks[0]?.allowedChanges).toEqual([]);
+    const g = run.gates.find((x) => x.gate === "gate:limit");
+    expect(g).toMatchObject({ decision: "retry", comment: "keep both assertions", reason: "tests-changed" });
+    expect(g && humanFeedback({ ...run, gates: [g] })).toBeNull();
+    const prompt = r.logged()[1]?.prompt ?? "";
+    expect(prompt).toContain("tests/readme.test.ts: assertions 2 → 1");
+    expect(prompt).toContain("FROM THE HUMAN: keep both assertions");
+  });
+
   it("v04 AC-38: an implement call stopped at max turns is a failed attempt; its edits stay for the next one", async () => {
     const r = repo();
     const turns = { type: "result", subtype: "error_max_turns", is_error: true, num_turns: 60, total_cost_usd: 0.02 };
