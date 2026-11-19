@@ -45,6 +45,8 @@ argument-hint: "<stage id, e.g. A0>"
      criterion has a test, no test invents one, code health within its SLOs, everything green.
    - **`verify` is a real check of this task only** — tests filtered by AC id, a type check, a script.
      Never `true`, never the whole suite unless the task is "everything green".
+   - **A missing test file must be red.** A runner given a file list may skip a file that does not exist yet
+     and pass. So a verify that names test files starts with `test -f <file> &&` for each one.
    - **One task = one reviewable step** (roughly one commit). Split anything bigger.
 3. **Assign a tier** to each task — it picks the implementer's model:
 
@@ -57,7 +59,8 @@ argument-hint: "<stage id, e.g. A0>"
    Under the driver (`agent-stack run`), a retry runs on Opus. By hand, after two failed `verify` runs move
    the task one tier up (`.claude/bin/verify` prints the hint).
 4. **Run `.claude/bin/verify`** once: every task should fail now (red). A `verify` that already passes
-   proves nothing — fix it.
+   proves nothing — fix it. Under the driver, skip this step: the driver runs each task's verify before its
+   first attempt and notes one that is already green.
 5. Show the plan to the human as a table (id, ACs, tier, verify) before implementing.
 
 ## Then

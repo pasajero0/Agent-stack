@@ -70,7 +70,10 @@
   - the implement role is told which shell commands it may run;
   - clarify gets the stage-id rule and the ids in use, and a stage id that cannot be used is never the
     default: the gate offers the proposal or a free id, so Enter no longer loops;
-  - a change to documentation only needs no test (a quick fix of one README line had got one).
+  - a change to documentation only needs no test (a quick fix of one README line had got one);
+  - the start check: before a task's first attempt the driver runs its verify once, and a verify that is
+    already green gets a note at gate:accept, because it cannot show the task's work;
+  - `/plan` puts `test -f <file> &&` in front of each named test file, so a missing file is red, not skipped.
 - **From a check against Compound V:**
   - a check that times out is the environment's fault: the driver exits 1, names the command and the limit,
     and counts no attempt. Before, a hung package manager sent the task back to implement on Opus;
