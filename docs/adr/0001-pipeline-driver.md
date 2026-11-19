@@ -1,6 +1,6 @@
 # 0001. A driver program holds the pipeline order
 
-- **Status:** Proposed
+- **Status:** Accepted — approved by the merge of v0.4.0 (the human merge is the approval)
 - **Decided:** 2026-11-18
 - **Recorded:** 2026-11-18
 - **Applies to:** All stages (project-wide decision)
