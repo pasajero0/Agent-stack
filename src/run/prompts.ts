@@ -10,7 +10,7 @@ import type { AnswerRecord } from "./types.js";
 export function loadSkill(projectDir: string, name: string, args: string): string {
   const skillDir = join(projectDir, ".claude", "skills", name);
   const file = join(skillDir, "SKILL.md");
-  if (!existsSync(file)) throw new RunError(`skill not found: ${file} (run agent-stack generate)`, 1);
+  if (!existsSync(file)) throw new RunError(`skill not found: ${file} (run agent-stack update)`, 1);
   return readFileSync(file, "utf8")
     .split("${CLAUDE_SKILL_DIR}")
     .join(skillDir)
@@ -18,16 +18,23 @@ export function loadSkill(projectDir: string, name: string, args: string): strin
     .join(args);
 }
 
+/** The frontmatter at the start of a file: an optional BOM, `---` lines with trailing spaces, CRLF, or empty. */
+const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
+
 /**
  * The body of `.claude/agents/<name>.md` without its frontmatter: the rules a role takes from the project's
- * agent, so the driver keeps no copy of them (AC-67).
+ * agent, so the driver keeps no copy of them (AC-67). `need` is a part the driver relies on; `update` keeps a
+ * file the user changed, so an old copy without it must stop the run, not run silently.
  */
-export function loadAgent(projectDir: string, name: string): string {
+export function loadAgent(projectDir: string, name: string, need?: { re: RegExp; what: string }): string {
   const file = join(projectDir, ".claude", "agents", `${name}.md`);
-  if (!existsSync(file)) throw new RunError(`agent not found: ${file} (run agent-stack generate)`, 1);
+  if (!existsSync(file)) throw new RunError(`agent not found: ${file} (run agent-stack update)`, 1);
   const text = readFileSync(file, "utf8");
-  const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(text);
-  return (m ? text.slice(m[0].length) : text).trim();
+  const m = FRONTMATTER.exec(text);
+  const body = (m ? text.slice(m[0].length) : text.replace(/^\uFEFF/, "")).trim();
+  const missing = body === "" ? "rules" : need && !need.re.test(body) ? need.what : null;
+  if (missing !== null) throw new RunError(`agent ${file} is out of date: no ${missing} (run agent-stack update --force, or add it)`, 1);
+  return body;
 }
 
 export function clarifyPrompt(p: { description: string; used: string[] }): string {
@@ -112,7 +119,7 @@ export function implementPrompt(
     "",
     "Rules (.claude/agents/implementer.md); follow 'Under the driver':",
     "",
-    loadAgent(projectDir, "implementer"),
+    loadAgent(projectDir, "implementer", { re: /^## Under the driver[ \t]*$/m, what: '"## Under the driver" section' }),
     "",
     `Task ${p.taskId}: ${p.taskDesc}`,
     "",
@@ -121,6 +128,9 @@ export function implementPrompt(
   ];
   if (p.feedback) lines.push("", "FROM THE PROGRAM (checks or review of the previous attempt):", p.feedback);
   lines.push(
+    "",
+    p.commands.verify.trim() === "" ? "This task has no verify command." : `The task's verify: \`${p.commands.verify}\` (the driver runs it after you).`,
+    p.commands.test.trim() === "" ? "No test command is listed: do not try to run tests; say so in the report." : `The test command: \`${p.commands.test}\`.`,
     "",
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),
@@ -146,21 +156,23 @@ export function conflictText(c: TestConflict, criteria: string[]): string {
 
 export function reviewPrompt(
   projectDir: string,
-  p: { taskId: string; taskDesc: string; criteria: string[]; diff: string; report: string }
+  p: { taskId: string; taskDesc: string; criteria: string[]; diff: string; report: string; verify: string }
 ): string {
   return [
     "# Role: review",
     "",
-    "The driver has run the checks and cut this diff. You review only; you must not edit files, run commands, commit or branch.",
+    "The driver has run the checks and cut this diff. You review only: read and search with Read, Glob and Grep; you must not edit files, run shell commands, commit or branch.",
     "",
     "Review rules (.claude/agents/code-reviewer.md):",
     "",
-    loadAgent(projectDir, "code-reviewer"),
+    loadAgent(projectDir, "code-reviewer", { re: /Task review/, what: '"Task review" item' }),
     "",
     `Task ${p.taskId}: ${p.taskDesc}`,
     "",
     "Criteria:",
     ...(p.criteria.length ? p.criteria : ["(none listed)"]),
+    "",
+    `Verify: ${p.verify.trim() === "" ? "(none)" : `\`${p.verify}\``}`,
     "",
     "Diff:",
     p.diff,

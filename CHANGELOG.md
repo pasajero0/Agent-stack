@@ -14,6 +14,16 @@
   deleted test file, fewer tests or assertions, more skip marks, a changed config. Gate `limit` (reason
   `tests-changed`) lists them: `a` allows exactly those, `r` sends the task back, `c` cancels. It does not see a
   weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`). Tested with a fake `claude` only.
+- **run: review and implement take their rules from your agents.** The driver no longer keeps its own copy: the
+  review prompt carries `.claude/agents/code-reviewer.md`, the implement prompt `.claude/agents/implementer.md`
+  (frontmatter removed). A fix to an agent now reaches the driver too. The implementer agent has a section for a
+  chat and one for the driver; both have the test conflict exit.
+
+### Upgrading from 0.4
+
+- **Run `agent-stack update`.** The driver needs the new `implementer.md` (a `## Under the driver` section) and
+  `code-reviewer.md` (a "Task review" item). If you changed one of them, `update` keeps your copy, and the run
+  stops with `agent … is out of date`: add the section, or run `agent-stack update --force`.
 
 ## 0.4.0 — the driver
 

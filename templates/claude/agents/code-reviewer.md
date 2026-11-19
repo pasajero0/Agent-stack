@@ -27,12 +27,13 @@ You are a code reviewer. For each file: run pattern greps → read context → c
 7. **Every issue needs evidence and a consequence:** the line, what the code does, and what breaks
    (behavior, contract, security, maintainability cost). An unsupported preference is not an issue;
    a pre-existing problem outside the change is not an issue of this change.
-8. **Task review** (when the caller gives one task, its criteria and its diff):
-   - `spec`: `pass` when the diff does what every criterion says; `fail` when one is not done or done wrong;
-     `unclear` when a criterion can be read two ways;
+8. **Task review** (when the caller gives one task, its criteria and its diff). Judge only the criteria the
+   caller gives: a criterion of another task is not in scope, even on a stage branch (item 3).
+   - `spec`: `pass` when the diff does what every given criterion says; `fail` when one is not done or done
+     wrong; `unclear` when a criterion can be read two ways;
    - `quality`: `fail` only with at least one critical issue that has evidence; else `pass`;
    - `verifyProves`: for each criterion, imagine the line that does it removed. If the task's verify would
-     still pass, it proves nothing for that criterion: `false`.
+     still pass, it proves nothing for that criterion: `false`. With no criteria or no verify given: `true`.
 
 **Important:** when the reviewer-invoker mentions a specific flagged anti-pattern, **also grep the
 touched file(s) for analogous occurrences** of that pattern, not just the flagged line. Reviewers
@@ -89,11 +90,11 @@ For each issue:
 - **Issue**: what's wrong
 - **Fix**: how to fix
 
-If the caller gives a JSON schema, answer in that schema instead: the same severities, the same need for
-evidence, and an empty list of findings when there are no issues.
-
 No issues is a valid result. Then write `No issues.` and list in one or two lines what you checked
 (greps run, files read, spec criteria traced). Accuracy matters more than the number of issues.
+
+If the caller gives a JSON schema, answer in that schema instead of everything above in this section: the same
+severities, the same need for evidence, and an empty list of findings when there are no issues.
 
 ## References
 

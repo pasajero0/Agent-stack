@@ -61,10 +61,7 @@ describe("quick mode: the path", () => {
     const r = repo({ run: { quickReviewLines: 3 } });
     r.script([impl({ writes: { "notes.txt": lines(5) } }), review()]);
     expect(await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC })).toBe(0);
-    const agent = readFileSync(join(r.dir, ".claude/agents/code-reviewer.md"), "utf8");
-    const body = agent.slice(agent.indexOf("You are a code reviewer"));
-    expect(r.logged()[1]?.prompt).toContain(body.split("\n")[0] ?? "x");
-    expect(r.logged()[1]?.prompt).toContain("Verify, don't trust.");
+    expect(r.logged()[1]?.prompt).toContain("You are a code reviewer. For each file:");
     expect(r.logged()[0]?.prompt).toContain("You implement one task.");
 
     const r2 = repo({ run: { quickReviewLines: 3 } });
@@ -73,7 +70,7 @@ describe("quick mode: the path", () => {
     r2.script([impl({ writes: { "notes.txt": lines(5) } })]);
     expect(await startRun({ ...r2.opts(), mode: "quick", description: DESC })).toBe(1);
     expect(r2.run().next).toBe("review:Q1");
-    expect(text(r2)).toMatch(/agent not found: .*code-reviewer\.md \(run agent-stack generate\)/);
+    expect(text(r2)).toMatch(/agent not found: .*code-reviewer\.md \(run agent-stack update\)/);
   });
 
   it("v04 AC-25: a diff within quickReviewLines skips the review", async () => {
