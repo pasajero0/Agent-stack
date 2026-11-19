@@ -194,6 +194,7 @@ When the file runs out, the gate behaves as AC-29: it is recorded, and the drive
 - **plan-approve** and **accept**: `a` approve, `r` reject (a comment follows), `c` cancel.
 - **limit**:
   - reasons attempts, blocked or review loop: `r` retry, `c` cancel;
+  - reason decision: `r` retry (a comment follows), `c` cancel (AC-57);
   - reason fuse: `f <n>` sets a new limit for this run, in the fuse's own unit (calls or dollars); it must be
     above what is used so far. `c` cancels.
 
@@ -244,6 +245,12 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   `--max-budget-usd <dollars left>` only with a dollar fuse;
 - gets the role prompt on stdin;
 - gets `AGENT_STACK_RUN` in its environment;
+- loads only the project (AC-58):
+  - `--strict-mcp-config --mcp-config <the project's .mcp.json, or {"mcpServers":{}}>`;
+  - `--setting-sources project,local`, so no user plugins, permissions or hooks;
+  - `--settings '{"claudeMdExcludes":["<home>/.claude/CLAUDE.md"]}'`;
+  - env `ENABLE_CLAUDEAI_MCP_SERVERS=false`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and
+    `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1`;
 - never gets `--bare`, `bypassPermissions`, `--dangerously-skip-permissions` or `disableAllHooks`.
 
 
@@ -251,7 +258,7 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 | --- | --- | --- | --- | --- |
 | clarify | opus | Read,Glob,Grep | default | — |
 | spec | opus | Read,Glob,Grep,Write,Edit,Agent | acceptEdits | — |
-| plan | opus | Read,Glob,Grep,Write | acceptEdits | — |
+| plan | opus | Read,Glob,Grep | default | — |
 | implement | AC-16 | Read,Glob,Grep,Edit,Write,Bash | acceptEdits | `Bash(<test command>:*)`, `Bash(<lint prefix>:*)`, `Bash(git status:*)`, `Bash(git diff:*)`, `Bash(git log:*)`, `Bash(git show:*)`, and `Bash(<this task's verify command, verbatim>)` (human-approved at gate:plan-approve; never `.claude/bin/verify`, which writes `passes`); an entry whose command is empty is left out |
 | review | opus | Read,Glob,Grep | default | — |
 
@@ -270,6 +277,7 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   - the full text of the `/plan` skill, filled in;
   - "the spec is merged and the branch exists — skip the precondition and step 1; do not run verify,
     commit or implement";
+  - "do not write `tasks.json`: return the tasks in your output; the program writes the file";
   - "**every task ends green**: its test is written first inside the task and its verify passes when the
     task is done; no test-only tasks".
 - **implement**:
@@ -292,7 +300,8 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   - `stage`: `{id, title}`;
   - `split`: `{id, goal}[]` when the size is epic.
 - **spec**: `{ specPath, summary, needsHumanDecision: string[] }`.
-- **plan**: `{ summary, needsHumanDecision: string[] }`.
+- **plan**: `{ summary, tasks, needsHumanDecision: string[] }`. `tasks` holds the fields of a "Valid plan"
+  task: `{id, ac, tier, desc, verify, passes: false}[]`. The driver, not the role, writes it to `tasks.json`.
 - **implement**:
   - `status`: `DONE` \| `BLOCKED`;
   - `report`;
@@ -343,6 +352,9 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   the run file and never from the model's output (ADR-0001).
 - **AC-2:** THE SYSTEM SHALL start every Claude call as "How Claude Code is invoked" specifies. It SHALL
   never pass `--bare`, a bypass permission mode or `disableAllHooks` (ADR-0001).
+- **AC-58:** THE SYSTEM SHALL start every Claude call with only the project's MCP servers, settings and
+  CLAUDE.md, and with auto-memory, the git status snapshot and the claude.ai account connectors off, as
+  "How Claude Code is invoked" lists.
 - **AC-3:** THE SYSTEM SHALL write the run file atomically (temp file, then rename) after every step and gate
   decision. It SHALL keep every call's argv (without the prompt), exit code and raw result under `calls/`.
 - **AC-4:** THE SYSTEM SHALL build each role's prompt as "Role prompts" specifies. For spec and plan, it
@@ -373,11 +385,12 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - check out a new branch `<stage>-<slug>` from the base ref (the slug comes from the title, as in AC-24);
   - set `branch` and `baseCommit`;
   - run the plan role.
-- **AC-12:** WHEN the plan role ends, THE SYSTEM SHALL check four things:
-  - `.claude/tmp/<stage>/tasks.json` is valid and non-empty;
-  - the branch is unchanged;
-  - no commit was made;
-  - nothing outside `.claude/tmp/<stage>/` changed.
+- **AC-12:** WHEN the plan role ends, THE SYSTEM SHALL check three things:
+  - the output's `tasks` form a valid plan;
+  - the branch is unchanged and no commit was made;
+  - nothing in the tree changed (the role has no write tool).
+
+  It SHALL then write the tasks to `.claude/tmp/<stage>/tasks.json` itself.
 
   It SHALL then stop at gate:plan-approve and show each task: id, criteria, tier, the model it will run on,
   and verify.
@@ -455,7 +468,9 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - retry and raise return to `returnTo`; a retry runs on Opus;
   - cancel cancels the run.
 - **AC-32:** WHEN `humanDecisions` is not empty, THE SYSTEM SHALL show it at the next gate, then clear it.
-  - The list collects `needsHumanDecision` from every role, and every `permission_denials` entry.
+  - The list collects `needsHumanDecision` and the `permission_denials` of every call whose result the
+    driver keeps. A call that is undone or re-run adds nothing.
+  - A denial is one line: `permission denied: <tool> <file_path or command>`, cut to 120 characters.
 
 ### Unhappy path
 
@@ -503,8 +518,13 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - It SHALL exit with code 1 if the branch cannot be restored without losing edits (partner of AC-16).
 - **AC-44:** IF the spec role ends without `<specsDir>/<stage>/SPEC.md`, THEN THE SYSTEM SHALL re-run it once
   with that feedback, then exit with code 1 (partner of AC-8).
-- **AC-45:** IF the plan role leaves no valid, non-empty `tasks.json`, THEN THE SYSTEM SHALL delete what it
-  left, re-run it once with the error, then exit with code 1 (partner of AC-12).
+- **AC-45:** IF the plan role's `tasks` are not a valid plan, THEN THE SYSTEM SHALL re-run it once with the
+  error, then exit with code 1 (partner of AC-12).
+- **AC-57:** IF the spec role ends without its SPEC.md, or the plan role without a valid plan, and its
+  `needsHumanDecision` is not empty, THEN THE SYSTEM SHALL not re-run it. It SHALL go to gate:limit, reason
+  "decision", and show the items (partner of AC-12, AC-44).
+  - `r` retries the role with the comment that follows, labelled "FROM THE HUMAN"; `c` cancels.
+  - The attempts and the fuse are unchanged.
 - **AC-46:** IF a task's checks pass with an empty task diff, THEN THE SYSTEM SHALL record `commit: "empty"`,
   make no commit, and show it at gate:accept (partner of AC-20).
 - **AC-47:** IF `--resume` finds the spec missing on the base ref, THEN THE SYSTEM SHALL stay at
@@ -571,8 +591,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   log, and a 5-round limit.
 - **"Accept as is"** at gate:limit.
 - **A custom `stagePattern` in task mode** (AC-54).
-- **Plan-role writes under another `.claude/tmp/<other>/`:** the plan role's bounds (AC-12) cannot see them,
-  because git does not track `.claude/tmp/`.
+- **The account email in the session context.** Claude Code adds it for a subscription login, and no
+  switch removes it short of `--bare`, which needs an API key and skips hooks (AC-2). README "Limits" says so.
 - **Worktree per run and parallel runs.** They wait for 2.W1–2.W7.
 - **The browser check** (7.11, with V9) **and lessons after a run** (7.12).
 - **Push, PR, merge and `git fetch`:** these are the human's (D2).
@@ -598,5 +618,14 @@ Manual check, once, with the real `claude` on a scratch repo:
    - the embedded skills followed: a spec-reviewer pass, EARS criteria.
 
 ## Changes
+
+- 2026-11-19 — from the manual check with the real `claude`:
+  - **AC-12, AC-45, role table, role outputs:** the plan role returns its tasks and the driver writes
+    `tasks.json`. Claude Code guards `.claude/` even under acceptEdits, so a headless plan could not write it.
+  - **AC-57 (new):** a spec or plan role that asks for a decision stops at gate:limit instead of a blind re-run.
+  - **AC-32:** a denial is one short line, and calls that are undone or re-run add nothing.
+  - **AC-58 (new), "How Claude Code is invoked":** each call loads only the project. The account's
+    connectors cost about 150k tokens a turn, and the user's own instructions, memory and plugins do not
+    belong in a project's run.
 
 First version.
