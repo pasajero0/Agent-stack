@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased (0.4)
+## 0.4.0 — the driver
+
+A program, `agent-stack run`, now holds the pipeline order. Before, the order lived in hooks and skills that the
+model could skip. The driver was checked in five manual runs with the real `claude`; the gates for plain sessions
+and a glossary check come with it.
 
 ### Upgrading from 0.3
 
