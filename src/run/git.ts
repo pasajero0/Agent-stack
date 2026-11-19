@@ -184,7 +184,8 @@ const TYPE_PREFIX = /^(feat|fix|refactor|test|docs|chore|perf|style|build|ci|rev
 
 /** Removes the stage or a type header the model repeated at the start of the subject (`A2: …`, `feat(a2): …`). */
 function dropRepeatedPrefix(text: string, scope: string | null): string {
-  const stage = scope ? new RegExp(`^${scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*`, "i") : null;
+  // The stage, alone or with a task id (`A2: …`, `A3 T2: …`); a task id is letters then digits (T2, F1, Q1).
+  const stage = scope ? new RegExp(`^${scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s+[A-Za-z]+[0-9]+)?:\\s*`, "i") : null;
   let out = text;
   for (;;) {
     const next = out.replace(TYPE_PREFIX, "").replace(stage ?? /$^/, "");

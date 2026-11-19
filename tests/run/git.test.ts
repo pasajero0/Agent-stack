@@ -201,6 +201,10 @@ describe("headers", () => {
     // Not a stage or a known type: kept.
     expect(normaliseHeader("docs", null, "usage: add a line")).toBe("docs: usage: add a line");
     expect(normaliseHeader("feat", "A2", "A21: other stage")).toBe("feat(a2): a21: other stage");
+    // Third manual run: the model wrote the stage with the task id.
+    expect(normaliseHeader("feat", "A3", "A3 T2: add CLI runner")).toBe("feat(a3): add CLI runner");
+    expect(normaliseHeader("feat", "A3", "a3 T1: add shout()")).toBe("feat(a3): add shout()");
+    expect(normaliseHeader("feat", "A3", "A3 is done: add it")).toBe("feat(a3): a3 is done: add it");
   });
 
   it("v04 AC-20: normaliseHeader cuts the header to 100 characters", () => {
