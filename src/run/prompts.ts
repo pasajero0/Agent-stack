@@ -44,6 +44,8 @@ export function specPrompt(
     "",
     "Task: write a full spec; the branch exists; do not commit, branch or push.",
     "",
+    "Skip step 7 (Hand over) of the skill: the driver commits the spec and stops for the human's merge. Do not ask about committing, merging or handing over.",
+    "",
     "Description:",
     p.description,
     "",

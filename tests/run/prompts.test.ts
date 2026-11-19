@@ -93,6 +93,13 @@ describe("role prompts", () => {
     expect(p).toMatch(/write a full spec/);
   });
 
+  it("v04 AC-4: spec skips the skill's hand-over step; the driver commits and stops for the merge", () => {
+    const p = specPrompt(project("spec", "skill"), { stage: "A1", title: "t", description: "d", answers: [] });
+    expect(p).toMatch(/skip step 7 \(Hand over\)/i);
+    expect(p).toMatch(/the driver commits the spec and stops for the human's merge/);
+    expect(p).toMatch(/do not ask about committing, merging or handing over/i);
+  });
+
   it("v04 AC-17: plan says every task ends green, tests first, no test-only tasks", () => {
     const dir = project("plan", "PLAN SKILL $ARGUMENTS");
     const p = planPrompt(dir, { stage: "A1", title: "Login", comment: "make it smaller" });
