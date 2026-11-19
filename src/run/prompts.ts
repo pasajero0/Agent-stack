@@ -104,6 +104,7 @@ export function implementPrompt(p: {
     "",
     "Write the failing test first, see it fail, then the code; touch only this task; do not commit, branch or edit `tasks.json`.",
     "A change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report.",
+    "If an existing test, or the task's verify, contradicts a criterion, do not change it: return status TEST_CONFLICT with conflict {test, criterion, reason}. Existing means not written in this attempt: another task's test, a test the repo had, or the verify command. The human decides.",
     "",
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),

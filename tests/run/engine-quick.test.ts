@@ -183,6 +183,46 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(run.humanDecisions).toEqual([]);
   });
 
+  it("v04 AC-64: TEST_CONFLICT goes to gate:limit (test-conflict); r with an answer retries on the same model, no attempt counted", async () => {
+    const r = repo();
+    const conflict = { test: "tests/readme.test.ts:has the line", criterion: "the README says fixed", reason: "the test wants broken" };
+    r.script([
+      impl({ status: "TEST_CONFLICT", conflict, writes: { "README.md": "# demo\nhalf\n" } }),
+      impl({ writes: { "README.md": "# demo\nfixed\n" } }),
+    ]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    let run = r.run();
+    expect(run.limitReason).toBe("test-conflict");
+    expect(run.next).toBe("gate:limit");
+    expect(run.tasks[0]?.attempts).toBe(1);
+    const out = text(r);
+    expect(out).toContain("reason: test-conflict");
+    expect(out).toContain("tests/readme.test.ts:has the line");
+    expect(out).toContain("the test wants broken");
+    expect(out).toMatch(/r retry \(your answer follows/);
+    // The attempt's edits are kept for the retry.
+    expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nhalf\n");
+
+    const code = await resumeRun({ ...r.opts({ gate: ["r the test is right, follow it", "a"] }) });
+    expect(code, text(r)).toBe(0);
+    run = r.run();
+    expect(run.status).toBe("finished");
+    expect(run.tasks[0]?.attempts).toBe(1);
+    const g = run.gates.find((x) => x.gate === "gate:limit");
+    expect(g).toMatchObject({ decision: "retry", comment: "the test is right, follow it" });
+    const prompt = r.logged()[1]?.prompt ?? "";
+    expect(prompt).toContain("FROM THE HUMAN: the test is right, follow it");
+    expect(prompt).toContain("the test wants broken");
+  });
+
+  it("v04 AC-64: TEST_CONFLICT without its conflict is a schema mismatch, not a gate", async () => {
+    const r = repo();
+    r.script([impl({ status: "TEST_CONFLICT" }), impl({ status: "TEST_CONFLICT" })]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(1);
+    expect(r.run().limitReason).toBeNull();
+    expect(r.run().next).toBe("implement:Q1");
+  });
+
   it("v04 AC-38: an implement call stopped at max turns is a failed attempt; its edits stay for the next one", async () => {
     const r = repo();
     const turns = { type: "result", subtype: "error_max_turns", is_error: true, num_turns: 60, total_cost_usd: 0.02 };

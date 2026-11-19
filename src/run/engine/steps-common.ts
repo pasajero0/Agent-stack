@@ -185,6 +185,19 @@ const implement: StepHandler = async (ctx, id) => {
     task.lastFeedback = `The implementer reported BLOCKED: ${r.value.report}`;
     return toLimit(ctx, "blocked", taskNext("implement", task.id));
   }
+  if (r.value.status === "TEST_CONFLICT" && r.value.conflict) {
+    // AC-64: the human decides; the attempt is not counted and its edits stay.
+    const c = r.value.conflict;
+    const text = info.criteria.find((t) => t.includes(`${c.criterion}:`));
+    task.lastFeedback = [
+      "The implementer reported TEST_CONFLICT and left the test alone.",
+      `Test: ${c.test}`,
+      `Criterion: ${c.criterion}`,
+      ...(text ? [text] : []),
+      `Reason: ${c.reason}`,
+    ].join("\n");
+    return toLimit(ctx, "test-conflict", taskNext("implement", task.id));
+  }
   return { type: "done" };
 };
 

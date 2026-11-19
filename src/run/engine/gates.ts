@@ -187,7 +187,9 @@ function limitSummary(ctx: Ctx): void {
       ? "f <n> sets a new fuse limit for this run (in its own unit, above what is used), c cancel"
       : run.limitReason === "decision"
         ? "r retry (your answer follows; the role gets it), c cancel"
-        : "r retry (on Opus), c cancel"
+        : run.limitReason === "test-conflict"
+          ? "Fix the test or the spec by hand if needed. r retry (your answer follows; the implementer gets it; no attempt is counted), c cancel"
+          : "r retry (on Opus), c cancel"
   );
 }
 
@@ -234,6 +236,16 @@ export const limitGate: StepHandler = async (ctx) => {
       if (c === null) return NO_INPUT;
       // recordGate clears humanDecisions, so the questions are kept in the record for the retried role.
       recordGate(ctx, "gate:limit", "retry", c, { asked: [...run.humanDecisions] });
+      return { type: "resume" };
+    }
+    if (run.limitReason === "test-conflict" && (s === "r" || s.startsWith("r "))) {
+      // AC-64: the answer goes to implement with the conflict; no attempt is counted, so the model stays.
+      const c = await comment(ctx, s);
+      if (c === null) return NO_INPUT;
+      const task = run.returnTo ? parseNext(run.returnTo).task : null;
+      const t = run.tasks.find((x) => x.id === task);
+      if (t) t.lastFeedback = [t.lastFeedback, `FROM THE HUMAN: ${c}`].filter((x) => x !== null).join("\n");
+      recordGate(ctx, "gate:limit", "retry", c);
       return { type: "resume" };
     }
     if (s === "r") {

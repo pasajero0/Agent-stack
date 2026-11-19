@@ -117,7 +117,8 @@ export function repo(gates: { test?: string; lint?: string; run?: Json; extra?: 
 export const impl = (o: {
   writes?: Record<string, string>;
   model?: "sonnet" | "opus";
-  status?: "DONE" | "BLOCKED";
+  status?: "DONE" | "BLOCKED" | "TEST_CONFLICT";
+  conflict?: { test: string; criterion: string; reason: string };
   exec?: string;
   subject?: string;
   report?: string;
@@ -132,6 +133,7 @@ export const impl = (o: {
     report: o.report ?? "changed the readme",
     commit: { type: "fix", subject: o.subject ?? "Fix the README line." },
     needsHumanDecision: o.needs ?? [],
+    ...(o.conflict ? { conflict: o.conflict } : {}),
   },
 });
 

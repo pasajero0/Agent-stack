@@ -74,7 +74,14 @@ export const roleSchemas: Record<Role, RoleSchema> = {
     type: "object",
     required: ["status", "report", "commit", "needsHumanDecision"],
     properties: {
-      status: { enum: ["DONE", "BLOCKED"] },
+      status: { enum: ["DONE", "BLOCKED", "TEST_CONFLICT"] },
+      // AC-64: required with TEST_CONFLICT and only then (checked by hand, below).
+      conflict: {
+        type: "object",
+        description: "Only with TEST_CONFLICT: the existing test or verify that contradicts a criterion.",
+        required: ["test", "criterion", "reason"],
+        properties: { test: { type: "string" }, criterion: { type: "string" }, reason: { type: "string" } },
+      },
       report: { type: "string" },
       commit: {
         type: "object",
@@ -144,8 +151,18 @@ export interface PlanOutput {
 
 export type CommitType = "feat" | "fix" | "refactor" | "test" | "docs" | "chore" | "perf";
 
+export interface TestConflict {
+  /** `file:test name`, or the verify command. */
+  test: string;
+  /** The AC id (or, in quick mode, the description) the test contradicts. */
+  criterion: string;
+  reason: string;
+}
+
 export interface ImplementOutput {
-  status: "DONE" | "BLOCKED";
+  status: "DONE" | "BLOCKED" | "TEST_CONFLICT";
+  /** Set exactly when the status is TEST_CONFLICT (AC-64). */
+  conflict?: TestConflict;
   report: string;
   commit: { type: CommitType; subject: string };
   needsHumanDecision: string[];
@@ -199,8 +216,15 @@ function checkClarify(o: Obj): string | null {
   return null;
 }
 
+function isConflict(v: unknown): v is TestConflict {
+  return isObj(v) && nonEmpty(v.test) && nonEmpty(v.criterion) && nonEmpty(v.reason);
+}
+
 function checkImplement(o: Obj): string | null {
-  if (!oneOf(o.status, ["DONE", "BLOCKED"])) return "status must be DONE or BLOCKED";
+  if (!oneOf(o.status, ["DONE", "BLOCKED", "TEST_CONFLICT"])) return "status must be DONE, BLOCKED or TEST_CONFLICT";
+  if (o.status === "TEST_CONFLICT" && !isConflict(o.conflict))
+    return "TEST_CONFLICT needs conflict: {test, criterion, reason}, all non-empty";
+  if (o.status !== "TEST_CONFLICT" && o.conflict !== undefined) return "conflict goes only with TEST_CONFLICT";
   if (!isStr(o.report)) return "report must be a string";
   if (!isObj(o.commit) || !oneOf(o.commit.type, COMMIT_TYPES) || !nonEmpty(o.commit.subject))
     return "commit must be {type, subject} with a known type and a non-empty subject";
@@ -302,14 +326,18 @@ export function parseImplement(v: unknown): ImplementOutput | string {
   if (err !== null) return err;
   if (!isObj(v) || !isObj(v.commit) || !isStr(v.report) || !isStr(v.commit.subject)) return "output must be an object";
   const type = commitTypeOf(v.commit.type);
-  const status = v.status === "DONE" || v.status === "BLOCKED" ? v.status : null;
+  const status = v.status === "DONE" || v.status === "BLOCKED" || v.status === "TEST_CONFLICT" ? v.status : null;
   if (type === null || status === null) return "commit must be {type, subject} with a known type";
-  return {
+  const out: ImplementOutput = {
     status,
     report: v.report,
     commit: { type, subject: v.commit.subject },
     needsHumanDecision: strings(v.needsHumanDecision),
   };
+  if (isConflict(v.conflict)) {
+    out.conflict = { test: v.conflict.test, criterion: v.conflict.criterion, reason: v.conflict.reason };
+  }
+  return out;
 }
 
 function severityOf(v: unknown): Finding["severity"] | null {

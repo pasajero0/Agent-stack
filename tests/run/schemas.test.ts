@@ -146,6 +146,18 @@ describe("typed parse functions", () => {
     });
     expect(typeof parseReview(review({ quality: "meh" }))).toBe("string");
   });
+
+  it("v04 AC-64: TEST_CONFLICT carries its conflict; without it, or with another status, it is a mismatch", () => {
+    const base = { report: "r", commit: { type: "fix", subject: "s" }, needsHumanDecision: [] };
+    const conflict = { test: "a.test.ts:greets", criterion: "AC-2", reason: "the test wants Hi, AC-2 says Hello" };
+    expect(parseImplement({ ...base, status: "TEST_CONFLICT", conflict })).toEqual({ ...base, status: "TEST_CONFLICT", conflict });
+    expect(parseImplement({ ...base, status: "TEST_CONFLICT" })).toMatch(/conflict/);
+    expect(parseImplement({ ...base, status: "TEST_CONFLICT", conflict: { test: "a", criterion: "AC-2" } })).toMatch(/conflict/);
+    expect(parseImplement({ ...base, status: "TEST_CONFLICT", conflict: { ...conflict, reason: " " } })).toMatch(/conflict/);
+    expect(parseImplement({ ...base, status: "DONE", conflict })).toMatch(/conflict/);
+    expect(roleSchemas.implement.properties.status).toEqual({ enum: ["DONE", "BLOCKED", "TEST_CONFLICT"] });
+    expect(roleSchemas.implement.properties).toHaveProperty("conflict");
+  });
 });
 
 describe("blocking review", () => {

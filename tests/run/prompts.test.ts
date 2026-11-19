@@ -86,6 +86,11 @@ describe("role prompts", () => {
     expect(first(specPrompt(spec, { stage: "A1", title: "t", description: "d", answers: [] }))).toBe("# Role: spec");
     expect(first(planPrompt(plan, { stage: "A1", title: "t" }))).toBe("# Role: plan");
     expect(first(implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } }))).toBe("# Role: implement");
+    // v04 AC-64: a legal way out instead of changing a wrong test.
+    const p64 = implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } });
+    expect(p64).toMatch(/existing test, or the task's verify, contradicts a criterion/);
+    expect(p64).toContain("TEST_CONFLICT");
+    expect(p64).toMatch(/not written in this attempt/);
     expect(first(reviewPrompt({ taskId: "T1", taskDesc: "d", criteria: [], diff: "", report: "" }))).toBe("# Role: review");
   });
 
