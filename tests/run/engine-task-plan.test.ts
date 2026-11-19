@@ -197,8 +197,15 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(await resumeRun({ ...r.opts({ gate: ["r", "return the tasks in the output"] }) }), text(r)).toBe(3);
     expect(r.run().next).toBe("gate:plan-approve");
     expect(r.logged().length).toBe(4);
-    expect(r.logged()[3]?.prompt).toMatch(/FROM THE HUMAN[\s\S]*return the tasks in the output/);
-    expect(r.run().gates.at(-1)).toMatchObject({ gate: "gate:limit", decision: "retry", comment: "return the tasks in the output" });
+    expect(r.logged()[3]?.prompt).toContain(
+      "FROM THE HUMAN: you asked: Approve writing tasks.json?; the answer: return the tasks in the output"
+    );
+    expect(r.run().gates.at(-1)).toMatchObject({
+      gate: "gate:limit",
+      decision: "retry",
+      comment: "return the tasks in the output",
+      asked: ["Approve writing tasks.json?"],
+    });
   });
 
   it("v04 AC-57: the human's answer survives a fuse stop between the decision retry and the next plan call", async () => {
@@ -208,7 +215,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(await resumeRun({ ...r.opts({ gate: ["r", "use hello.txt", "f 5"] }) }), text(r)).toBe(3);
     expect(r.run().next).toBe("gate:plan-approve");
     expect(r.logged().length).toBe(4);
-    expect(r.logged()[3]?.prompt).toContain("FROM THE HUMAN: use hello.txt");
+    expect(r.logged()[3]?.prompt).toContain("FROM THE HUMAN: you asked: Which file?; the answer: use hello.txt");
   });
 
   it("v04 AC-57: a spec role with no SPEC.md that asks for a decision stops at gate:limit (decision)", async () => {

@@ -158,6 +158,7 @@ describe("run id and run file", () => {
       gates: [
         { gate: "gate:accept", at: "2026-11-18T00:00:00Z", decision: "a", comment: null },
         { gate: "gate:plan-approve", at: "2026-11-18T00:00:01Z", decision: "reject", comment: "c", planSha256: "a".repeat(64) },
+        { gate: "gate:limit", at: "2026-11-18T00:00:02Z", decision: "retry", comment: "B", asked: ["A or B?"] },
       ],
       answers: [{ question: "q", answer: "a" }],
       humanDecisions: ["h"],
@@ -198,6 +199,7 @@ describe("run id and run file", () => {
       ["humanDecisions", { humanDecisions: "x" }],
       ["gates", { gates: [{ gate: "g", at: "t", decision: "d" }] }],
       ["gates.planSha256", { gates: [{ gate: "g", at: "t", decision: "d", comment: null, planSha256: "abc" }] }],
+      ["gates.asked", { gates: [{ gate: "g", at: "t", decision: "d", comment: null, asked: [1] }] }],
       ["answers", { answers: [{ question: "q" }] }],
       ["tasks", { tasks: {} }],
       ["tasks[0].attempts", { tasks: [task({ attempts: -1 })] }],

@@ -25,7 +25,7 @@ export async function ask(ctx: Ctx, prompt: string): Promise<string | null> {
   }
 }
 
-export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256"> = {}): void {
+export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256" | "asked"> = {}): void {
   ctx.run.gates.push({ gate, at: new Date().toISOString(), decision, comment, ...extra });
   // Shown at this gate; a decision clears them (AC-32).
   ctx.run.humanDecisions = [];
@@ -60,7 +60,8 @@ export function humanFeedback(run: RunFile): string | null {
     const g = run.gates[i];
     if (g === undefined || g.gate !== "gate:limit") return null;
     if (g.decision === "raise") continue;
-    return g.decision === "retry" && g.comment ? `FROM THE HUMAN: ${g.comment}` : null;
+    if (g.decision !== "retry" || !g.comment) return null;
+    return g.asked && g.asked.length > 0 ? `FROM THE HUMAN: you asked: ${g.asked.join("; ")}; the answer: ${g.comment}` : `FROM THE HUMAN: ${g.comment}`;
   }
   return null;
 }
@@ -200,7 +201,8 @@ export const limitGate: StepHandler = async (ctx) => {
       // AC-57: the answer goes to the role; attempts and the fuse are unchanged.
       const c = await comment(ctx, s);
       if (c === null) return NO_INPUT;
-      recordGate(ctx, "gate:limit", "retry", c);
+      // recordGate clears humanDecisions, so the questions are kept in the record for the retried role.
+      recordGate(ctx, "gate:limit", "retry", c, { asked: [...run.humanDecisions] });
       return { type: "resume" };
     }
     if (s === "r") {

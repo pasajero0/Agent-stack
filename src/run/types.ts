@@ -53,6 +53,8 @@ export interface GateRecord {
   comment: string | null;
   /** A plan-approve reject: the sha256 of the rejected tasks.json, so a leftover copy is known exactly (AC-14). */
   planSha256?: string;
+  /** A gate:limit (decision) retry: the items the role asked, given back with the answer (AC-57). */
+  asked?: string[];
 }
 
 export interface AnswerRecord {
