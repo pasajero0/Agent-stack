@@ -256,7 +256,8 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 - loads only the project (AC-58):
   - `--strict-mcp-config --mcp-config <the project's .mcp.json, or {"mcpServers":{}}>`;
   - `--setting-sources project,local`, so no user plugins, permissions or hooks;
-  - `--settings '{"claudeMdExcludes":["<home>/.claude/CLAUDE.md"]}'`;
+  - `--settings '{"claudeMdExcludes":["<user dir>/CLAUDE.md"]}'`, where the user dir is `$CLAUDE_CONFIG_DIR`
+    when it is set, else `<home>/.claude`;
   - env `ENABLE_CLAUDEAI_MCP_SERVERS=false`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and
     `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1`;
 - never gets `--bare`, `bypassPermissions`, `--dangerously-skip-permissions` or `disableAllHooks`.
@@ -681,6 +682,7 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-58: the user CLAUDE.md to exclude follows `$CLAUDE_CONFIG_DIR`.
 - 2026-11-19 — AC-7: a branch under `spec/<id>/` also takes the id (from review).
 - 2026-11-19 — AC-48, Gate input, clarify and implement prompts: clarify gets the stage-id rule and the
   ids in use; a failed id is never the default, so Enter no longer loops; a docs-only change needs no test.
