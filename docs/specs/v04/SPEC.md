@@ -379,8 +379,11 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - commit those paths as `docs(<stage>): spec — <title>`.
 - **AC-9:** WHEN size epic is confirmed, THE SYSTEM SHALL write `split.md` from `proposal.split` and print
   `agent-stack run task --stage <id> "<goal>"` for each part. It SHALL finish the run without writing code.
-- **AC-10:** WHEN the spec is committed, THE SYSTEM SHALL stop at gate:spec-merge, print the branch to push
-  and merge, and exit with code 3.
+- **AC-10:** WHEN the spec is committed, THE SYSTEM SHALL stop at gate:spec-merge, print how to approve it,
+  and exit with code 3.
+  - With `origin/<base>`: push `spec/<stage>`, merge its pull request, then `git fetch`.
+  - Without it: `git checkout <base> && git merge spec/<stage>`. The local merge is the approval, and the text
+    says nothing about a push.
 - **AC-11:** WHEN `--resume` runs at gate:spec-merge and the spec exists on the base ref (the check spec-gate
   makes), THE SYSTEM SHALL:
   - check out a new branch `<stage>-<slug>` from the base ref (the slug comes from the title, as in AC-24);
@@ -530,7 +533,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-46:** IF a task's checks pass with an empty task diff, THEN THE SYSTEM SHALL record `commit: "empty"`,
   make no commit, and show it at gate:accept (partner of AC-20).
 - **AC-47:** IF `--resume` finds the spec missing on the base ref, THEN THE SYSTEM SHALL stay at
-  gate:spec-merge, say what is missing (push, merge, `git fetch`) and exit with code 3 (partner of AC-11).
+  gate:spec-merge, print the same steps as AC-10 and exit with code 3 (partner of AC-11).
 - **AC-48:** IF a stage id fails AC-7, THEN THE SYSTEM SHALL say why and ask again at the same gate (partner
   of AC-7).
 
@@ -621,6 +624,7 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-10, AC-47: without a remote, the spec-merge gate prints the local merge commands, not a push.
 - 2026-11-19 — from the manual check with the real `claude`:
   - **AC-12, AC-45, role table, role outputs:** the plan role returns its tasks and the driver writes
     `tasks.json`. Claude Code guards `.claude/` even under acceptEdits, so a headless plan could not write it.
