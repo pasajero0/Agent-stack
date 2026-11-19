@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { chmodSync, readdirSync, readFileSync } from "node:fs";
+import { chmodSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { cleanupProjects, git, patchGates, write } from "../hooks/fixture.js";
 import { resumeRun, startRun } from "../../src/run/engine/index.js";
@@ -324,6 +324,44 @@ describe("quick mode: failures that exit 1", () => {
     expect(r.run().next).toBe("base-check");
     expect(text(r)).toContain("test -f ok.txt");
     expect(r.logged().length).toBe(0);
+  });
+
+  // The test command hangs while .git/slow exists (outside the task diff); the limit is 0.003 min = 180 ms.
+  const SLOW = "if [ -f .git/slow ]; then sleep 5; fi";
+  const FAST_LIMIT = { checkTimeoutMin: 0.003 };
+
+  it("v04 AC-60: a check that times out exits 1 naming the command and the limit, and counts no attempt", async () => {
+    const r = repo({ test: SLOW, run: FAST_LIMIT });
+    r.script([impl({ writes: { "notes.txt": "n\n", ".git/slow": "" } }), impl({ writes: { "never.txt": "x\n" } })]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(1);
+    const run = r.run();
+    expect(run.next).toBe("checks:Q1");
+    expect(run.tasks[0]?.attempts).toBe(1);
+    expect(r.logged().length).toBe(1);
+    const t = text(r);
+    expect(t).toContain(SLOW);
+    expect(t).toMatch(/timed out after .*checkTimeoutMin/);
+    expect(t).not.toMatch(/Check failed/);
+  });
+
+  it("v04 AC-60: --resume after a check timeout runs the same checks again, with no new implement call", async () => {
+    const r = repo({ test: SLOW, run: FAST_LIMIT });
+    r.script([impl({ writes: { "notes.txt": "n\n", ".git/slow": "" } })]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(1);
+    rmSync(join(r.dir, ".git/slow"), { force: true }); // the human fixes the environment
+    expect(await resumeRun({ ...r.opts({ gate: ["a"] }) }), text(r)).toBe(0);
+    expect(r.logged().length).toBe(1);
+    expect(r.run().tasks[0]?.attempts).toBe(1);
+  });
+
+  it("v04 AC-60: a base-check test that times out exits 1 with the limit, not as a red base", async () => {
+    const r = repo({ test: "sleep 5", run: FAST_LIMIT });
+    r.script([]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(1);
+    expect(r.run().next).toBe("base-check");
+    const t = text(r);
+    expect(t).toMatch(/timed out after .*checkTimeoutMin/);
+    expect(t).not.toContain("the base is red");
   });
 });
 

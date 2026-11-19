@@ -11,6 +11,8 @@ export interface CheckRun extends CheckResult {
   tail: string;
   /** Set when the signal stopped the check: the step is interrupted, not red. */
   aborted?: boolean;
+  /** Set when the check ran past its limit: the environment's fault, not a red check (AC-60). */
+  timedOut?: boolean;
 }
 
 function lastLines(text: string): string {
@@ -50,7 +52,8 @@ export function runCheck(cmd: string, cwd: string, timeoutMs: number, signal?: A
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
       const text = extra ? (out ? `${out}\n${extra}` : extra) : out;
-      resolve({ cmd, exit, skipped: false, tail: lastLines(text), ...(stopped === "aborted" ? { aborted: true } : {}) });
+      const flag = stopped === "aborted" ? { aborted: true } : stopped === "timeout" ? { timedOut: true } : {};
+      resolve({ cmd, exit, skipped: false, tail: lastLines(text), ...flag });
     };
     child.on("error", (e) => finish(1, e.message));
     child.on("close", (code) => {

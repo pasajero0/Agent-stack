@@ -76,6 +76,7 @@ const baseCheck: StepHandler = async (ctx) => {
   requireClean(ctx.projectDir, "before base-check");
   const r = await runCheck(ctx.cfg.commands.test, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
   if (r.aborted) throw new Interrupted();
+  if (r.timedOut) throw timedOutError(ctx, "base-check", r);
   if (!r.skipped && r.exit !== 0) {
     throw new RunError(
       `base-check: \`${r.cmd}\` exited ${r.exit} before any change, so the base is red. Fix the base, then ${resumeHint(ctx.run.id)}.\n${r.tail}`,
@@ -207,7 +208,18 @@ function checkFeedback(ctx: Ctx, item: CheckItem, r: CheckRun): string {
   return `Check failed: \`${r.cmd}\` exited ${r.exit}. Last lines of its output:\n${tail}`;
 }
 
-/** Runs the mode's commands, by exit code only (AC-19); red is a failed attempt (AC-33). */
+/**
+ * A check that ran past `checkTimeoutMin` (AC-60): exit 1 with `next` kept and no attempt counted. A hang is the
+ * environment's (a package manager waiting on the network), not the code's, so it does not go back to implement.
+ */
+function timedOutError(ctx: Ctx, step: string, r: CheckRun): RunError {
+  return new RunError(
+    `${step}: \`${r.cmd}\` timed out after ${ctx.cfg.checkTimeoutMin} min (checkTimeoutMin). No attempt was counted. Fix what hangs, or raise run.checkTimeoutMin in gates.json, then ${resumeHint(ctx.run.id)} runs the checks again.\n${r.tail}`,
+    1
+  );
+}
+
+/** Runs the mode's commands, by exit code only (AC-19); red is a failed attempt (AC-33), a timeout exits 1 (AC-60). */
 const checks: StepHandler = async (ctx, id) => {
   const task = taskOf(ctx, id);
   const info = ctx.mode.taskInfo(ctx, task.id);
@@ -216,6 +228,7 @@ const checks: StepHandler = async (ctx, id) => {
   for (const item of items) {
     const r = await runCheck(item.cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
     if (r.aborted) throw new Interrupted();
+    if (r.timedOut) throw timedOutError(ctx, "checks", r);
     runs.push(r);
   }
   task.checks = runs.map((r, i) => ({
