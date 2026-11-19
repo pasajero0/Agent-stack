@@ -157,6 +157,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | any | fuse reached | gate:limit (fuse) | AC-35 |
 | any | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
 | spec / plan | output missing or out of bounds twice | unchanged, exit 1 | AC-40, AC-44, AC-45 |
+| spec / plan | output missing and `needsHumanDecision` not empty | gate:limit (decision) | AC-57 |
 | base-check | `test` exits non-zero | unchanged, exit 1 | AC-41 |
 | commit | commit refused | implement (attempt + 1) | AC-42 |
 | gate:limit | retry / raise fuse / cancel | `returnTo` (on Opus) / `returnTo` / cancelled | AC-31 |
@@ -469,7 +470,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - cancel cancels the run.
 - **AC-32:** WHEN `humanDecisions` is not empty, THE SYSTEM SHALL show it at the next gate, then clear it.
   - The list collects `needsHumanDecision` and the `permission_denials` of every call whose result the
-    driver keeps. A call that is undone or re-run adds nothing.
+    driver keeps. A spec or plan call whose result is undone adds nothing, except at gate:limit (decision),
+    which shows that call's items (AC-57).
   - A denial is one line: `permission denied: <tool> <file_path or command>`, cut to 120 characters.
 
 ### Unhappy path
