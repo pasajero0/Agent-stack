@@ -428,6 +428,12 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   attempt, and run a fresh session.
   - The model SHALL be Opus for tier L, for a risky task, for a fix task, and for every attempt after the
     first. Otherwise it SHALL be Sonnet.
+- **AC-63:** WHEN a plan task's first attempt starts, THE SYSTEM SHALL run that task's verify command once,
+  as the plan writes it, before the implement call (not `.claude/bin/verify`, so nothing is marked passing).
+  - IF it exits 0, THEN THE SYSTEM SHALL add a note to the task: its verify passed before the task started, so
+    it may not test the task. Gate:accept shows the note (AC-21). The run goes on.
+  - A red result is the expected state; nothing is noted.
+  - A timeout is AC-60. Quick mode's Q1, a fix task F*k* and a later attempt are not checked.
 - **AC-17:** WHEN the plan role runs, THE SYSTEM SHALL require in its prompt that every task end green.
   - The `/plan` skill SHALL say the same: tests first inside a task, and no test-only tasks.
   - Its "after two failed verify runs move one tier up" SHALL read "under the driver, a retry runs on Opus".
@@ -682,6 +688,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-63 (new): the start check. In the first build a verify passed with its test file still
+  missing (vitest skipped it), and only a hand check caught it.
 - 2026-11-19 — AC-58: the user CLAUDE.md to exclude follows `$CLAUDE_CONFIG_DIR`.
 - 2026-11-19 — AC-7: a branch under `spec/<id>/` also takes the id (from review).
 - 2026-11-19 — AC-48, Gate input, clarify and implement prompts: clarify gets the stage-id rule and the
