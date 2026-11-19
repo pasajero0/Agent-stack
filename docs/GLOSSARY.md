@@ -86,7 +86,8 @@ it here first.
   - **Tests changed** reason: the task deleted or weakened a test that was there before it, or changed a check
     config (CI, test or lint settings). The human allows the change or sends the task back.
 - **Role** — what one Claude call is asked to be: clarify, spec, plan, implement or review. Each role has
-  its own tools, model and output schema. The role returns data, and the driver writes the files it owns,
+  its own tools, model and output schema. Its rules come from the project's skill or agent, never from a copy
+  in the driver. The role returns data, and the driver writes the files it owns,
   such as `tasks.json` and the commits.
 - **Project-only call** — every call the driver makes loads only the project: its `.mcp.json`, project
   settings and CLAUDE.md. It loads nothing of the user's: no global CLAUDE.md, memory, plugins or account

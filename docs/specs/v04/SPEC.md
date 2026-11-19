@@ -295,6 +295,11 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 
 **Role prompts** (AC-4) start with what the driver has already done, and what the role must not do.
 
+**One source of rules** (AC-67). A role's rules come from the project's skill or agent: spec from `/spec`, plan
+from `/plan`, review from the `code-reviewer` agent. The driver's prompt adds only the step's data, its bounds
+(what is done, what the role must not do) and the output it wants. It keeps no copy of a skill's or an agent's
+rules, so an improved agent reaches the driver too.
+
 - **clarify**:
   - ask at most 5 questions, each with a recommended answer;
   - size the work;
@@ -327,6 +332,7 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   - the shell commands it may run, built from the same list as its `--allowedTools`: "anything else is
     denied, so do not try it".
 - **review**:
+  - the body of `.claude/agents/code-reviewer.md` (frontmatter removed), labelled as the review rules (AC-67);
   - the task and its criteria;
   - the task diff;
   - the implementer's report, labelled "UNVERIFIED CLAIMS FROM THE IMPLEMENTER";
@@ -475,6 +481,15 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   "Commits", record the sha, and go on to the next task.
   - A run with stage `A0` SHALL produce a header that commitlint accepts.
   - The review's notes SHALL be stored in the task's `notes`.
+- **AC-67:** WHEN the review role runs, THE SYSTEM SHALL put the body of the project's
+  `.claude/agents/code-reviewer.md` (frontmatter removed) into its prompt as the review rules, and add no review
+  rules of its own (One source of rules).
+  - The `code-reviewer` agent SHALL say: when the caller gives a JSON schema, answer in it, with the same
+    severities and the same need for evidence. For a task review it SHALL say what `spec`, `quality` and
+    `verifyProves` mean, and give the check for `verifyProves`: imagine the line that does a criterion removed;
+    if the task's verify would still pass, it proves nothing for that criterion.
+  - IF the agent file is missing, THEN THE SYSTEM SHALL keep `next` and exit with code 1:
+    `agent not found: <path> (run agent-stack generate)`, as for a missing skill.
 - **AC-21:** WHEN the last task is committed, THE SYSTEM SHALL stop at gate:accept and show:
   - the diff stat from `baseCommit`;
   - each task's checks;
@@ -739,6 +754,10 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-67 (new), One source of rules, Role prompts (review): the review role takes its rules from
+  the `code-reviewer` agent. The driver had its own short copy, and the agent's later fixes (less noise, every
+  issue with evidence) never reached it. The agent says `quality: fail` needs a critical issue with evidence;
+  "Blocking review" is unchanged, the engine still blocks on any `quality: fail`.
 - 2026-11-19 — AC-66 (new), Frozen tests, Check config: the driver stops when a task weakens a test it found, or
   changes a check config. With TEST_CONFLICT (AC-64) the role has a legal way out; this checks it was not
   bypassed. It stops at a gate, not as a failed attempt, because a legal rename would only use up the attempts.
