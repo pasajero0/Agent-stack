@@ -55,7 +55,7 @@ if field 'STATUS:[*[:space:]]*DONE'; then
     block "STATUS: DONE needs an EVIDENCE section: the commands you ran and their real output (at least .claude/bin/verify)."
   trace_out=$("$PROJECT_DIR/.claude/bin/trace" 2>&1)
   [ $? -eq 1 ] &&
-    block "STATUS: DONE, but criteria and tests do not line up: $trace_out"
+    block "STATUS: DONE, but trace failed (criteria ↔ tests, spec terms ↔ glossary): $trace_out"
   health_out=$("$PROJECT_DIR/.claude/bin/health" --quick 2>&1)
   [ $? -eq 1 ] &&
     block "STATUS: DONE, but a code-health SLO is broken: $health_out"

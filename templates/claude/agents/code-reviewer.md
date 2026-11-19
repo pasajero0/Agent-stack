@@ -57,6 +57,10 @@ files; report a site outside the diff only if the change copies or depends on it
   case, and a distinct code for invalid payload. Overloading one status with multiple meanings is
   **critical**. Allowlist/URL-based workarounds are red flags — they signal an API design issue,
   not a clean fix.
+- Flag a new concept the change introduces — a mode, role, status or reason value, a CLI word, a config
+  key a user sets — that is neither in the stage spec's `## Terms` nor in the project glossary
+  (`gates.json → glossary`, default `docs/GLOSSARY.md`), when the project has one. Words are how the next
+  reader finds the idea; `trace` checks only what reached Terms. **Warning.**
 - Verify tests tagged as executable actually assert (smoke-only = **warning**).
 - Verify async/portal/animated assertions wait on the final state rather than racing it
   (**warning**).

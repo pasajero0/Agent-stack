@@ -7,6 +7,9 @@
 - **After `update`, code on a stage branch waits for `/plan`.** spec-gate now also needs
   `.claude/tmp/<stage>/tasks.json`. A stage you were already coding without a plan stops at the next edit
   with "Run /plan first". Run `/plan`, or set `specGate: "off"` in `gates.json` to opt out.
+- **A spec with `## Terms` may now fail `trace`** when the repo has `docs/GLOSSARY.md`: each Terms entry must be
+  a glossary headword or be marked `- **Word** (local): …`. Mark the spec's own words `(local)`, move the shared
+  ones to the glossary, or set `"glossary": ""` in `gates.json` to opt out.
 
 ### Gates
 
@@ -35,6 +38,11 @@
 - **Hooks:** spec-gate's quick-mode bypass and evidence-gate's silence apply only to a live driver run on the
   run's branch; guard-file protects the run folder; path checks follow symlinks.
 - **/plan skill:** every task ends green; the test is written first inside the task, no test-only tasks.
+- **`trace` checks spec terms against the glossary.** Each `- **Term**` in a spec's `## Terms` must be a
+  headword of the glossary (`gates.json → glossary`, default `docs/GLOSSARY.md` when it exists; `""` turns it
+  off) or be marked `(local)`. `trace --terms` checks only that, so `/spec` runs it before the review and the
+  driver after its spec role. spec-reviewer and code-reviewer flag a new word that never reached Terms. A rule
+  kept only as text in CLAUDE.md was skipped three times in one session.
 - **/spec skill:** the EARS pattern table moved from `template.md` into the skill, so a spec written from the
   template no longer carries it.
 - **From the first run with the real `claude`:**

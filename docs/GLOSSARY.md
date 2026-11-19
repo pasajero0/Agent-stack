@@ -39,6 +39,8 @@ it here first.
 - **Spec** — `docs/specs/<stage>/SPEC.md`: acceptance criteria in EARS, unhappy paths, edge cases, numeric
   NFRs, how to verify. **Full** for visible behaviour, **light** (a checklist) for setup work. Approved when
   a human merges it.
+- **Local term** — a word a spec defines for itself only, marked `- **Word** (local): …` in its `## Terms`.
+  `trace` checks every other Terms entry against this glossary.
 - **Acceptance criterion (AC)** — one checkable statement in a spec, with an id (`AC-3`); tests carry the
   id in their names.
 - **ADR** — a numbered architecture decision (`docs/adr/NNNN-*.md`): context, decision, rejected
@@ -62,6 +64,10 @@ it here first.
   spec.
 - **Run** — one execution of the pipeline for one piece of work; its state is the **run file**
   (`.claude/tmp/runs/<run id>/run.json`), written only by the driver.
+- **Live run** — a run whose status is `running` and whose driver process is alive. Two hooks step aside only
+  for a live run on its own branch: spec-gate (quick mode) and evidence-gate.
+- **Driver call** — a Claude process the driver started, with `AGENT_STACK_RUN=<run id>` in its environment;
+  its hooks inherit that variable.
 - **Mode** — the path a run takes: **quick** (a small fix: implement → checks → review → accept), **task**
   (clarify → spec → plan → implement → checks → review → accept), **bug** (a failing test first),
   **refactor** (green before and after, tests untouched). There is no separate "big task" mode.

@@ -18,7 +18,9 @@ stage: <stage id>
 
 ## Terms
 
-<Domain words used below, one line each. Use the same word for the same thing everywhere.>
+<Domain words used below, one line each: "- **Word** — meaning". Use the same word for the same thing everywhere.
+A word the whole project shares goes into the glossary (gates.json → glossary, default docs/GLOSSARY.md) in the
+same change; a word for this spec only is marked "- **Word** (local): …". `.claude/bin/trace` checks this.>
 
 ## Model and state transitions
 

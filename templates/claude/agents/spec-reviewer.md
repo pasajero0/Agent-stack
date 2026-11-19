@@ -33,6 +33,10 @@ the code it touches or names. Do not edit files.
    undefined term, a decision silently assumed instead of stated (→ should be an ADR).
    **Decisions link both ways:** every `(ADR-NNNN)` cited by a criterion is in the Decisions table, and each
    table row's ADR exists and lists this stage under "Applies to" (or is project-wide).
+   **New words are declared.** A named concept a criterion introduces — a state, role, reason, mode, gate or
+   status value — is an entry in `## Terms`. If the project has a glossary (`gates.json → glossary`, default
+   `docs/GLOSSARY.md`), each Terms entry is either in it or marked `(local)`; `.claude/bin/trace` checks
+   only the second part, so a word that never reaches Terms is yours to catch (**major**).
 9. **No implementation leaks** into criteria (how, instead of what) unless the contract requires it.
 10. **Verifiable.** "How to verify" gives concrete commands; tests can be filtered by AC id.
 11. **Claims about code are true.** Every file, symbol, dependency, endpoint, or existing behavior the

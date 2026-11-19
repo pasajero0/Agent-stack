@@ -3,20 +3,29 @@
 #   missing: a criterion in the spec with no test that names it
 #   orphan:  a test that names a criterion the spec does not have (code built on requirements
 #            that never reached the spec, or a criterion removed without its tests)
+#   terms:   an entry "- **Word** — …" of the spec's "## Terms" that is neither a headword of the glossary nor
+#            marked "- **Word** (local): …" (a word for this spec only)
 # Tests name criteria with the stage in front, so ids from different stages never collide:
 #   it("A0 AC-3: counts duplicates")   ·   def test_A0_AC_3_counts_duplicates()
 # Test files: gates.json → testGlobs. Spec: <specsDir>/<stage>/SPEC.md in the working tree.
+# Glossary: gates.json → glossary ("" turns the term check off), else docs/GLOSSARY.md; no file, no check.
 #
-# A light spec (exactly "light: true" in the frontmatter) is not traced: exit 0.
+# A light spec (exactly "light: true" in the frontmatter) is not traced for tests: exit 0 unless its terms fail.
+# --terms checks only the terms, so a spec can be checked before it has tests (/spec, and the driver's spec step).
 #
-# Usage: .claude/bin/trace [STAGE]      (default: the stage from the branch name)
-# Exit:  0 every criterion traced, no orphans · 1 gaps · 2 no stage / no spec
+# Usage: .claude/bin/trace [--terms] [STAGE]      (default: the stage from the branch name)
+# Exit:  0 every criterion traced, no orphans, terms listed · 1 gaps · 2 no stage / no spec
 set -uo pipefail
 
 PROJECT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 export CLAUDE_PROJECT_DIR="$PROJECT_DIR"
 . "$PROJECT_DIR/.claude/hooks/gates-lib.sh"
 
+terms_only=0
+if [ "${1:-}" = "--terms" ]; then
+  terms_only=1
+  shift
+fi
 stage=${1:-$(active_stage)}
 if [ -z "$stage" ]; then
   echo "trace: no stage — pass one, or work on a stage branch (A0-…)." >&2
@@ -29,9 +38,53 @@ if [ ! -f "$spec" ]; then
   exit 2
 fi
 
+# ---- terms: a rule that lived only as text in CLAUDE.md was skipped, so it is a check ----
+if [ -f "$GATES_FILE" ] && jq -e 'type == "object" and has("glossary")' "$GATES_FILE" >/dev/null 2>&1; then
+  glossary_rel=$(jq -r '.glossary // "" | tostring' "$GATES_FILE" 2>/dev/null)
+  [ "$glossary_rel" = "false" ] && glossary_rel=""
+  glossary_set=1
+else
+  glossary_rel="docs/GLOSSARY.md"
+  glossary_set=0
+fi
+case $glossary_rel in
+  /*) glossary=$glossary_rel ;;
+  *) glossary="$PROJECT_DIR/$glossary_rel" ;;
+esac
+unlisted=""
+if [ -n "$glossary_rel" ] && [ -f "$glossary" ]; then
+  # Headwords: "- **Word**" at any depth; a colon inside the bold ("**Word:**") is not part of the word.
+  headwords=$(sed -nE 's/^[[:space:]]*[-*][[:space:]]+\*\*([^*]+)\*\*.*/\1/p' "$glossary" |
+    sed -E 's/[[:space:]]*:?[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+  # Terms: top-level "- **Word**" lines under "## Terms" (text may follow the heading), up to the next "## ".
+  unlisted=$(awk '{ sub(/\r$/, "") } /^## / { in_terms = ($0 ~ /^## Terms([[:space:]]|$)/); next } in_terms' "$spec" |
+    grep -E '^[-*][[:space:]]+\*\*[^*]+\*\*' | grep -vE '^[-*][[:space:]]+\*\*[^*]+\*\*[[:space:]]*\(local\)' |
+    sed -E 's/^[-*][[:space:]]+\*\*([^*]+)\*\*.*/\1/' | sed -E 's/[[:space:]]*:?[[:space:]]*$//' |
+    while IFS= read -r term; do
+      lower=$(printf '%s' "$term" | tr '[:upper:]' '[:lower:]')
+      grep -qxF -- "$lower" <<<"$headwords" || printf '%s\n' "$term"
+    done | sort -u)
+elif [ "$glossary_set" -eq 1 ] && [ -n "$glossary_rel" ]; then
+  echo "trace: gates.json → glossary names $glossary_rel, which does not exist; terms are not checked." >&2
+fi
+terms_line=""
+[ -n "$unlisted" ] &&
+  terms_line="  terms not in $glossary_rel: $(printf '%s\n' "$unlisted" | awk 'NR > 1 { printf ", " } { printf "%s", $0 }') — add them there, or mark them (local) in the spec's Terms"
+
+if [ "$terms_only" -eq 1 ]; then
+  if [ -n "$unlisted" ]; then
+    echo "trace $stage: spec terms"
+    echo "$terms_line"
+    exit 1
+  fi
+  echo "trace $stage: spec terms ok"
+  exit 0
+fi
+
 # A light spec (frontmatter "light: true") is setup work: its checklist is proven by commands, not tests.
 if awk '{ sub(/\r$/, "") } NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1' "$spec" | grep -qE '^light:[[:space:]]*true[[:space:]]*$'; then
   echo "trace $stage: light spec — its checklist is checked by the commands it names, not by tests"
+  [ -n "$terms_line" ] && { echo "$terms_line"; exit 1; }
   exit 0
 fi
 
@@ -58,9 +111,10 @@ traced=$((total - $(printf '%s\n' "$missing" | sed '/^$/d' | wc -l | tr -d ' '))
 echo "trace $stage: $traced/$total criteria have tests"
 [ -n "$missing" ] && echo "  missing tests: $(printf '%s' "$missing" | tr '\n' ' ')"
 [ -n "$orphan" ] && echo "  tests for criteria not in the spec: $(printf '%s' "$orphan" | tr '\n' ' ')— update the spec first, or remove them"
+[ -n "$terms_line" ] && echo "$terms_line"
 if [ "$total" -eq 0 ]; then
   echo "  no criteria found — list them as '- **AC-1:** …' in the spec"
   exit 1
 fi
-[ -z "$missing" ] && [ -z "$orphan" ] && exit 0
+[ -z "$missing" ] && [ -z "$orphan" ] && [ -z "$unlisted" ] && exit 0
 exit 1

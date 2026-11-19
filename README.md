@@ -43,7 +43,9 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 │   ├── stop-flag-reflect.sh # Stop: after a memory change, suggests /reflect next session
 │   └── gates-lib.sh         # shared helpers (not a hook)
 ├── bin/verify             # runs each task's verify command — the only writer of `passes`
-├── bin/trace              # links spec criteria ↔ tests ("A0 AC-3: …"): missing tests, invented criteria
+├── bin/trace              # links spec criteria ↔ tests ("A0 AC-3: …"): missing tests, invented criteria;
+│                          #   and spec Terms ↔ glossary: a term not in it and not marked (local);
+│                          #   --terms checks only the terms (before a spec has tests)
 ├── bin/health             # code-health SLIs on the branch's changes vs SLOs; time series in tmp/health.jsonl
 ├── agents/                # spec-reviewer, implementer, test-writer, code-reviewer, task-analyzer,
 │                          # researcher, pattern-scout — each with a model and effort level
@@ -114,6 +116,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `installPatterns`, `cheatPatterns` | what counts as an install / a cheat (POSIX regex) |
 | `commands.test`, `commands.lint`, `lintMatch` | test command; per-file lint command with `{file}`; files to lint |
 | `testGlobs` | where `trace` looks for tests that name criteria |
+| `glossary` | the glossary `trace` checks spec Terms against: each `- **Term**` in a spec's `## Terms` is a headword there or is marked `(local)`. Default `docs/GLOSSARY.md` when it exists; `""` turns the check off. Optional, not in the seed |
 | `slo` | code-health limits on changed files: `maxFileLines` (400), `newDependencies` (null = report only) |
 | `health` | project metrics: `[{"name": "complexity", "command": "… {files} …", "max": 0}]` — detected for ESLint and ruff |
 | `docsLayout` | where Markdown files belong; `health` lists a changed `.md` outside these globs (a hint, never a block). Root-level `*.md` always fits. Set for a monorepo (see below), empty otherwise |
