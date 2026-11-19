@@ -388,7 +388,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-7:** WHEN a stage id is confirmed, THE SYSTEM SHALL accept it only if all three hold:
   - the default stage pattern maps `<id>-x` back to `<id>`;
   - `<specsDir>/<id>/` does not exist on the base ref;
-  - no branch `spec/<id>` exists.
+  - no branch `spec/<id>` exists, and none under `spec/<id>/` (git could not create `spec/<id>` then).
 - **AC-8:** WHEN size task or story is confirmed, THE SYSTEM SHALL:
   - create `spec/<stage>` from the base ref;
   - run the spec role;
@@ -681,6 +681,7 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-7: a branch under `spec/<id>/` also takes the id (from review).
 - 2026-11-19 — AC-48, Gate input, clarify and implement prompts: clarify gets the stage-id rule and the
   ids in use; a failed id is never the default, so Enter no longer loops; a docs-only change needs no test.
   From the first manual run (`greet` as the stage id, a test for a README line).
