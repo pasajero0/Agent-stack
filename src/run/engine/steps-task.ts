@@ -252,9 +252,12 @@ export const taskMode: ModeSteps = {
     return plan[i + 1]?.id ?? null;
   },
 
-  /** A plan task's own verify, as the plan writes it; a fix task has none of its own (AC-63). */
+  /**
+   * A plan task's own verify through `verify --dry`: guarded like every verify, nothing recorded (AC-63). A fix
+   * task has an empty verify today; the isFix test keeps it out even if that changes.
+   */
   startCheck(_ctx, task, info) {
-    return isFix(task.id) || info.verify.trim() === "" ? null : info.verify;
+    return isFix(task.id) || info.verify.trim() === "" ? null : `.claude/bin/verify --dry ${task.id}`;
   },
 
   /**

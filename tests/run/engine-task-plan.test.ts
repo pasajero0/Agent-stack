@@ -349,12 +349,27 @@ describe("task mode: base-check, tasks and gate:accept", () => {
     });
 
     it("v04 AC-63: a start check that times out exits 1 before the implement call (AC-60)", async () => {
-      const r = repo({ run: { checkTimeoutMin: 0.003 } });
+      const r = repo({ run: { checkTimeoutMin: 0.02 } }); // 1.2 s: verify reaches the sleep, holding its lock
       await toPlanApprove(r, [plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"], verify: "sleep 5" }] })]);
       expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(1);
       expect(r.run().next).toBe("implement:T1");
       expect(text(r)).toMatch(/timed out after .*checkTimeoutMin/);
       expect(r.logged().length).toBe(3); // clarify, spec, plan: no implement call
+      // AC-60: no attempt counted, no base recorded; --dry wrote no log (AC-63).
+      expect(r.run().tasks[0]).toMatchObject({ attempts: 0, taskBase: null });
+      expect(existsSync(join(r.dir, ".claude/tmp/B1/verify.log"))).toBe(false);
+      // The killed verify could not drop its lock; the driver does, or the resume would wait 60 s and fail.
+      expect(existsSync(join(r.dir, ".claude/tmp/B1/.verify.lock"))).toBe(false);
+    });
+
+    it("v04 AC-63: a verify that guard-bash refuses is not run by the start check", async () => {
+      const r = repo();
+      // pnpm add asks first, so guard-bash refuses the whole command; it must never run.
+      const verify = "touch .git/ran; pnpm add left-pad";
+      await toPlanApprove(r, [plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"], verify }] }), impl({}), impl({ model: "opus" })]);
+      await resumeRun({ ...r.opts({ gate: ["a"] }) });
+      expect(existsSync(join(r.dir, ".git/ran"))).toBe(false);
+      expect(r.run().tasks[0]?.notes.join("\n") ?? "").not.toContain(START_NOTE);
     });
   });
 

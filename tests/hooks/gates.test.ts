@@ -310,6 +310,23 @@ describe("verify runner", () => {
     expect(readTasks(dir).every((t) => !t.passes)).toBe(true);
   });
 
+  it("--dry runs and guards like verify but records nothing: no passes, no fails, no log", () => {
+    const dir = stageWithTasks([
+      { id: "T1", verify: "true", passes: false },
+      { id: "T2", verify: "pnpm add left-pad", passes: false },
+    ]);
+    const before = readFileSync(join(dir, ".claude/tmp/A0/tasks.json"), "utf-8");
+    let r = verify(dir, "--dry", "T1");
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("PASS T1");
+    expect(r.out).toContain("dry run: nothing recorded");
+    r = verify(dir, "--dry", "T2");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("FAIL T2 — verify command refused by guard-bash");
+    expect(readFileSync(join(dir, ".claude/tmp/A0/tasks.json"), "utf-8")).toBe(before);
+    expect(existsSync(join(dir, ".claude/tmp/A0/verify.log"))).toBe(false);
+  });
+
   it("is not auto-allowed: its commands come from an agent-written plan", () => {
     const dir = deployHarness();
     const allow = JSON.parse(readFileSync(join(dir, ".claude/settings.json"), "utf-8")).permissions.allow;

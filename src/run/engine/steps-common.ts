@@ -2,7 +2,7 @@
  * Steps both modes share: base-check, implement, checks, review, commit. Spec: docs/specs/v04/SPEC.md,
  * AC-15/16/19/20/24/25, and the unhappy path AC-33/34/36..39/41..43/46/55.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { lintRuns, runCheck, verifyTail, type CheckRun } from "../checks.js";
 import type { Model } from "../claude.js";
@@ -140,9 +140,10 @@ function undoGitSideEffects(ctx: Ctx, task: RunTask): string | null {
 export const START_NOTE = "its verify passed before the task started";
 
 /**
- * AC-63: before a task's first attempt, its verify as the plan writes it (not .claude/bin/verify, which would
- * mark tasks.json). Green there means the verify cannot show the task's work, e.g. a test file that is missing
- * and skipped. It is a note, not a stop: a docs-only task may well have `true`.
+ * AC-63: before a task's first attempt, its verify through `.claude/bin/verify --dry`: guarded like any verify
+ * (tasks.json is re-read, so a rewritten command is not run raw), and nothing is recorded. Green there means
+ * the verify cannot show the task's work, e.g. a test file that is missing and skipped. It is a note, not a
+ * stop: a docs-only task may well have `true`.
  */
 async function startCheck(ctx: Ctx, task: RunTask, info: TaskInfo): Promise<void> {
   const cmd = ctx.mode.startCheck?.(ctx, task, info) ?? null;
@@ -157,8 +158,10 @@ const implement: StepHandler = async (ctx, id) => {
   const task = taskOf(ctx, id);
   const info = ctx.mode.taskInfo(ctx, task.id);
   if (task.taskBase === null) {
+    // The base is read first: a failure after the note would leave taskBase null and add the note twice.
+    const base = headSha(ctx.projectDir);
     await startCheck(ctx, task, info);
-    task.taskBase = headSha(ctx.projectDir);
+    task.taskBase = base;
   }
   if (task.attempts === 0) task.attempts = 1;
   const commands = { test: ctx.cfg.commands.test, lint: ctx.cfg.commands.lint, verify: info.verify };
@@ -233,6 +236,12 @@ function checkFeedback(ctx: Ctx, item: CheckItem, r: CheckRun): string {
  * environment's (a package manager waiting on the network), not the code's, so it does not go back to implement.
  */
 export function timedOutError(ctx: Ctx, step: string, r: CheckRun): RunError {
+  // A verify killed on timeout cannot run its EXIT trap, so its lock stays; the driver killed it, so the lock
+  // is the driver's to drop. Otherwise the next verify waits 60 s and fails (AC-60).
+  const stage = ctx.run.stage;
+  if (stage !== null && r.cmd.startsWith(".claude/bin/verify")) {
+    rmSync(join(ctx.projectDir, ".claude", "tmp", stage, ".verify.lock"), { recursive: true, force: true });
+  }
   return new RunError(
     `${step}: \`${r.cmd}\` timed out after ${ctx.cfg.checkTimeoutMin} min (checkTimeoutMin). No attempt was counted. Fix what hangs, or raise run.checkTimeoutMin in gates.json, then ${resumeHint(ctx.run.id)} runs the checks again.\n${r.tail}`,
     1
