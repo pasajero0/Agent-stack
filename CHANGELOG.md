@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (0.5)
+
+- **run: a test conflict is a way out, not a cheat.** If an existing test or the task's verify contradicts a
+  criterion, implement returns `TEST_CONFLICT` and leaves the test alone. The run stops at gate `limit`
+  (reason `test-conflict`) and shows the test, the criterion and the reason. `r` and your answer retry
+  implement; no attempt is counted. Tested with a fake `claude` only.
+- **run: a verify that cannot fail makes a new plan not valid** (`|| true`, `|| echo`, `; exit 0`, `| tee`,
+  `set +e` and the like). The plan role is re-run with the task and the pattern. An approved plan is not
+  re-checked. The `/plan` skill says the same; `.claude/bin/verify` does not check it.
+
 ## 0.4.0 — the driver
 
 A program, `agent-stack run`, now holds the pipeline order. Before, the order lived in hooks and skills that the
