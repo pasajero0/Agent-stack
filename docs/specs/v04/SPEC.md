@@ -86,6 +86,17 @@ word for this spec only is marked `(local)`.
   Every criterion id of the merged spec appears in some task.
 - **Task diff** (local): changes since the task's base commit (HEAD when its first attempt started). It counts
   tracked changes plus untracked files, and always excludes `.claude/tmp/`.
+- **Frozen tests** (local): the files matching `gates.json → testGlobs` that exist at the task's base commit. In
+  each one the driver counts, over the whole text:
+  - tests: `it(`, `test(` (also with a modifier: `it.skip(`, `test.each(`), `def test_`, `func Test`, `#[test]`;
+  - assertions: `expect(`, `assert` (also `assert.x(`, `assert_eq!(`), `t.Error(`, `t.Fatal(` and their `f` forms;
+  - skip marks: `.skip`, `.only`, `.todo`, `xit(`, `xdescribe(`, `xtest(`, `@pytest.mark.skip`,
+    `@pytest.mark.xfail`, `t.Skip`, `#[ignore]`.
+
+  Tests the task adds after its base are not frozen.
+- **Check config** (local): a file that decides how checks run: `.github/workflows/*`, `.gitlab-ci.yml`,
+  `vitest.config.*`, `vitest.workspace.*`, `jest.config.*`, `playwright.config.*`, `eslint.config.*`, `.eslintrc*`,
+  `biome.json`, `biome.jsonc`, `pytest.ini`, `tox.ini`, `ruff.toml`, `.ruff.toml`, `.golangci.*`, `clippy.toml`.
 - **Diff lines** (local): added plus deleted lines of the task diff (`git diff --numstat`), plus all lines of each
   untracked file.
 - **Clean tree** (local): `git status --porcelain`, excluding `.claude/tmp/`, is empty.
@@ -159,6 +170,8 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | review | blocking count not lower than last time | gate:limit (review loop) | AC-39 |
 | implement | BLOCKED | gate:limit (blocked) | AC-38 |
 | implement | TEST_CONFLICT | gate:limit (test conflict) | AC-64 |
+| checks | frozen tests weakened or a check config changed | gate:limit (tests changed) | AC-66 |
+| gate:limit (tests changed) | allow / retry with a comment | checks / implement (attempt + 1) | AC-66 |
 | any | fuse reached | gate:limit (fuse) | AC-35 |
 | any | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
 | spec / plan | output missing, out of bounds or (spec) terms failing twice | unchanged, exit 1 | AC-40, AC-44, AC-45, AC-59 |
@@ -205,6 +218,7 @@ When the file runs out, the gate behaves as AC-29: it is recorded, and the drive
   - reasons attempts, blocked or review loop: `r` retry, `c` cancel;
   - reason decision: `r` retry (a comment follows), `c` cancel (AC-57);
   - reason test conflict: `r` retry (a comment follows), `c` cancel (AC-64);
+  - reason tests changed: `a` allow, `r` retry (a comment follows), `c` cancel (AC-66);
   - reason fuse: `f <n>` sets a new limit for this run, in the fuse's own unit (calls or dollars); it must be
     above what is used so far. `c` cancels.
 
@@ -233,7 +247,7 @@ Any other value is refused when a run starts, with code 1.
 | `status` | `running` \| `waiting` \| `finished` \| `cancelled` |
 | `next` | one of the values listed above |
 | `returnTo` | the `next` value that gate:limit returns to, or null |
-| `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| `test-conflict` \| null |
+| `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| `test-conflict` \| `tests-changed` \| null |
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
 | `stagePrefill` | the `--stage` id that gate:answers proposes, or null |
@@ -461,6 +475,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - each task's checks;
   - the review notes;
   - the skipped commands;
+  - the test changes the human allowed (AC-66);
   - the human decisions;
   - the cost;
   - in task mode with more than one plan task, the **final check**: `.claude/bin/verify` with no task id, run
@@ -606,6 +621,18 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     `grep "a; true" f` is refused too; rewrite such a command.
   - Only a new plan is checked. A plan approved earlier is read as it is, so a run in progress is not stopped.
   - The `/plan` skill SHALL say the same. `.claude/bin/verify` does not check it.
+- **AC-66:** WHEN implement returns DONE, THE SYSTEM SHALL compare the task's frozen tests and the check configs
+  with the task's base, before it runs the checks.
+  - IF a frozen test file is gone, has fewer tests or fewer assertions, or more skip marks, or a check config that
+    exists at the base has changed, THEN THE SYSTEM SHALL go to gate:limit, reason "tests changed", and list each
+    change: `deleted test file a.test.ts`, `a.test.ts: assertions 12 → 10`, `changed check config vitest.config.ts`.
+  - `a` allows exactly the changes listed; the run goes on to the checks. A later change that is not on the list
+    stops again. Gate:accept shows the allowed changes (AC-21).
+  - `r` retries implement with the list and the comment that follows; this is a new attempt (on Opus). `c`
+    cancels.
+  - With `testGlobs` empty, only the check configs are compared. A test renamed or merged is a change too; the
+    human allows it. A test the human weakened by hand at another gate is a change too.
+  - It does not see a weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`).
 - **AC-46:** IF a task's checks pass with an empty task diff, THEN THE SYSTEM SHALL record `commit: "empty"`,
   make no commit, and show it at gate:accept (partner of AC-20).
 - **AC-47:** IF `--resume` finds the spec missing on the base ref, THEN THE SYSTEM SHALL stay at
@@ -705,6 +732,9 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-66 (new), Frozen tests, Check config: the driver stops when a task weakens a test it found, or
+  changes a check config. With TEST_CONFLICT (AC-64) the role has a legal way out; this checks it was not
+  bypassed. It stops at a gate, not as a failed attempt, because a legal rename would only use up the attempts.
 - 2026-11-19 — AC-64 (new): implement may return `TEST_CONFLICT`. With only DONE or BLOCKED, a role that met
   a wrong test could only change it; a legal way out cuts test cheating (ImpossibleBench: 54 % → 9 %).
 - 2026-11-19 — AC-65 (new), Valid plan: a verify that cannot fail (`|| true`) makes a new plan not valid. Such

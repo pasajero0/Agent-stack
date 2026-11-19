@@ -83,6 +83,8 @@ it here first.
     and the role runs again with its questions and the answer. A blind re-run would only ask again.
   - **Test conflict** reason: the implementer found an existing test or verify that contradicts a criterion,
     and left it alone. The human fixes the test or the spec, or answers; no attempt is counted.
+  - **Tests changed** reason: the task deleted or weakened a test that was there before it, or changed a check
+    config (CI, test or lint settings). The human allows the change or sends the task back.
 - **Role** — what one Claude call is asked to be: clarify, spec, plan, implement or review. Each role has
   its own tools, model and output schema. The role returns data, and the driver writes the files it owns,
   such as `tasks.json` and the commits.
