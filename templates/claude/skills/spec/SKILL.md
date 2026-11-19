@@ -28,7 +28,17 @@ every code edit for the stage. So the spec must be good enough to build from wit
    from `${CLAUDE_SKILL_DIR}/template.md`.
 3. **Acceptance criteria** — each one:
    - has a unique id (`AC-1`, `AC-2`, …) — tests will carry these ids in their names;
-   - uses an EARS pattern (table in the template) and an observable outcome — something a test can check;
+   - uses an EARS pattern and an observable outcome — something a test can check. The patterns (reference
+     only — do not copy this table into the spec):
+
+     | Pattern | Form |
+     | --- | --- |
+     | Always | `THE SYSTEM SHALL …` |
+     | Event | `WHEN <trigger>, THE SYSTEM SHALL …` |
+     | State | `WHILE <state>, THE SYSTEM SHALL …` |
+     | Unwanted | `IF <condition>, THEN THE SYSTEM SHALL …` |
+     | Option | `WHERE <feature is enabled>, THE SYSTEM SHALL …` |
+
    - **every happy-path criterion has at least one unhappy-path partner** (`IF … THEN THE SYSTEM SHALL …`);
    - every edge case from the grill is either a criterion or listed under "Out of scope";
    - a criterion that follows from a decision cites its ADR: `(ADR-0003)`, and that ADR is in the

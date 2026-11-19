@@ -34,6 +34,8 @@
 - **Hooks:** spec-gate's quick-mode bypass and evidence-gate's silence apply only to a live driver run on the
   run's branch; guard-file protects the run folder; path checks follow symlinks.
 - **/plan skill:** every task ends green; the test is written first inside the task, no test-only tasks.
+- **/spec skill:** the EARS pattern table moved from `template.md` into the skill, so a spec written from the
+  template no longer carries it.
 - **From the first run with the real `claude`:**
   - the plan role returns its tasks and the driver writes `tasks.json`: Claude Code guards `.claude/`, so a
     headless role could not;

@@ -33,14 +33,6 @@ If the shapes live in a contract package, name them here; fields are described o
 
 ## Acceptance criteria (EARS)
 
-| Pattern | Form |
-| --- | --- |
-| Always | `THE SYSTEM SHALL …` |
-| Event | `WHEN <trigger>, THE SYSTEM SHALL …` |
-| State | `WHILE <state>, THE SYSTEM SHALL …` |
-| Unwanted | `IF <condition>, THEN THE SYSTEM SHALL …` |
-| Option | `WHERE <feature is enabled>, THE SYSTEM SHALL …` |
-
 <!-- A stage that spans parts (Backend and Frontend, api and web) groups the three headings below under a
      heading per part: "### Backend" → "#### Happy path" … AC ids run on through all parts, so each stays
      unique in this file. One part only: keep the headings as they are. -->

@@ -77,6 +77,10 @@ describe("buildHarnessFiles", () => {
     expect(byPath(".claude/skills/adr/template.md")!.content).toContain("Alternatives considered");
     expect(byPath(".claude/skills/spec/light-template.md")!.content).toContain("light: true");
     expect(byPath(".claude/skills/adr/template.md")!.content).toContain("**Applies to:**");
+    // The EARS pattern table is reference for the writer, so it lives in the skill: a spec copied from the
+    // template does not carry it (seen in two real runs).
+    expect(byPath(".claude/skills/spec/template.md")!.content).not.toContain("| Pattern | Form |");
+    expect(byPath(".claude/skills/spec/SKILL.md")!.content).toContain("| Pattern | Form |");
     const codemap = byPath("CODEMAP.md")!.content;
     expect(codemap).toContain("## Specs");
     expect(codemap).toContain("docs/specs/");
