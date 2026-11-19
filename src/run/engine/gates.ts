@@ -3,7 +3,7 @@
  * AC-31, AC-32, AC-46, AC-56. Task-mode gates (T9) reuse `ask`, `recordGate` and `showDecisions`.
  */
 import { runCheck, type CheckRun } from "../checks.js";
-import { diffStat, git } from "../git.js";
+import { diffStat, dirtyPaths, git } from "../git.js";
 import type { GateRecord, RunFile } from "../types.js";
 import { fuseText } from "./call.js";
 import { Interrupted, newTask, type Ctx, type StepHandler } from "./context.js";
@@ -89,7 +89,6 @@ function commitText(c: string | null): string {
   return c === "empty" ? "empty (no changes, no commit)" : `commit ${short(c)}`;
 }
 
-/** The gate:accept summary (AC-21, AC-46). */
 /** The mode's final check, run once more before gate:accept (AC-21, AC-61); null when the mode has none. */
 async function finalCheck(ctx: Ctx): Promise<CheckRun | null> {
   const item = ctx.mode.finalCheck?.(ctx) ?? null;
@@ -100,6 +99,7 @@ async function finalCheck(ctx: Ctx): Promise<CheckRun | null> {
   return r;
 }
 
+/** The gate:accept summary (AC-21, AC-46, AC-61). */
 function acceptSummary(ctx: Ctx, final: CheckRun | null): void {
   const { run } = ctx;
   ctx.out(`== gate:accept — run ${run.id} on ${run.branch} ==`);
@@ -115,6 +115,8 @@ function acceptSummary(ctx: Ctx, final: CheckRun | null): void {
   if (final !== null) {
     const red = final.exit !== 0;
     ctx.out(`Final check: ${final.cmd} (every task) → ${final.exit}${red ? " RED" : ""}`);
+    // A hand fix made while the gate waited is not committed: say so, or the green is taken for the branch's.
+    if (dirtyPaths(ctx.projectDir).length > 0) ctx.out("The final check ran on uncommitted changes; the commits alone may differ.");
     if (red) {
       ctx.out(final.tail);
       ctx.out("A later task broke an earlier one: r with a comment adds a fix task; a accepts a red result.");
@@ -199,7 +201,9 @@ function raise(run: RunFile, answer: string): RunFile["fuse"] | string {
     if (!Number.isInteger(n) || n <= run.calls) return `The calls limit must be a whole number above ${run.calls} (used).`;
     return { calls: n };
   }
-  if (n <= run.costUsd) return `The dollar limit must be above $${run.costUsd.toFixed(4)} (used).`;
+  // AC-62: name the calls whose cost is unknown, since the used amount is then too low.
+  const unknown = run.costUnknownCalls > 0 ? `; plus ${run.costUnknownCalls} call(s) with unknown cost` : "";
+  if (n <= run.costUsd) return `The dollar limit must be above $${run.costUsd.toFixed(4)} (used${unknown}).`;
   return { usd: n };
 }
 

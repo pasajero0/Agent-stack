@@ -311,5 +311,7 @@ describe("task mode: base-check, tasks and gate:accept", () => {
     expect(sh(r.dir, "log", "-1", "--format=%s")).toBe("fix(b1): greet the world");
     expect(sh(r.dir, "rev-list", "--count", `main..${WORK_BRANCH}`)).toBe("3");
     expect(text(r).match(/== gate:accept/g)?.length).toBe(2);
+    // AC-21: F1's own checks are every task's verify, so the gate after it runs no final check.
+    expect(text(r).match(/Final check:/g)?.length).toBe(1);
   });
 });

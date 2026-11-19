@@ -372,7 +372,30 @@ describe("task mode: the whole path", () => {
     const t = text(r);
     expect(t).toMatch(/Final check: \.claude\/bin\/verify \(every task\) → [1-9]\d* RED/);
     expect(t).toContain("r with a comment adds a fix task; a accepts a red result");
+    expect(t).toContain("FAIL T1"); // the last lines of the red check (AC-61)
     expect(r.run().status).toBe("finished");
+  });
+
+  it("v04 AC-21: with one plan task there is no final check", async () => {
+    const r = repo();
+    const one = [{ id: "T1", ac: ["AC-1", "AC-2"], verify: "test -f hello.txt" }];
+    await toSpecMerge(r, [plan({ tasks: one }), impl({ writes: { "hello.txt": "hello\n" }, subject: "Add the hello file" }), review()]);
+    mergeSpec(r);
+    expect(await resumeRun({ ...r.opts({ gate: ["a", "a"] }) }), text(r)).toBe(0);
+    expect(text(r)).toContain("== gate:accept");
+    expect(text(r)).not.toContain("Final check");
+  });
+
+  it("v04 AC-21: the gate says when the final check ran on uncommitted changes", async () => {
+    const r = repo();
+    await toSpecMerge(r, [plan(), ...twoTasksDone()]);
+    mergeSpec(r);
+    expect(await resumeRun({ ...r.opts({ gate: ["a"] }) }), text(r)).toBe(3); // waits at gate:accept
+    expect(text(r)).not.toContain("uncommitted changes");
+    write(r.dir, "hand-fix.txt", "x\n");
+    r.out.length = 0;
+    expect(await resumeRun({ ...r.opts() })).toBe(3);
+    expect(text(r)).toContain("The final check ran on uncommitted changes");
   });
 
   it("v04 AC-20: each task's checks are its verify plus lint, then review, then the commit; the next task follows", async () => {
