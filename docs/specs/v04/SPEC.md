@@ -444,7 +444,10 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - the review notes;
   - the skipped commands;
   - the human decisions;
-  - the cost.
+  - the cost;
+  - in task mode with more than one plan task, the **final check**: `.claude/bin/verify` with no task id, run
+    once more right before the gate, so a later task that broke an earlier one shows up. It is skipped after a
+    fix task F*k*, whose checks already are every task's verify (AC-22).
 - **AC-22:** WHEN the human accepts, THE SYSTEM SHALL finish the run and SHALL NOT push or merge (D2).
   WHEN the human rejects with a comment, THE SYSTEM SHALL implement a fix task F*k* with the comment as
   feedback.
@@ -537,6 +540,10 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - It SHALL exit with code 1 if the branch cannot be restored without losing edits (partner of AC-16).
 - **AC-44:** IF the spec role ends without `<specsDir>/<stage>/SPEC.md`, THEN THE SYSTEM SHALL re-run it once
   with that feedback, then exit with code 1 (partner of AC-8).
+- **AC-61:** IF the final check exits non-zero, THEN THE SYSTEM SHALL mark it red at gate:accept and show its
+  last 50 lines (partner of AC-21).
+  - The gate SHALL say that `r` with a comment adds a fix task, and that `a` accepts a red result.
+  - The human decides; the driver does not refuse `a`.
 - **AC-60:** IF a check or base-check's `test` runs longer than `checkTimeoutMin`, THEN THE SYSTEM SHALL exit
   with code 1 and name the command and the limit (partner of AC-15, AC-19).
   - It SHALL count no attempt and keep `next` at that step, so `--resume` runs the checks again.
@@ -657,6 +664,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-21, AC-61 (new): the final check before gate:accept. A later task could break an earlier
+  one's verify, and the gate still showed the earlier green.
 - 2026-11-19 — AC-33, AC-60 (new): a check timeout exits 1 with no attempt counted, not a red check. A hung
   `pnpm` had sent a task back to implement on Opus (found in the Compound V check).
 - 2026-11-19 — AC-8, AC-59 (new), spec prompt: the glossary is in the spec role's bounds, and the driver checks
