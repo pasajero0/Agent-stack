@@ -315,6 +315,49 @@ describe("task mode: base-check, tasks and gate:accept", () => {
     expect(t2?.lastFeedback).toContain("test -f bye.txt");
   });
 
+  describe("v04 AC-63: the start check", () => {
+    const START_NOTE = "its verify passed before the task started";
+
+    it("v04 AC-63: a verify that is red before the task adds no note", async () => {
+      const r = repo();
+      await toPlanApprove(r, [plan(), ...twoTasksDone()]);
+      expect(await resumeRun({ ...r.opts({ gate: ["a", "a"] }) }), text(r)).toBe(0);
+      for (const t of r.run().tasks) expect(t.notes.join("\n")).not.toContain(START_NOTE);
+    });
+
+    it("v04 AC-63: a verify that is green before the task gets a note, shown at gate:accept; the run goes on", async () => {
+      const r = repo();
+      await toPlanApprove(r, [plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"], verify: "true" }] }), impl({ writes: { "hello.txt": "hi\n" } }), review()]);
+      expect(await resumeRun({ ...r.opts({ gate: ["a", "a"] }) }), text(r)).toBe(0);
+      expect(r.run().tasks[0]?.notes.join("\n")).toContain(START_NOTE);
+      expect(text(r)).toMatch(/note: .*its verify passed before the task started/);
+      expect(r.run().status).toBe("finished");
+    });
+
+    it("v04 AC-63: only the first attempt is start-checked", async () => {
+      const r = repo();
+      const verify = "echo run >> .git/verify-runs && test -f hello.txt";
+      await toPlanApprove(r, [
+        plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"], verify }] }),
+        impl({}),
+        impl({ model: "opus", writes: { "hello.txt": "hi\n" } }),
+        review(),
+      ]);
+      expect(await resumeRun({ ...r.opts({ gate: ["a", "a"] }) }), text(r)).toBe(0);
+      // start check (1) + checks of attempt 1 (2) + checks of attempt 2 (3); one task, so no final check.
+      expect(readFileSync(join(r.dir, ".git/verify-runs"), "utf8").trim().split("\n")).toHaveLength(3);
+    });
+
+    it("v04 AC-63: a start check that times out exits 1 before the implement call (AC-60)", async () => {
+      const r = repo({ run: { checkTimeoutMin: 0.003 } });
+      await toPlanApprove(r, [plan({ tasks: [{ id: "T1", ac: ["AC-1", "AC-2"], verify: "sleep 5" }] })]);
+      expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(1);
+      expect(r.run().next).toBe("implement:T1");
+      expect(text(r)).toMatch(/timed out after .*checkTimeoutMin/);
+      expect(r.logged().length).toBe(3); // clarify, spec, plan: no implement call
+    });
+  });
+
   it("v04 AC-22: reject at gate:accept implements a fix task F1 on Opus, checks every task's verify, reviews, commits and returns to gate:accept", async () => {
     const r = repo();
     await toPlanApprove(r, [
@@ -335,5 +378,7 @@ describe("task mode: base-check, tasks and gate:accept", () => {
     expect(text(r).match(/== gate:accept/g)?.length).toBe(2);
     // AC-21: F1's own checks are every task's verify, so the gate after it runs no final check.
     expect(text(r).match(/Final check:/g)?.length).toBe(1);
+    // AC-63: a fix task is not start-checked (every verify is green before it, by design).
+    expect(run.tasks.find((t) => t.id === "F1")?.notes.join("\n") ?? "").not.toContain("passed before");
   });
 });

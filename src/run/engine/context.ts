@@ -85,6 +85,8 @@ export interface ModeSteps {
   nextTaskAfter(ctx: Ctx, id: string): string | null;
   /** The final check gate:accept runs first, or null for none (AC-21, AC-61). */
   finalCheck?(ctx: Ctx): CheckItem | null;
+  /** The command the start check runs before a task's first attempt, or null for none (AC-63). */
+  startCheck?(ctx: Ctx, task: RunTask, info: TaskInfo): string | null;
 }
 
 /** Thrown when the signal aborts a call or a gate; the loop writes the run and exits 1 (AC-51). */

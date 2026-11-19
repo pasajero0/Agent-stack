@@ -252,6 +252,11 @@ export const taskMode: ModeSteps = {
     return plan[i + 1]?.id ?? null;
   },
 
+  /** A plan task's own verify, as the plan writes it; a fix task has none of its own (AC-63). */
+  startCheck(_ctx, task, info) {
+    return isFix(task.id) || info.verify.trim() === "" ? null : info.verify;
+  },
+
   /**
    * Every task's verify once more before gate:accept, so a later task that broke an earlier one shows up
    * (AC-21, AC-61). Skipped with one plan task, and after a fix task, whose checks already are this.

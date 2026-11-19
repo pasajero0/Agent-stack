@@ -136,10 +136,30 @@ function undoGitSideEffects(ctx: Ctx, task: RunTask): string | null {
   return notes.length > 0 ? notes.join("\n") : null;
 }
 
+/** The start of the note the start check leaves (AC-63); a review keeps it when it replaces the notes. */
+export const START_NOTE = "its verify passed before the task started";
+
+/**
+ * AC-63: before a task's first attempt, its verify as the plan writes it (not .claude/bin/verify, which would
+ * mark tasks.json). Green there means the verify cannot show the task's work, e.g. a test file that is missing
+ * and skipped. It is a note, not a stop: a docs-only task may well have `true`.
+ */
+async function startCheck(ctx: Ctx, task: RunTask, info: TaskInfo): Promise<void> {
+  const cmd = ctx.mode.startCheck?.(ctx, task, info) ?? null;
+  if (cmd === null) return;
+  const r = await runCheck(cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
+  if (r.aborted) throw new Interrupted();
+  if (r.timedOut) throw timedOutError(ctx, "start check", r);
+  if (!r.skipped && r.exit === 0) task.notes.push(`${START_NOTE}, so it may not test the task: check the plan's verify.`);
+}
+
 const implement: StepHandler = async (ctx, id) => {
   const task = taskOf(ctx, id);
   const info = ctx.mode.taskInfo(ctx, task.id);
-  if (task.taskBase === null) task.taskBase = headSha(ctx.projectDir);
+  if (task.taskBase === null) {
+    await startCheck(ctx, task, info);
+    task.taskBase = headSha(ctx.projectDir);
+  }
   if (task.attempts === 0) task.attempts = 1;
   const commands = { test: ctx.cfg.commands.test, lint: ctx.cfg.commands.lint, verify: info.verify };
   const prompt = implementPrompt({ taskId: task.id, taskDesc: info.desc, criteria: info.criteria, feedback: task.lastFeedback, commands });
@@ -300,7 +320,8 @@ const review: StepHandler = async (ctx, id) => {
   };
   const r = await judgeCall(ctx, "review", prompt, parseReview);
   if (r.kind === "fuse") return toLimit(ctx, "fuse", ctx.run.next);
-  task.notes = reviewNotes(r.value);
+  // The start check's note (AC-63) outlives the review's own notes, which replace each other.
+  task.notes = [...task.notes.filter((n) => n.startsWith(START_NOTE)), ...reviewNotes(r.value)];
   if (!isBlocking(r.value)) return { type: "pass" };
   const count = blockingCount(r.value);
   const previous = task.blockingCount;
