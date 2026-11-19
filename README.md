@@ -211,6 +211,9 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 **Limits of this part.**
 - Experimental: three manual runs with the real `claude` (one quick fix, two one-task stages); the rest is tested
   with a fake `claude`.
+- **`/plan` needs a person in a plain session.** Claude Code guards `.claude/` itself, even with an allow rule,
+  so writing `tasks.json` asks for approval. With no one to approve (a headless or autonomous session), `/plan`
+  cannot write it; use `agent-stack run task`, where the driver writes the plan.
 - With a claude.ai login, Claude Code still puts the account email into the session context. No switch removes
   it short of `--bare`, which needs an API key and skips the hooks. It stays in the model's context; nothing
   writes it to the repo.
@@ -223,8 +226,10 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 
 - **Blocklists, not a sandbox.** Guards catch an agent's mistakes, not a determined bypass: a file written
   through Bash (`sed -i`, `>`) skips the Edit/Write gates, and command matching is regex-based (known false
-  positive: `git push` quoted inside another command's argument is blocked). Put the same checks in CI for
-  anything that must hold.
+  positive: `git push` quoted inside another command's argument is blocked, and so is a heredoc that writes a
+  file containing `git push` or another package manager's command. Use the Edit or Write tool for such a file.
+  The guard does not skip heredoc text, because a heredoc fed to a shell runs it). Put the same checks in CI
+  for anything that must hold.
 - **Hooks fail open** when they crash. Stop hooks can only nudge once per turn (`stop_hook_active`).
 - `verify` runs commands from an agent-written plan; it is not allow-listed and refuses commands guard-bash
   would block. Review the plan table before implementation starts.

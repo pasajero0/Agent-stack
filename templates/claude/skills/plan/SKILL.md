@@ -22,7 +22,10 @@ argument-hint: "<stage id, e.g. A0>"
    **Light spec** (`light: true`): no test tasks — each task's `verify` is the `Check:` command of its ACs,
    and the last task runs them all.
 2. **Write `.claude/tmp/$ARGUMENTS/tasks.json`** (the file can be written once — after that only
-   `.claude/bin/verify` updates it; to re-plan, `rm` it and write a new one):
+   `.claude/bin/verify` updates it; to re-plan, `rm` it and write a new one). Claude Code asks the human to
+   approve a write under `.claude/`; with no one to approve, the write is denied, so say that and stop.
+   Under the driver (`agent-stack run`), do not write the file at all: return the tasks, and the driver writes
+   it:
 
    ```json
    { "stage": "$ARGUMENTS",
