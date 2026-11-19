@@ -10,6 +10,8 @@
 - **A spec with `## Terms` may now fail `trace`** when the repo has `docs/GLOSSARY.md`: each Terms entry must be
   a glossary headword or be marked `- **Word** (local): …`. Mark the spec's own words `(local)`, move the shared
   ones to the glossary, or set `"glossary": ""` in `gates.json` to opt out.
+- **Copy the new "Explaining to the human" section by hand.** `CLAUDE.md` is a seed file, so `update` keeps
+  your copy. Take the section from `templates/claude/_normative.md`.
 
 ### Gates
 
@@ -25,6 +27,12 @@
 
 - [ADR 0001](docs/adr/0001-pipeline-driver.md): a driver program, `agent-stack run`, holds the pipeline
   order.
+- **Five sentence rules in the generated `CLAUDE.md`.** "Explaining to the human" now asks for about 20 words
+  a step and 25 an explanation, the condition first, who acts, one word for one thing, plain verbs, and
+  short text that keeps the facts. The rules hold for replies, docs, prompts and commit bodies. The old
+  "everyday words" pushed the model to swap a glossary term for a synonym. The rules come from ASD-STE100
+  (Issue 9) and Google's "Writing for a global audience", without the STE dictionary. In one test a strict
+  "write in ASD-STE100" prompt lost 46.8% of the facts about code, so the harness does not use one.
 
 ### Driver (experimental)
 

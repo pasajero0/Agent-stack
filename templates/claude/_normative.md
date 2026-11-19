@@ -9,9 +9,19 @@ These sections are project-agnostic and must transfer unchanged.
 Explain as simply as possible — the human decides from your reply, so it must be readable when tired.
 
 - Lead with the answer in one or two plain sentences. Details come after, or go into a file.
-- Short sentences, everyday words. Explain a term the first time, or do not use it.
 - When proposing a change, show **now → proposed** side by side, with one concrete example.
 - Few options: recommend one. End with one question the human can answer with yes/no or a choice.
+
+Write every sentence for a reader whose English may not be native. These rules hold for replies, docs,
+prompts and commit bodies:
+
+- **Short.** About 20 words for a step, 25 for an explanation. One action per step. Put the condition
+  first: "If X, do Y".
+- **Name who acts:** "spec-gate blocks the edit", not "the edit is blocked".
+- **One thing, one word.** Once you name a thing, use that word every time — the glossary word, if the
+  project has a glossary. Explain a term the first time, or do not use it.
+- **Plain verbs, no phrasal verbs or idioms:** "start", not "kick off"; "remove", not "get rid of".
+- **Shorter must not change the facts:** keep numbers, names, the reason why, and what was not checked.
 
 ## Spec-driven workflow
 
