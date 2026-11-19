@@ -86,6 +86,19 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(tasks).toMatchObject({ tasks: [{ id: "T1" }, { id: "T2" }] });
   });
 
+  it("v04 AC-65: a verify that cannot fail makes the plan invalid; plan is re-run once with the error", async () => {
+    const r = repo();
+    const bad = [
+      { id: "T1", ac: ["AC-1"], verify: "test -f hello.txt || true" },
+      { id: "T2", ac: ["AC-2"], verify: "test -f bye.txt" },
+    ];
+    await toPlanApprove(r, [plan({ tasks: bad }), plan()]);
+    expect(r.run().next).toBe("gate:plan-approve");
+    expect(r.logged()[3]?.prompt).toContain("task T1: verify cannot fail (|| true); remove it");
+    const tasks: unknown = JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"));
+    expect(tasks).toMatchObject({ tasks: [{ verify: "test -f hello.txt" }, { verify: "test -f bye.txt" }] });
+  });
+
   it("v04 AC-45: an invalid plan twice exits 1 at plan and leaves no tasks.json", async () => {
     const r = repo();
     const bad = [

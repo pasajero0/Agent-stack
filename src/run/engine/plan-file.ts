@@ -37,8 +37,28 @@ export function specAcIds(specMd: string): string[] {
   return ids;
 }
 
-/** One task of the plan, or why it is not valid. */
-function parseTask(v: unknown, i: number, seen: Set<string>): PlanTask | string {
+/**
+ * AC-65: what makes a verify unable to fail, with the name the error shows. Whole words only, so a test name
+ * like `-t "true value"` is not one. Deterministic, no model.
+ */
+const NEVER_FAILS: readonly [RegExp, string][] = [
+  [/\|\|\s*true\b/, "|| true"],
+  [/\|\|\s*:(?=$|[\s;&|)])/, "|| :"],
+  [/\|\|\s*echo\b/, "|| echo"],
+  [/\|\|\s*exit\s+0\b/, "|| exit 0"],
+  [/;\s*true\b/, "; true"],
+  [/;\s*exit\s+0\b/, "; exit 0"],
+  [/2>\s*\/dev\/null\s*\|\|/, "2>/dev/null ||"],
+  [/\bset\s+\+[A-Za-z]*e/, "set +e"],
+];
+
+/** The pattern that keeps `verify` from failing, or null. */
+export function neverFails(verify: string): string | null {
+  return NEVER_FAILS.find(([re]) => re.test(verify))?.[1] ?? null;
+}
+
+/** One task of the plan, or why it is not valid. A verify that cannot fail is checked in a new plan only. */
+function parseTask(v: unknown, i: number, seen: Set<string>, fresh: boolean): PlanTask | string {
   const at = `tasks[${i}]`;
   if (!isObj(v)) return `${at} is not an object`;
   if (!nonEmptyStr(v.id)) return `${at} has no id`;
@@ -52,13 +72,16 @@ function parseTask(v: unknown, i: number, seen: Set<string>): PlanTask | string 
   const tier = TIERS.find((t) => t === v.tier);
   if (tier === undefined) return `task ${id} needs a tier of S, M or L`;
   if (!nonEmptyStr(v.verify)) return `task ${id} needs a non-empty verify`;
+  const never = fresh ? neverFails(v.verify) : null;
+  if (never !== null) return `task ${id}: verify cannot fail (${never}); remove it`;
   if (v.passes !== false) return `task ${id} must have passes: false`;
   return { id, ac: v.ac, tier, desc: typeof v.desc === "string" ? v.desc : "", verify: v.verify };
 }
 
 /**
- * The valid plan in `text` against the spec's criteria, or why it is not one. With `fresh` false the `passes`
- * flags verify has written since are accepted.
+ * The valid plan in `text` against the spec's criteria, or why it is not one. With `fresh` false (an approved
+ * plan) the `passes` flags verify has written since are accepted, and the verify commands are not re-checked:
+ * a run in progress is not stopped by a rule newer than its plan (AC-65).
  */
 export function parsePlan(text: string, specMd: string, fresh = true): PlanTask[] | string {
   let raw: unknown;
@@ -71,7 +94,7 @@ export function parsePlan(text: string, specMd: string, fresh = true): PlanTask[
   const seen = new Set<string>();
   const tasks: PlanTask[] = [];
   for (const [i, v] of raw.tasks.entries()) {
-    const t = parseTask(fresh || !isObj(v) ? v : { ...v, passes: false }, i, seen);
+    const t = parseTask(fresh || !isObj(v) ? v : { ...v, passes: false }, i, seen, fresh);
     if (typeof t === "string") return t;
     tasks.push(t);
   }

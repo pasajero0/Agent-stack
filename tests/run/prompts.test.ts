@@ -143,6 +143,15 @@ describe("role prompts", () => {
     expect(flat).toMatch(/under the driver \(`agent-stack run`\), a retry runs on Opus/i);
   });
 
+  it("v04 AC-65: the /plan skill says a verify must be able to fail, with the same patterns", () => {
+    const skill = readFileSync(new URL("../../templates/claude/skills/plan/SKILL.md", import.meta.url), "utf8");
+    const flat = skill.replace(/\s+/g, " ");
+    expect(flat).toMatch(/`verify` must be able to fail/);
+    for (const p of ["|| true", "|| :", "|| echo", "|| exit 0", "; true", "; exit 0", "2>/dev/null ||", "set +e"]) {
+      expect(flat).toContain(`\`${p}\``);
+    }
+  });
+
   it("v04 AC-4: implement labels feedback FROM THE PROGRAM", () => {
     const p = implementPrompt({
       taskId: "T1",
