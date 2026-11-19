@@ -1,8 +1,9 @@
 /**
  * Starting Claude Code for one role and classifying how the call ended.
- * Spec: docs/specs/v04/SPEC.md — "How Claude Code is invoked", "Result fields the driver reads", AC-2, AC-35..38.
+ * Spec: docs/specs/v04/SPEC.md — "How Claude Code is invoked", "Result fields the driver reads", AC-2, AC-35..38, AC-58.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
 import type { Role } from "./types.js";
@@ -49,6 +50,31 @@ export interface CallIo {
   signal?: AbortSignal;
 }
 
+/** What a call may load besides the repo (AC-58): the project's MCP config, and the user CLAUDE.md to exclude. */
+export interface CallScope {
+  /** `--mcp-config`: the project's `.mcp.json`, or an empty server list. */
+  mcpConfig: string;
+  /** Absolute path of the user-level CLAUDE.md, passed in `claudeMdExcludes`. */
+  userClaudeMd: string;
+}
+
+const NO_MCP = '{"mcpServers":{}}';
+
+export function callScope(projectDir: string, home: string): CallScope {
+  const mcp = join(projectDir, ".mcp.json");
+  return { mcpConfig: existsSync(mcp) ? mcp : NO_MCP, userClaudeMd: join(home, ".claude", "CLAUDE.md") };
+}
+
+/**
+ * The child's env (AC-58): the account's claude.ai connectors (about 150k tokens a turn), auto-memory and the
+ * git status snapshot (the user's name) are off.
+ */
+export const PROJECT_ONLY_ENV: Readonly<Record<string, string>> = {
+  ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+  CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: "1",
+};
+
 export type CallOutcome =
   | { kind: "ok"; output: unknown; costUsd: number; denials: string[]; turns: number }
   | { kind: "infra"; message: string; costUsd: number }
@@ -62,7 +88,8 @@ export type CallOutcome =
 const ROLE_TOOLS: Record<Role, { tools: string; mode: "default" | "acceptEdits" }> = {
   clarify: { tools: "Read,Glob,Grep", mode: "default" },
   spec: { tools: "Read,Glob,Grep,Write,Edit,Agent", mode: "acceptEdits" },
-  plan: { tools: "Read,Glob,Grep,Write", mode: "acceptEdits" },
+  // The driver writes tasks.json from the output (AC-12): Claude Code guards `.claude/` even under acceptEdits.
+  plan: { tools: "Read,Glob,Grep", mode: "default" },
   implement: { tools: "Read,Glob,Grep,Edit,Write,Bash", mode: "acceptEdits" },
   review: { tools: "Read,Glob,Grep", mode: "default" },
 };
@@ -80,8 +107,11 @@ function implementAllowed(c: CallCommands): string[] {
   return out;
 }
 
-/** The argv (without the binary) for one call. Never `--bare`, a bypass mode or `disableAllHooks` (AC-2). */
-export function buildArgs(spec: CallSpec): string[] {
+/**
+ * The argv (without the binary) for one call. Never `--bare`, a bypass mode or `disableAllHooks` (AC-2); only
+ * the project's MCP servers, settings and CLAUDE.md (AC-58).
+ */
+export function buildArgs(spec: CallSpec, scope: CallScope): string[] {
   const { tools, mode } = ROLE_TOOLS[spec.role];
   const args = [
     "-p",
@@ -97,6 +127,13 @@ export function buildArgs(spec: CallSpec): string[] {
     tools,
     "--permission-mode",
     mode,
+    "--strict-mcp-config",
+    "--mcp-config",
+    scope.mcpConfig,
+    "--setting-sources",
+    "project,local",
+    "--settings",
+    JSON.stringify({ claudeMdExcludes: [scope.userClaudeMd] }),
   ];
   if (spec.budgetUsd !== null) args.push("--max-budget-usd", String(spec.budgetUsd));
   if (spec.role === "implement") {
@@ -187,11 +224,11 @@ function killGroup(pid: number | undefined, killChild: () => void): void {
  */
 export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcome> {
   const bin = io.env?.["AGENT_STACK_CLAUDE"] ?? process.env["AGENT_STACK_CLAUDE"] ?? "claude";
-  const args = buildArgs(spec);
+  const args = buildArgs(spec, callScope(io.cwd, homedir()));
   const sub = execa(bin, args, {
     cwd: io.cwd,
     input: io.prompt,
-    env: { ...io.env, AGENT_STACK_RUN: io.runId },
+    env: { ...io.env, ...PROJECT_ONLY_ENV, AGENT_STACK_RUN: io.runId },
     detached: true,
     reject: false,
     stripFinalNewline: false,

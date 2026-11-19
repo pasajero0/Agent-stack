@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildArgs, callClaude, type CallSpec, type CallIo } from "../../src/run/claude.js";
+import { buildArgs, callClaude, callScope, PROJECT_ONLY_ENV, type CallSpec, type CallIo, type CallScope } from "../../src/run/claude.js";
 import type { Role } from "../../src/run/types.js";
 
 type Commands = { test: string; lint: string; verify: string };
@@ -13,6 +13,7 @@ const NO_COMMANDS: Commands = { test: "", lint: "", verify: "" };
 
 const FAKE = fileURLToPath(new URL("./fake-claude.mjs", import.meta.url));
 const SCHEMA = { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] };
+const SCOPE: CallScope = { mcpConfig: '{"mcpServers":{}}', userClaudeMd: "/home/u/.claude/CLAUDE.md" };
 const FORBIDDEN = ["--bare", "bypassPermissions", "--dangerously-skip-permissions", "disableAllHooks"];
 
 /** A non-implement spec: it carries no commands. */
@@ -76,14 +77,14 @@ describe("buildArgs", () => {
   const table: Array<[Role, string, string]> = [
     ["clarify", "Read,Glob,Grep", "default"],
     ["spec", "Read,Glob,Grep,Write,Edit,Agent", "acceptEdits"],
-    ["plan", "Read,Glob,Grep,Write", "acceptEdits"],
+    ["plan", "Read,Glob,Grep", "default"],
     ["implement", "Read,Glob,Grep,Edit,Write,Bash", "acceptEdits"],
     ["review", "Read,Glob,Grep", "default"],
   ];
 
   for (const [role, tools, mode] of table) {
     it(`v04 AC-2: ${role} gets -p, json output, max turns, model, schema, its tools and permission mode`, () => {
-      const args = buildArgs(anyRole(role, { test: "pnpm test", lint: "", verify: "pnpm vitest run x" }));
+      const args = buildArgs(anyRole(role, { test: "pnpm test", lint: "", verify: "pnpm vitest run x" }), SCOPE);
       expect(args).toContain("-p");
       expect(valueAfter(args, "--output-format")).toBe("json");
       expect(valueAfter(args, "--max-turns")).toBe("60");
@@ -99,7 +100,7 @@ describe("buildArgs", () => {
 
   it("v04 AC-2: implement allows test, lint prefix, read-only git and the task's verify verbatim", () => {
     const verify = "test -f a.ts && pnpm vitest run tests/run/a.test.ts && pnpm typecheck";
-    const args = buildArgs(impl({ test: "pnpm test", lint: "eslint --fix {file}", verify }, { model: "opus" }));
+    const args = buildArgs(impl({ test: "pnpm test", lint: "eslint --fix {file}", verify }, { model: "opus" }), SCOPE);
     expect(valueAfter(args, "--model")).toBe("opus");
     expect(variadic(args, "--allowedTools")).toEqual([
       "Bash(pnpm test:*)",
@@ -114,7 +115,7 @@ describe("buildArgs", () => {
   });
 
   it("v04 AC-2: implement leaves out allowedTools entries whose command is empty", () => {
-    const args = buildArgs(impl({ test: "", lint: "  ", verify: "" }));
+    const args = buildArgs(impl({ test: "", lint: "  ", verify: "" }), SCOPE);
     expect(variadic(args, "--allowedTools")).toEqual([
       "Bash(git status:*)",
       "Bash(git diff:*)",
@@ -124,8 +125,43 @@ describe("buildArgs", () => {
   });
 
   it("v04 AC-35: --max-budget-usd is passed only with a dollar fuse", () => {
-    expect(valueAfter(buildArgs(spec("review", { budgetUsd: 1.25 })), "--max-budget-usd")).toBe("1.25");
-    expect(buildArgs(spec("review", { budgetUsd: null }))).not.toContain("--max-budget-usd");
+    expect(valueAfter(buildArgs(spec("review", { budgetUsd: 1.25 }), SCOPE), "--max-budget-usd")).toBe("1.25");
+    expect(buildArgs(spec("review", { budgetUsd: null }), SCOPE)).not.toContain("--max-budget-usd");
+  });
+
+  it("v04 AC-58: every role loads only the project's MCP servers, settings and CLAUDE.md", () => {
+    for (const role of ["clarify", "spec", "plan", "implement", "review"] as const) {
+      const args = buildArgs(anyRole(role, { test: "pnpm test", lint: "", verify: "x" }), SCOPE);
+      expect(args).toContain("--strict-mcp-config");
+      expect(valueAfter(args, "--mcp-config")).toBe('{"mcpServers":{}}');
+      expect(valueAfter(args, "--setting-sources")).toBe("project,local");
+      expect(JSON.parse(valueAfter(args, "--settings") ?? "null")).toEqual({ claudeMdExcludes: ["/home/u/.claude/CLAUDE.md"] });
+    }
+  });
+
+  it("v04 AC-58: implement's variadic --allowedTools stays last, after the project-only flags", () => {
+    const args = buildArgs(impl({ test: "pnpm test", lint: "", verify: "" }), SCOPE);
+    expect(args.indexOf("--allowedTools")).toBeGreaterThan(args.indexOf("--settings"));
+    expect(args.indexOf("--allowedTools") + variadic(args, "--allowedTools").length).toBe(args.length - 1);
+  });
+
+  it("v04 AC-58: callScope uses the project's .mcp.json when it exists, an empty server list otherwise", () => {
+    const d = mkdtempSync(join(tmpdir(), "as-scope-"));
+    try {
+      expect(callScope(d, "/home/u")).toEqual(SCOPE);
+      writeFileSync(join(d, ".mcp.json"), '{"mcpServers":{"x":{"command":"x"}}}');
+      expect(callScope(d, "/home/u")).toEqual({ mcpConfig: join(d, ".mcp.json"), userClaudeMd: "/home/u/.claude/CLAUDE.md" });
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("v04 AC-58: the env turns off account connectors, auto-memory and the git status snapshot", () => {
+    expect(PROJECT_ONLY_ENV).toEqual({
+      ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+      CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: "1",
+    });
   });
 });
 
@@ -154,19 +190,26 @@ describe("callClaude with the fake claude", () => {
       ...over,
     };
   };
-  const logged = (): Array<{ argv: string[]; env: { AGENT_STACK_RUN: string | null } }> =>
+  type Env = { AGENT_STACK_RUN: string | null } & Record<string, string | null>;
+  const logged = (): Array<{ argv: string[]; env: Env }> =>
     readFileSync(log, "utf8")
       .trim()
       .split("\n")
-      .map((l) => JSON.parse(l) as { argv: string[]; env: { AGENT_STACK_RUN: string | null } });
+      .map((l) => JSON.parse(l) as { argv: string[]; env: Env });
 
   it("v04 AC-2: runs $AGENT_STACK_CLAUDE with the built argv, prompt on stdin and AGENT_STACK_RUN set", async () => {
     const s = spec("review");
     const out = await callClaude(s, io([{ expectRole: "review", output: { ok: true } }]));
     expect(out).toEqual({ kind: "ok", output: { ok: true }, costUsd: 0.01, denials: [], turns: 3 });
     const [entry] = logged();
-    expect(entry.argv).toEqual(buildArgs(s));
+    expect(entry.argv).toEqual(buildArgs(s, callScope(dir, homedir())));
     expect(entry.env.AGENT_STACK_RUN).toBe("20261118-120000");
+  });
+
+  it("v04 AC-58: the child gets the project-only env", async () => {
+    await callClaude(spec("review"), io([{ output: { ok: true } }]));
+    const [entry] = logged();
+    expect(entry.env).toMatchObject(PROJECT_ONLY_ENV);
   });
 
   it("v04 AC-2: writes calls/<n>-<role>.json with argv, exit code and result, never the prompt", async () => {

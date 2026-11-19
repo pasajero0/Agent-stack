@@ -2,7 +2,7 @@
 // Fake `claude` for the v04 driver tests. Plain Node ESM, no dependencies. See .claude/tmp/v04/design.md.
 //
 // FAKE_CLAUDE_SCRIPT names a JSON array of responses, consumed in order (counter in `<script>.idx`).
-// FAKE_CLAUDE_LOG gets one JSONL line per call: {argv, env: {AGENT_STACK_RUN}, prompt}. `prompt` is an excerpt:
+// FAKE_CLAUDE_LOG gets one JSONL line per call: {argv, env: {AGENT_STACK_RUN and the AC-58 vars}, prompt}. `prompt` is an excerpt:
 // the whole prompt up to 4000 chars, else its first and last 2000 (the program's feedback is appended last).
 // A response: { expectRole?, expectModel?, writes?: {path: content}, deletes?: string[], exec?: string,
 //               exit?: number, stdout?: string | object, sleepMs?: number, output?: unknown }
@@ -29,10 +29,13 @@ function flag(name) {
 
 const prompt = readStdin();
 
+const LOGGED_ENV = ["AGENT_STACK_RUN", "ENABLE_CLAUDEAI_MCP_SERVERS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY", "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"];
+const loggedEnv = () => Object.fromEntries(LOGGED_ENV.map((k) => [k, process.env[k] ?? null]));
+
 const log = process.env.FAKE_CLAUDE_LOG;
 if (log) {
   const excerpt = prompt.length <= 4000 ? prompt : `${prompt.slice(0, 2000)}\n[...]\n${prompt.slice(-2000)}`;
-  appendFileSync(log, JSON.stringify({ argv, env: { AGENT_STACK_RUN: process.env.AGENT_STACK_RUN ?? null }, prompt: excerpt }) + "\n");
+  appendFileSync(log, JSON.stringify({ argv, env: loggedEnv(), prompt: excerpt }) + "\n");
 }
 
 const scriptPath = process.env.FAKE_CLAUDE_SCRIPT;
