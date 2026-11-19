@@ -448,7 +448,9 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - the cost;
   - in task mode with more than one plan task, the **final check**: `.claude/bin/verify` with no task id, run
     once more right before the gate, so a later task that broke an earlier one shows up. It is skipped after a
-    fix task F*k*, whose checks already are every task's verify (AC-22).
+    fix task F*k*, whose checks already are every task's verify (AC-22). When the tree has uncommitted changes
+    outside `.claude/tmp/`, the gate says that the final check ran on them, so a hand fix is not taken for
+    the committed state.
 - **AC-22:** WHEN the human accepts, THE SYSTEM SHALL finish the run and SHALL NOT push or merge (D2).
   WHEN the human rejects with a comment, THE SYSTEM SHALL implement a fix task F*k* with the comment as
   feedback.
@@ -670,6 +672,7 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-21: the gate names a final check that ran on uncommitted changes (from review).
 - 2026-11-19 — AC-62 (new), run file `costUnknownCalls`: a killed call or a result with no cost is unknown,
   not $0, so a dollar fuse does not count too little without saying so.
 - 2026-11-19 — AC-21, AC-61 (new): the final check before gate:accept. A later task could break an earlier
