@@ -273,7 +273,9 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   - the full text of the `/spec` skill, with `$ARGUMENTS` = `<stage> <title>` and `${CLAUDE_SKILL_DIR}`
     filled in;
   - the description, and the answers marked "these are the grill";
-  - "write a full spec; the branch exists; do not commit, branch or push".
+  - "write a full spec; the branch exists; do not commit, branch or push";
+  - "skip step 7 (Hand over): the driver commits the spec and stops for the human's merge; do not ask about
+    committing, merging or handing over".
 - **plan**:
   - the full text of the `/plan` skill, filled in;
   - "the spec is merged and the branch exists — skip the precondition and step 1; do not run verify,
@@ -626,6 +628,7 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
 - 2026-11-19 — AC-10, AC-47: without a remote, the spec-merge gate prints the local merge commands, not a push.
