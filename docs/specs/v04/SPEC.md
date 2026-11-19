@@ -233,7 +233,7 @@ Any other value is refused when a run starts, with code 1.
 | `baseCommit` | sha, set when the run's work branch is created |
 | `tasks` | `{ id, taskBase, attempts, blockingCount, lastFeedback, checks: {cmd, exit, skipped}[], notes: string[], commit: sha \| "empty" \| null }[]` |
 | `createdBranches` | `string[]`, the branches this run created |
-| `gates` | `{ gate, at, decision, comment }[]` |
+| `gates` | `{ gate, at, decision, comment }[]`; a plan-approve reject adds `planSha256`, a decision retry `asked` |
 | `answers` | `{ question, answer }[]` |
 | `humanDecisions` | `string[]`, shown at the next gate |
 | `costUsd` | number, the sum of `total_cost_usd`; always recorded, whatever the fuse |
@@ -534,6 +534,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   `needsHumanDecision` is not empty, THEN THE SYSTEM SHALL not re-run it. It SHALL go to gate:limit, reason
   "decision", and show the items (partner of AC-12, AC-44).
   - `r` retries the role with the comment that follows, labelled "FROM THE HUMAN"; `c` cancels.
+  - The gate record keeps the items as `asked`. The retried role gets them with the answer: "FROM THE HUMAN:
+    you asked: <items>; the answer: <comment>".
   - The attempts and the fuse are unchanged.
 - **AC-46:** IF a task's checks pass with an empty task diff, THEN THE SYSTEM SHALL record `commit: "empty"`,
   make no commit, and show it at gate:accept (partner of AC-20).
@@ -629,6 +631,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-57: the retried role gets the questions it asked with the answer; a short "yes" meant
+  nothing to a fresh session.
 - 2026-11-19 — Gate input (answers): each prompt says what Enter does; an answer meant for the stage id was
   typed over two recommended answers.
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
