@@ -104,7 +104,8 @@ const answersGate: StepHandler = async (ctx) => {
   const answers: AnswerRecord[] = [];
   for (const [i, q] of p.questions.entries()) {
     ctx.out(`Q${i + 1}: ${q.text} [recommended: ${q.recommended}]`);
-    const a = await ask(ctx, `answer ${i + 1}> `);
+    // Gate input: the prompt itself says what Enter does, so a reply meant for another prompt is not typed over it.
+    const a = await ask(ctx, `answer ${i + 1} (Enter = recommended, or type your own)> `);
     if (a === null) return NO_INPUT;
     const s = a.trim();
     if (s === "c") return cancel();

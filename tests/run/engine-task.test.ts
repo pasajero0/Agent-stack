@@ -49,6 +49,15 @@ describe("task mode: clarify, answers and the spec", () => {
     for (const want of ["Which file?", "hello.txt", "task", STAGE]) expect(t).toContain(want);
   });
 
+  it("v04 AC-6: each question's prompt says that Enter takes the recommended answer", async () => {
+    const r = repo();
+    r.script([clarify()]);
+    const asked: string[] = [];
+    const p = { ask: async (q: string) => (asked.push(q), null), close: () => {} };
+    expect(await startRun({ ...r.opts(), prompter: p, mode: "task", description: TASK_DESC })).toBe(3);
+    expect(asked[0]).toBe("answer 1 (Enter = recommended, or type your own)> ");
+  });
+
   it("v04 AC-8: the confirmed answers create spec/<stage> from the base ref and the spec is committed as docs(<stage>): spec — <title>", async () => {
     const r = repo();
     const main = sh(r.dir, "rev-parse", "main");
