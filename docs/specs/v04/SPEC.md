@@ -240,7 +240,8 @@ Any other value is refused when a run starts, with code 1.
 | `gates` | `{ gate, at, decision, comment }[]`; a plan-approve reject adds `planSha256`, a decision retry `asked` |
 | `answers` | `{ question, answer }[]` |
 | `humanDecisions` | `string[]`, shown at the next gate |
-| `costUsd` | number, the sum of `total_cost_usd`; always recorded, whatever the fuse |
+| `costUsd` | number, the sum of the known `total_cost_usd`; always recorded, whatever the fuse |
+| `costUnknownCalls` | number of calls whose cost is unknown: killed (timeout, interrupt) or a result without `total_cost_usd`. A run file without it reads as 0 (AC-62) |
 | `calls` | number of Claude calls made |
 | `fuse` | `{ calls: n }` \| `{ usd: n }` \| `"off"`, copied from config at start; raised at gate:limit |
 
@@ -335,7 +336,7 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 - `subtype`, one of `success`, `error_max_turns`, `error_max_budget_usd`, `error_during_execution`,
   `error_max_structured_output_retries` (check the list against the CLI version in use);
 - `num_turns`;
-- `total_cost_usd`;
+- `total_cost_usd`, or unknown when it is missing or the call was killed (AC-62);
 - `permission_denials`;
 - `structured_output`.
 
@@ -544,6 +545,11 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   last 50 lines (partner of AC-21).
   - The gate SHALL say that `r` with a comment adds a fix task, and that `a` accepts a red result.
   - The human decides; the driver does not refuse `a`.
+- **AC-62:** IF a call is killed, or its result has no `total_cost_usd`, THEN THE SYSTEM SHALL count its cost
+  as unknown, not as $0 (partner of AC-35).
+  - It SHALL add 1 to `costUnknownCalls` and nothing to `costUsd`.
+  - Every place that shows the cost SHALL add "k with unknown cost" when k > 0.
+  - With a `usd` fuse it SHALL also say that the fuse may count too little.
 - **AC-60:** IF a check or base-check's `test` runs longer than `checkTimeoutMin`, THEN THE SYSTEM SHALL exit
   with code 1 and name the command and the limit (partner of AC-15, AC-19).
   - It SHALL count no attempt and keep `next` at that step, so `--resume` runs the checks again.
@@ -664,6 +670,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-62 (new), run file `costUnknownCalls`: a killed call or a result with no cost is unknown,
+  not $0, so a dollar fuse does not count too little without saying so.
 - 2026-11-19 — AC-21, AC-61 (new): the final check before gate:accept. A later task could break an earlier
   one's verify, and the gate still showed the earlier green.
 - 2026-11-19 — AC-33, AC-60 (new): a check timeout exits 1 with no attempt counted, not a red check. A hung
