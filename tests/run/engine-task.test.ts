@@ -58,6 +58,51 @@ describe("task mode: clarify, answers and the spec", () => {
     expect(asked[0]).toBe("answer 1 (Enter = recommended, or type your own)> ");
   });
 
+  describe("v04 AC-59: the spec's terms are checked after the spec role", () => {
+    const withTerms = (terms: string): string => specMd().replace("## Acceptance criteria", `## Terms\n\n${terms}\n## Acceptance criteria`);
+    /** A repo whose base commit has docs/GLOSSARY.md with one headword, Greeting. */
+    function glossaryRepo(): ReturnType<typeof repo> {
+      const r = repo();
+      write(r.dir, "docs/GLOSSARY.md", "# Glossary\n\n- **Greeting** — what the file says.\n");
+      sh(r.dir, "add", "-A");
+      sh(r.dir, "commit", "-q", "-m", "docs: glossary");
+      return r;
+    }
+    const start = (r: ReturnType<typeof repo>) => startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
+
+    it("v04 AC-59: an unlisted term undoes the spec and re-runs the role with trace's output", async () => {
+      const r = glossaryRepo();
+      r.script([
+        clarify(),
+        spec({ writes: { [SPEC_PATH]: withTerms("- **Greeting** — shared.\n- **Wave** — new word.\n") } }),
+        spec({ writes: { [SPEC_PATH]: withTerms("- **Greeting** — shared.\n- **Wave** (local): this spec only.\n") } }),
+      ]);
+      expect(await start(r), text(r)).toBe(3);
+      expect(r.run().next).toBe("gate:spec-merge");
+      expect(r.logged().length).toBe(3);
+      expect(r.logged()[2]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*terms not in docs\/GLOSSARY\.md: Wave/);
+      expect(sh(r.dir, "show", `${SPEC_BRANCH}:${SPEC_PATH}`)).toContain("**Wave** (local)");
+    });
+
+    it("v04 AC-8: a glossary edit by the spec role is in bounds and committed with the spec", async () => {
+      const r = glossaryRepo();
+      const glossary = "# Glossary\n\n- **Greeting** — what the file says.\n- **Wave** — a farewell.\n";
+      r.script([clarify(), spec({ writes: { [SPEC_PATH]: withTerms("- **Wave** — shared now.\n"), "docs/GLOSSARY.md": glossary } })]);
+      expect(await start(r), text(r)).toBe(3);
+      expect(r.logged().length).toBe(2);
+      expect(sh(r.dir, "show", "--stat", "--format=", SPEC_BRANCH)).toContain("docs/GLOSSARY.md");
+    });
+
+    it("v04 AC-59: unlisted terms twice exit 1 at spec", async () => {
+      const r = glossaryRepo();
+      const bad = spec({ writes: { [SPEC_PATH]: withTerms("- **Wave** — new word.\n") } });
+      r.script([clarify(), bad, bad]);
+      expect(await start(r)).toBe(1);
+      expect(r.run().next).toBe("spec");
+      expect(text(r)).toContain("Wave");
+    });
+  });
+
   it("v04 AC-8: the confirmed answers create spec/<stage> from the base ref and the spec is committed as docs(<stage>): spec — <title>", async () => {
     const r = repo();
     const main = sh(r.dir, "rev-parse", "main");

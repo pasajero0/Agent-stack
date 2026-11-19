@@ -102,4 +102,6 @@ export interface RunConfig {
   adrDir: string;
   baseBranch: string;
   stagePattern: string;
+  /** The glossary file: the spec role may edit it, and `trace --terms` checks against it; "" for none (AC-8, AC-59). */
+  glossary: string;
 }

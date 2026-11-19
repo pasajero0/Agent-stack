@@ -41,6 +41,7 @@ const DEFAULTS = {
   adrDir: "docs/adr",
   baseBranch: "main",
   stagePattern: DEFAULT_STAGE_PATTERN,
+  glossary: "docs/GLOSSARY.md",
 };
 
 describe("loadRunConfig", () => {
@@ -64,6 +65,15 @@ describe("loadRunConfig", () => {
   it("normalises specsDir and adrDir: no leading ./, no trailing /", () => {
     writeGates({ specsDir: "./docs/specs/", adrDir: "docs/adr//" });
     expect(loadRunConfig(dir)).toMatchObject({ specsDir: "docs/specs", adrDir: "docs/adr" });
+  });
+
+  it("v04 AC-8: glossary defaults to docs/GLOSSARY.md, takes a path from gates.json, and \"\" means none", () => {
+    writeGates({});
+    expect(loadRunConfig(dir).glossary).toBe("docs/GLOSSARY.md");
+    writeGates({ glossary: "./handbook/words.md" });
+    expect(loadRunConfig(dir).glossary).toBe("handbook/words.md");
+    writeGates({ glossary: "" });
+    expect(loadRunConfig(dir).glossary).toBe("");
   });
 
   it("treats run: null as no run key", () => {

@@ -47,6 +47,8 @@ export function specPrompt(
     "",
     "Skip step 7 (Hand over) of the skill: the driver commits the spec and stops for the human's merge. Do not ask about committing, merging or handing over.",
     "",
+    "The driver checks your `## Terms` with `trace --terms` after you: a word the project shares goes into the glossary in this change, and a word for this spec only is marked `(local)`.",
+    "",
     "Description:",
     p.description,
     "",

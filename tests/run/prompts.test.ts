@@ -100,6 +100,13 @@ describe("role prompts", () => {
     expect(p).toMatch(/do not ask about committing, merging or handing over/i);
   });
 
+  it("v04 AC-59: spec says the driver checks its Terms with trace --terms: glossary or (local)", () => {
+    const p = specPrompt(project("spec", "skill"), { stage: "A1", title: "t", description: "d", answers: [] });
+    expect(p).toMatch(/the driver checks your `## Terms` with `trace --terms`/i);
+    expect(p).toMatch(/goes into the glossary in this change/);
+    expect(p).toMatch(/marked `\(local\)`/);
+  });
+
   it("v04 AC-17: plan says every task ends green, tests first, no test-only tasks", () => {
     const dir = project("plan", "PLAN SKILL $ARGUMENTS");
     const p = planPrompt(dir, { stage: "A1", title: "Login", comment: "make it smaller" });

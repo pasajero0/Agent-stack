@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { RunError } from "../errors.js";
 import { baseRef, branchExists, checkout, commitPaths, createBranch, currentBranch, dirtyPaths, existsOnRef, git, headSha, normaliseHeader, slugify } from "../git.js";
+import { runCheck } from "../checks.js";
 import { specPrompt } from "../prompts.js";
 import { parseClarify, parseSpecOut, type ClarifyOutput } from "../schemas.js";
 import { writeRun } from "../store.js";
@@ -29,9 +30,24 @@ export function stageOf(run: RunFile): string {
   return run.stage;
 }
 
-/** The spec role may change only `<specsDir>/<stage>/` and `<adrDir>/` (AC-8); both are normalised by loadRunConfig. */
+/**
+ * The spec role may change only `<specsDir>/<stage>/`, `<adrDir>/` and the glossary file (AC-8); all are
+ * normalised by loadRunConfig. The glossary is in bounds so a shared word lands in the spec's own commit.
+ */
 export function specInBounds(cfg: RunConfig, stage: string): (path: string) => boolean {
-  return (p) => under(p, `${cfg.specsDir}/${stage}`) || under(p, cfg.adrDir);
+  return (p) => under(p, `${cfg.specsDir}/${stage}`) || under(p, cfg.adrDir) || (cfg.glossary !== "" && p === cfg.glossary);
+}
+
+/**
+ * `.claude/bin/trace --terms <stage>` after the spec role (AC-59): its output when it exits 1, else null. A
+ * missing trace, or another exit code (2: no spec, which AC-44 reports), is no check.
+ */
+async function termsProblem(ctx: Ctx, stage: string): Promise<string | null> {
+  const bin = join(ctx.projectDir, ".claude", "bin", "trace");
+  if (!existsSync(bin)) return null;
+  // The stage id passed AC-7 (letters and digits), so it is one shell word.
+  const r = await runCheck(`.claude/bin/trace --terms ${stage}`, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
+  return r.exit === 1 ? r.tail.trim() : null;
 }
 
 /**
@@ -92,6 +108,10 @@ const specStep: StepHandler = async (ctx) => {
     const { problems, outside } = checkRole(ctx, mark, inBounds);
     const missing = !existsSync(join(dir, file));
     if (missing) problems.push(`${file} does not exist; write the spec there`);
+    else {
+      const terms = await termsProblem(ctx, stage);
+      if (terms !== null) problems.push(terms);
+    }
     if (problems.length === 0) {
       const c = commitPaths(dir, dirtyPaths(dir).filter(inBounds), header);
       if (!c.ok) {

@@ -116,5 +116,7 @@ export function loadRunConfig(projectDir: string): RunConfig {
     adrDir: dirPath(str(parsed, "adrDir", DEFAULTS.adrDir)),
     baseBranch: str(parsed, "baseBranch", DEFAULTS.baseBranch),
     stagePattern: str(parsed, "stagePattern", DEFAULT_STAGE_PATTERN),
+    // The same default as .claude/bin/trace: docs/GLOSSARY.md unless gates.json names one ("" for none).
+    glossary: dirPath(str(parsed, "glossary", "docs/GLOSSARY.md")),
   };
 }
