@@ -57,6 +57,24 @@ describe("quick mode: the path", () => {
     expect(sh(r.dir, "show", "--stat", "--format=%s", "HEAD")).toContain("notes.txt");
   });
 
+  it("v04 AC-67: the review call gets the project's code-reviewer rules; without the agent the run exits 1 at review", async () => {
+    const r = repo({ run: { quickReviewLines: 3 } });
+    r.script([impl({ writes: { "notes.txt": lines(5) } }), review()]);
+    expect(await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC })).toBe(0);
+    const agent = readFileSync(join(r.dir, ".claude/agents/code-reviewer.md"), "utf8");
+    const body = agent.slice(agent.indexOf("You are a code reviewer"));
+    expect(r.logged()[1]?.prompt).toContain(body.split("\n")[0] ?? "x");
+    expect(r.logged()[1]?.prompt).toContain("Verify, don't trust.");
+
+    const r2 = repo({ run: { quickReviewLines: 3 } });
+    rmSync(join(r2.dir, ".claude/agents/code-reviewer.md"));
+    git(r2.dir, "commit", "-q", "-am", "chore: no reviewer");
+    r2.script([impl({ writes: { "notes.txt": lines(5) } })]);
+    expect(await startRun({ ...r2.opts(), mode: "quick", description: DESC })).toBe(1);
+    expect(r2.run().next).toBe("review:Q1");
+    expect(text(r2)).toMatch(/agent not found: .*code-reviewer\.md \(run agent-stack generate\)/);
+  });
+
   it("v04 AC-25: a diff within quickReviewLines skips the review", async () => {
     const r = repo({ run: { quickReviewLines: 10 } });
     r.script([impl({ writes: { "notes.txt": lines(5) } })]);

@@ -18,6 +18,18 @@ export function loadSkill(projectDir: string, name: string, args: string): strin
     .join(args);
 }
 
+/**
+ * The body of `.claude/agents/<name>.md` without its frontmatter: the rules a role takes from the project's
+ * agent, so the driver keeps no copy of them (AC-67).
+ */
+export function loadAgent(projectDir: string, name: string): string {
+  const file = join(projectDir, ".claude", "agents", `${name}.md`);
+  if (!existsSync(file)) throw new RunError(`agent not found: ${file} (run agent-stack generate)`, 1);
+  const text = readFileSync(file, "utf8");
+  const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(text);
+  return (m ? text.slice(m[0].length) : text).trim();
+}
+
 export function clarifyPrompt(p: { description: string; used: string[] }): string {
   return [
     "# Role: clarify",
@@ -129,17 +141,18 @@ export function conflictText(c: TestConflict, criteria: string[]): string {
   ].join("\n");
 }
 
-export function reviewPrompt(p: {
-  taskId: string;
-  taskDesc: string;
-  criteria: string[];
-  diff: string;
-  report: string;
-}): string {
+export function reviewPrompt(
+  projectDir: string,
+  p: { taskId: string; taskDesc: string; criteria: string[]; diff: string; report: string }
+): string {
   return [
     "# Role: review",
     "",
     "The driver has run the checks and cut this diff. You review only; you must not edit files, run commands, commit or branch.",
+    "",
+    "Review rules (.claude/agents/code-reviewer.md):",
+    "",
+    loadAgent(projectDir, "code-reviewer"),
     "",
     `Task ${p.taskId}: ${p.taskDesc}`,
     "",

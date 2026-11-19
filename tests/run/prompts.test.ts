@@ -9,11 +9,22 @@ import {
   conflictText,
   implementPrompt,
   isRisky,
+  loadAgent,
   loadSkill,
   planPrompt,
   reviewPrompt,
   specPrompt,
 } from "../../src/run/prompts.js";
+
+const AGENT = "---\nname: code-reviewer\nmodel: opus\n---\n\nYou are a code reviewer. RULE-X: every issue needs evidence.\n";
+
+/** A project with `.claude/agents/<name>.md`. */
+function agentProject(name = "code-reviewer", body = AGENT): string {
+  const dir = mkdtempSync(join(tmpdir(), "prompts-"));
+  mkdirSync(join(dir, ".claude", "agents"), { recursive: true });
+  writeFileSync(join(dir, ".claude", "agents", `${name}.md`), body);
+  return dir;
+}
 
 function project(skill: string, body: string): string {
   const dir = mkdtempSync(join(tmpdir(), "prompts-"));
@@ -92,7 +103,7 @@ describe("role prompts", () => {
     expect(p64).toMatch(/existing test, or the task's verify, contradicts a criterion/);
     expect(p64).toContain("TEST_CONFLICT");
     expect(p64).toMatch(/not written in this attempt/);
-    expect(first(reviewPrompt({ taskId: "T1", taskDesc: "d", criteria: [], diff: "", report: "" }))).toBe("# Role: review");
+    expect(first(reviewPrompt(agentProject(), { taskId: "T1", taskDesc: "d", criteria: [], diff: "", report: "" }))).toBe("# Role: review");
   });
 
   it("v04 AC-4: spec embeds the skill, marks the answers as the grill, forbids commit", () => {
@@ -193,11 +204,41 @@ describe("role prompts", () => {
   });
 
   it("v04 AC-4: review labels the report UNVERIFIED CLAIMS FROM THE IMPLEMENTER", () => {
-    const p = reviewPrompt({ taskId: "T1", taskDesc: "d", criteria: ["c"], diff: "+line", report: "all good" });
+    const p = reviewPrompt(agentProject(), { taskId: "T1", taskDesc: "d", criteria: ["c"], diff: "+line", report: "all good" });
     expect(p).toContain("UNVERIFIED CLAIMS FROM THE IMPLEMENTER");
     expect(p).toContain("all good");
     expect(p).toContain("+line");
     expect(p).toMatch(/verify proves/);
+  });
+
+  it("v04 AC-67: review takes its rules from the code-reviewer agent, without the frontmatter", () => {
+    const p = reviewPrompt(agentProject(), { taskId: "T1", taskDesc: "d", criteria: ["c"], diff: "+line", report: "r" });
+    expect(p).toContain("RULE-X: every issue needs evidence.");
+    expect(p).toContain("Review rules (.claude/agents/code-reviewer.md):");
+    expect(p).not.toContain("name: code-reviewer");
+    expect(p).not.toContain("model: opus");
+    // The rules come before the data, so the role reads them first.
+    expect(p.indexOf("RULE-X")).toBeLessThan(p.indexOf("+line"));
+  });
+
+  it("v04 AC-67: a missing code-reviewer agent is a RunError with exit code 1 that says to run generate", () => {
+    const dir = agentProject("other");
+    try {
+      loadAgent(dir, "code-reviewer");
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(RunError);
+      expect((e as RunError).exitCode).toBe(1);
+      expect((e as RunError).message).toBe(`agent not found: ${join(dir, ".claude", "agents", "code-reviewer.md")} (run agent-stack generate)`);
+    }
+  });
+
+  it("v04 AC-67: the code-reviewer agent answers in the caller's schema and says what the task verdicts mean", () => {
+    const agent = readFileSync(new URL("../../templates/claude/agents/code-reviewer.md", import.meta.url), "utf8");
+    const flat = agent.replace(/\s+/g, " ");
+    expect(flat).toMatch(/If the caller gives a JSON schema, answer in that schema/);
+    for (const field of ["`spec`", "`quality`", "`verifyProves`"]) expect(flat).toContain(field);
+    expect(flat).toMatch(/imagine the line that does it removed/i);
   });
 });
 

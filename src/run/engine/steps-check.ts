@@ -103,7 +103,7 @@ export const review: StepHandler = async (ctx, id) => {
   const diff = taskDiffText(ctx.projectDir, baseOf(task));
   const report = lastImplement(ctx).report;
   const prompt = (feedback: string | null): string => {
-    const p = reviewPrompt({ taskId: task.id, taskDesc: info.desc, criteria: info.criteria, diff, report });
+    const p = reviewPrompt(ctx.projectDir, { taskId: task.id, taskDesc: info.desc, criteria: info.criteria, diff, report });
     return feedback ? `${p}\n\n${feedback}` : p;
   };
   const r = await judgeCall(ctx, "review", prompt, parseReview);
