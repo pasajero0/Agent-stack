@@ -179,10 +179,24 @@ export function restorePaths(dir: string, base: string, paths: string[]): void {
 }
 
 /** Header that `@commitlint/config-conventional` accepts: lowercase scope and subject start, no period, ≤ 100. */
+/** A conventional `<type>(<scope>): ` or `<type>: ` at the start of a subject. */
+const TYPE_PREFIX = /^(feat|fix|refactor|test|docs|chore|perf|style|build|ci|revert)(\([^)]*\))?!?:\s*/i;
+
+/** Removes the stage or a type header the model repeated at the start of the subject (`A2: …`, `feat(a2): …`). */
+function dropRepeatedPrefix(text: string, scope: string | null): string {
+  const stage = scope ? new RegExp(`^${scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*`, "i") : null;
+  let out = text;
+  for (;;) {
+    const next = out.replace(TYPE_PREFIX, "").replace(stage ?? /$^/, "");
+    if (next === out || next.trim() === "") return out;
+    out = next;
+  }
+}
+
 export function normaliseHeader(type: string, scope: string | null, subject: string): string {
   if (subject.trim() === "") throw new RunError("commit subject is empty", 1);
   const prefix = scope ? `${type}(${scope.toLowerCase()}): ` : `${type}: `;
-  let text = subject.trim().replace(/\s+/g, " ");
+  let text = dropRepeatedPrefix(subject.trim().replace(/\s+/g, " "), scope);
   text = text.charAt(0).toLowerCase() + text.slice(1);
   text = text.slice(0, Math.max(0, 100 - prefix.length)).replace(/[.\s]+$/, "");
   return `${prefix}${text}`;

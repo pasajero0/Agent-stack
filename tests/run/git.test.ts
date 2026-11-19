@@ -193,6 +193,16 @@ describe("headers", () => {
     expect(normaliseHeader("fix", null, "Repair it")).toBe("fix: repair it");
   });
 
+  it("v04 AC-20: normaliseHeader drops a stage or type prefix the model repeated in the subject", () => {
+    expect(normaliseHeader("feat", "A2", "A2: add farewell(name) function")).toBe("feat(a2): add farewell(name) function");
+    expect(normaliseHeader("feat", "A2", "feat(a2): Add farewell")).toBe("feat(a2): add farewell");
+    expect(normaliseHeader("fix", null, "fix: repair it")).toBe("fix: repair it");
+    expect(normaliseHeader("feat", "A2", "feat: A2: add it")).toBe("feat(a2): add it");
+    // Not a stage or a known type: kept.
+    expect(normaliseHeader("docs", null, "usage: add a line")).toBe("docs: usage: add a line");
+    expect(normaliseHeader("feat", "A2", "A21: other stage")).toBe("feat(a2): a21: other stage");
+  });
+
   it("v04 AC-20: normaliseHeader cuts the header to 100 characters", () => {
     const h = normaliseHeader("feat", "a0", "x".repeat(200));
     expect(h.length).toBeLessThanOrEqual(100);
