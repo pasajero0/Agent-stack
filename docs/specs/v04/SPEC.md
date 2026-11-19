@@ -224,7 +224,7 @@ Any other value is refused when a run starts, with code 1.
 | `status` | `running` \| `waiting` \| `finished` \| `cancelled` |
 | `next` | one of the values listed above |
 | `returnTo` | the `next` value that gate:limit returns to, or null |
-| `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| null |
+| `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| null |
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
 | `stagePrefill` | the `--stage` id that gate:answers proposes, or null |
