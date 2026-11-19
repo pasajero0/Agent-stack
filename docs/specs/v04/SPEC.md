@@ -188,7 +188,8 @@ answers from that file instead, one line per prompt. That variable is the test s
 When the file runs out, the gate behaves as AC-29: it is recorded, and the driver exits with code 3.
 
 - **answers**:
-  - per question: Enter accepts the recommended answer; text replaces it;
+  - per question: Enter accepts the recommended answer; text replaces it. Each question's prompt says so:
+    `answer <n> (Enter = recommended, or type your own)>`;
   - size: Enter keeps it, or type `task` / `story` / `epic`;
   - stage id: Enter keeps it, or type a new one;
   - `c` cancels.
@@ -628,6 +629,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — Gate input (answers): each prompt says what Enter does; an answer meant for the stage id was
+  typed over two recommended answers.
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
