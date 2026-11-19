@@ -18,7 +18,7 @@ import {
   softReset,
   taskDiffPaths,
 } from "../git.js";
-import { implementPrompt, reviewPrompt } from "../prompts.js";
+import { conflictText, implementPrompt, reviewPrompt } from "../prompts.js";
 import { blockingCount, isBlocking, parseImplement, parseReview, type ImplementOutput, type ReviewOutput } from "../schemas.js";
 import { runDir } from "../store.js";
 import type { LimitReason, Next, Role, RunTask } from "../types.js";
@@ -187,15 +187,7 @@ const implement: StepHandler = async (ctx, id) => {
   }
   if (r.value.status === "TEST_CONFLICT" && r.value.conflict) {
     // AC-64: the human decides; the attempt is not counted and its edits stay.
-    const c = r.value.conflict;
-    const text = info.criteria.find((t) => t.includes(`${c.criterion}:`));
-    task.lastFeedback = [
-      "The implementer reported TEST_CONFLICT and left the test alone.",
-      `Test: ${c.test}`,
-      `Criterion: ${c.criterion}`,
-      ...(text ? [text] : []),
-      `Reason: ${c.reason}`,
-    ].join("\n");
+    task.lastFeedback = conflictText(r.value.conflict, info.criteria);
     return toLimit(ctx, "test-conflict", taskNext("implement", task.id));
   }
   return { type: "done" };

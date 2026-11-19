@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { allowedCommandLines, type CallCommands } from "./claude.js";
 import { RunError } from "./errors.js";
+import type { TestConflict } from "./schemas.js";
 import type { AnswerRecord } from "./types.js";
 
 /** Reads `.claude/skills/<name>/SKILL.md` and fills `$ARGUMENTS` and `${CLAUDE_SKILL_DIR}`. */
@@ -112,6 +113,18 @@ export function implementPrompt(p: {
     "End with a report of what you did."
   );
   return lines.join("\n");
+}
+
+/** The test conflict as gate:limit shows it and the retried implement reads it (AC-64). */
+export function conflictText(c: TestConflict, criteria: string[]): string {
+  const text = criteria.find((t) => t.includes(`${c.criterion}:`));
+  return [
+    "The implementer reported TEST_CONFLICT and left the test alone.",
+    `Test: ${c.test}`,
+    `Criterion: ${c.criterion}`,
+    ...(text ? [text] : []),
+    `Reason: ${c.reason}`,
+  ].join("\n");
 }
 
 export function reviewPrompt(p: {
