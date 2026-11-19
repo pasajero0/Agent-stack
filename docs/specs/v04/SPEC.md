@@ -428,8 +428,10 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   attempt, and run a fresh session.
   - The model SHALL be Opus for tier L, for a risky task, for a fix task, and for every attempt after the
     first. Otherwise it SHALL be Sonnet.
-- **AC-63:** WHEN a plan task's first attempt starts, THE SYSTEM SHALL run that task's verify command once,
-  as the plan writes it, before the implement call (not `.claude/bin/verify`, so nothing is marked passing).
+- **AC-63:** WHEN a plan task's first attempt starts, THE SYSTEM SHALL run that task's verify once, before the
+  implement call, through `.claude/bin/verify --dry <task>`. That is the same guard-bash check and the same
+  environment as verify, and it records nothing: no `passes`, no `verify.log`. `tasks.json` is re-read from disk,
+  so a command a role rewrote is guarded, not run raw.
   - IF it exits 0, THEN THE SYSTEM SHALL add a note to the task: its verify passed before the task started, so
     it may not test the task. Gate:accept shows the note (AC-21). The run goes on.
   - A red result is the expected state; nothing is noted.
@@ -688,6 +690,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-63: the start check goes through `verify --dry`, not a raw `bash -c`. The raw run skipped
+  guard-bash, and a role could rewrite a later task's verify in `tasks.json` (from review).
 - 2026-11-19 — AC-63 (new): the start check. In the first build a verify passed with its test file still
   missing (vitest skipped it), and only a hand check caught it.
 - 2026-11-19 — AC-58: the user CLAUDE.md to exclude follows `$CLAUDE_CONFIG_DIR`.
