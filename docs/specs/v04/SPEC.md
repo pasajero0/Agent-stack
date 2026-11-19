@@ -296,7 +296,7 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 **Role prompts** (AC-4) start with what the driver has already done, and what the role must not do.
 
 **One source of rules** (AC-67). A role's rules come from the project's skill or agent: spec from `/spec`, plan
-from `/plan`, review from the `code-reviewer` agent. The driver's prompt adds only the step's data, its bounds
+from `/plan`, implement from the `implementer` agent, review from the `code-reviewer` agent. The driver's prompt adds only the step's data, its bounds
 (what is done, what the role must not do) and the output it wants. It keeps no copy of a skill's or an agent's
 rules, so an improved agent reaches the driver too.
 
@@ -323,12 +323,15 @@ rules, so an improved agent reaches the driver too.
   - "**every task ends green**: its test is written first inside the task and its verify passes when the
     task is done; no test-only tasks".
 - **implement**:
+  - the body of `.claude/agents/implementer.md` (frontmatter removed), labelled as the rules, with "follow
+    'Under the driver'" (AC-67). The agent says, among its rules:
+    - "write the failing test first, see it fail, then the code; touch only this task; do not commit,
+      branch or edit `tasks.json`";
+    - "a change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report";
+    - the test conflict rule (AC-64);
   - the task;
   - the text of its criteria;
   - the last feedback, labelled "FROM THE PROGRAM";
-  - "write the failing test first, see it fail, then the code; touch only this task; do not commit,
-    branch or edit `tasks.json`";
-  - "a change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report";
   - the shell commands it may run, built from the same list as its `--allowedTools`: "anything else is
     denied, so do not try it".
 - **review**:
@@ -481,9 +484,12 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   "Commits", record the sha, and go on to the next task.
   - A run with stage `A0` SHALL produce a header that commitlint accepts.
   - The review's notes SHALL be stored in the task's `notes`.
-- **AC-67:** WHEN the review role runs, THE SYSTEM SHALL put the body of the project's
-  `.claude/agents/code-reviewer.md` (frontmatter removed) into its prompt as the review rules, and add no review
-  rules of its own (One source of rules).
+- **AC-67:** WHEN the review or the implement role runs, THE SYSTEM SHALL put the body of the project's agent
+  (`.claude/agents/code-reviewer.md`, `.claude/agents/implementer.md`; frontmatter removed) into its prompt as
+  the rules, and add no rules of its own (One source of rules).
+  - The `implementer` agent SHALL keep two modes. In a chat it reads the task from `tasks.json`, runs
+    `.claude/bin/verify <id>` and reports in the contract, `TEST_CONFLICT` included. Under the driver it runs
+    only the commands the prompt lists, never `.claude/bin/verify`, and answers in the caller's schema.
   - The `code-reviewer` agent SHALL say: when the caller gives a JSON schema, answer in it, with the same
     severities and the same need for evidence. For a task review it SHALL say what `spec`, `quality` and
     `verifyProves` mean, and give the check for `verifyProves`: imagine the line that does a criterion removed;
@@ -623,8 +629,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - The attempts and the fuse are unchanged.
 - **AC-64:** IF implement returns `TEST_CONFLICT`, THEN THE SYSTEM SHALL go to gate:limit, reason "test
   conflict", and show the conflict: the test, the criterion and the reason (partner of AC-16).
-  - The implement prompt SHALL say: if an existing test, or the task's verify, contradicts a criterion, do
-    not change it; return `TEST_CONFLICT`. Existing means not written in this attempt: another task's test,
+  - The `implementer` agent, which the implement prompt carries (AC-67), SHALL say: if an existing test, or
+    the task's verify, contradicts a criterion, do not change it; return `TEST_CONFLICT`. Existing means not written in this attempt: another task's test,
     a test the repo had, or the verify command.
   - `r` retries implement with the comment that follows: the role gets the conflict and the answer, labelled
     "FROM THE HUMAN". The human may fix the test or the spec by hand before `r`. `c` cancels.
@@ -754,6 +760,9 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-67, AC-64, Role prompts (implement): the implement role takes its rules from the
+  `implementer` agent too. The agent gets a mode for the driver (no `verify`, the schema) and the test conflict
+  exit in a chat as well.
 - 2026-11-19 — AC-67 (new), One source of rules, Role prompts (review): the review role takes its rules from
   the `code-reviewer` agent. The driver had its own short copy, and the agent's later fixes (less noise, every
   issue with evidence) never reached it. The agent says `quality: fail` needs a critical issue with evidence;
