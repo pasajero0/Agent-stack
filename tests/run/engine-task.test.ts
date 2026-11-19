@@ -76,6 +76,23 @@ describe("task mode: clarify, answers and the spec", () => {
     expect(readLock(r.dir)?.id).toBe(run.id);
   });
 
+  it("v04 AC-10: with no remote, the spec-merge gate prints the local merge commands and no push", async () => {
+    const r = repo();
+    await toSpecMerge(r);
+    const t = text(r);
+    expect(t).toContain(`git checkout main && git merge ${SPEC_BRANCH}`);
+    expect(t).not.toMatch(/push|pull request|git fetch/i);
+  });
+
+  it("v04 AC-10: with origin/<base>, the spec-merge gate says push, merge the pull request, then git fetch", async () => {
+    const r = repo();
+    sh(r.dir, "update-ref", "refs/remotes/origin/main", "HEAD");
+    await toSpecMerge(r);
+    const t = text(r);
+    for (const want of [`push -u origin ${SPEC_BRANCH}`, "pull request", "git fetch"]) expect(t).toContain(want);
+    expect(t).not.toContain("git merge");
+  });
+
   it("v04 AC-9: an epic writes split.md, prints one run command per part and finishes without a branch or code", async () => {
     const r = repo();
     const split = [
@@ -225,7 +242,7 @@ describe("task mode: clarify, answers and the spec", () => {
 });
 
 describe("task mode: gate:spec-merge", () => {
-  it("v04 AC-47: --resume with the spec not on the base ref stays at gate:spec-merge and exits 3 naming push, merge and fetch", async () => {
+  it("v04 AC-47: --resume with the spec not on the base ref stays at gate:spec-merge and exits 3 with the same steps", async () => {
     const r = repo();
     await toSpecMerge(r);
     r.out.length = 0;
@@ -233,7 +250,7 @@ describe("task mode: gate:spec-merge", () => {
     const run = r.run();
     expect(run.next).toBe("gate:spec-merge");
     const t = text(r);
-    for (const want of ["push", "merge", "git fetch", SPEC_PATH]) expect(t).toContain(want);
+    for (const want of [`git checkout main && git merge ${SPEC_BRANCH}`, SPEC_PATH]) expect(t).toContain(want);
   });
 
   it("v04 AC-11: --resume with the spec merged creates <stage>-<slug> from the base ref, sets branch and baseCommit, and runs plan", async () => {

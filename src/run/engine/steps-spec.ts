@@ -129,7 +129,12 @@ const specMergeGate: StepHandler = async (ctx) => {
   if (!existsOnRef(dir, base, file)) {
     ctx.out(`== gate:spec-merge — run ${run.id} ==`);
     ctx.out(`The spec is committed on spec/${stage}, but ${file} is not on ${base} yet.`);
-    ctx.out(`Push and merge it: git push -u origin spec/${stage}, open and merge the pull request into ${cfg.baseBranch}; then git fetch, and ${resumeHint(run.id)}.`);
+    // AC-10, AC-47: with no origin/<base> the local merge is the approval, so a push would only confuse.
+    ctx.out(
+      base === cfg.baseBranch
+        ? `Review spec/${stage}, then approve it with a local merge: git checkout ${cfg.baseBranch} && git merge spec/${stage}; then ${resumeHint(run.id)}.`
+        : `Push and merge it: git push -u origin spec/${stage}, open and merge the pull request into ${cfg.baseBranch}; then git fetch, and ${resumeHint(run.id)}.`
+    );
     showDecisions(ctx);
     return NO_INPUT;
   }
