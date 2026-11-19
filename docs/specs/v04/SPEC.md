@@ -355,8 +355,8 @@ The driver stages exactly the paths of the task diff, or the spec's allowed path
 
 Before committing, the driver normalises the header so that `@commitlint/config-conventional` accepts it:
 - the scope is lowercased (`A0` → `a0`);
-- a prefix the model repeated at the start of the subject is removed: the stage (`A2: …`), or a whole
-  `<type>(<scope>): ` or `<type>: ` with a known type;
+- a prefix the model repeated at the start of the subject is removed: the stage, alone or with a task id
+  (`A2: …`, `A3 T2: …`), or a whole `<type>(<scope>): ` or `<type>: ` with a known type;
 - the first letter of the subject is lowercased;
 - a trailing period is removed;
 - the header is cut to 100 characters.
@@ -690,6 +690,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — Commits: the stage with a task id (`A3 T2: …`) is also dropped from the subject (third manual
+  run).
 - 2026-11-19 — AC-63: the start check goes through `verify --dry`, not a raw `bash -c`. The raw run skipped
   guard-bash, and a role could rewrite a later task's verify in `tasks.json` (from review).
 - 2026-11-19 — AC-63 (new): the start check. In the first build a verify passed with its test file still
