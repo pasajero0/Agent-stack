@@ -44,6 +44,13 @@
   - each call loads only the project: its `.mcp.json`, project settings, no user CLAUDE.md, no claude.ai
     connectors, no auto-memory. About 165k → 15k tokens a turn;
   - a line before and after every call, so a long call does not look hung.
+- **From the second run:**
+  - without a remote, the spec-merge gate prints `git checkout <base> && git merge spec/<stage>`;
+  - a stage or type prefix the model repeats in a commit subject is dropped (no more `feat(a2): a2: …`);
+  - the spec role is told the driver commits, so it does not ask;
+  - each answers prompt says that Enter takes the recommended answer;
+  - a decision retry gives the role its questions with your answer;
+  - the implement role is told which shell commands it may run.
 
 ## 0.3.0 — from the first trial
 
