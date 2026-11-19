@@ -230,8 +230,43 @@ describe("task mode: clarify, answers and the spec", () => {
     expect(text(r)).toContain("Stage id C7 cannot be used");
     expect(text(r)).toContain("spec/C7");
     expect(text(r)).not.toContain("[C7]"); // a failed id is never the default (AC-48)
+    expect(text(r)).toContain("Stage id [B1]"); // the proposal passes AC-7, so it is offered (AC-48)
     expect(r.run().stage).toBe("C8");
     expect(r.run().stagePrefill).toBe("C7");
+  });
+
+  it("v04 AC-7: a free --stage value is the default, and Enter takes it", async () => {
+    const r = repo();
+    r.script([clarify(), spec({ stage: "C7" })]);
+    const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC, stage: "C7" });
+    expect(code, text(r)).toBe(3);
+    expect(text(r)).toContain("Stage id [C7]");
+    expect(r.run().stage).toBe("C7");
+  });
+
+  it("v04 AC-7: a branch under spec/<id>/ takes the id, and the offered id skips it", async () => {
+    const r = repo();
+    git(r.dir, "branch", "spec/A4");
+    git(r.dir, "branch", "spec/A5/wip");
+    write(r.dir, "docs/specs/README.md", "# specs\n");
+    git(r.dir, "add", "-A");
+    git(r.dir, "commit", "-q", "-m", "docs: specs readme");
+    r.script([clarify({ id: "A5" }), spec({ stage: "A6" })]);
+    const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
+    expect(code, text(r)).toBe(3);
+    expect(text(r)).toContain("Stage id A5 cannot be used");
+    expect(text(r)).toContain("Stage id [A6]");
+    expect(r.run().stage).toBe("A6");
+    const prompt = r.logged()[0]?.prompt ?? "";
+    expect(prompt).toContain("Ids already in use: A4, A5");
+    expect(prompt).not.toContain("README.md");
+  });
+
+  it("v04 AC-48: an id with other characters gets the same plain reason", async () => {
+    const r = repo();
+    r.script([clarify(), spec()]);
+    expect(await startRun({ ...r.opts({ gate: ["", "", "A1 b", ""] }), mode: "task", description: TASK_DESC })).toBe(3);
+    expect(text(r)).toContain("Stage id A1 b cannot be used: it must be letters then digits, like A1");
   });
 
   it("v04 AC-7: --stage is kept apart from the confirmed stage, so an epic run leaves stage null", async () => {

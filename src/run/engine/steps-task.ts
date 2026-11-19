@@ -28,9 +28,13 @@ export function usedStageIds(ctx: Ctx): string[] {
   const dir = ctx.projectDir;
   const base = baseRef(dir, ctx.cfg.baseBranch);
   const lines = (out: string): string[] => out.split("\n").map((l) => l.trim()).filter((l) => l !== "");
-  const tree = git(dir, ["ls-tree", "--name-only", `${base}:${ctx.cfg.specsDir}`]);
-  const branches = git(dir, ["for-each-ref", "--format=%(refname:lstrip=3)", "refs/heads/spec/"]);
-  return [...new Set([...(tree.ok ? lines(tree.stdout) : []), ...lines(branches.stdout)])].sort();
+  // Folders only (-d): a README.md in the specs folder is not an id.
+  const tree = git(dir, ["ls-tree", "-d", "--name-only", `${base}:${ctx.cfg.specsDir}`]);
+  // spec/A5/wip takes A5 too: git cannot create spec/A5 next to it.
+  const branches = lines(git(dir, ["for-each-ref", "--format=%(refname:lstrip=3)", "refs/heads/spec/"]).stdout).map(
+    (b) => b.split("/")[0] ?? b
+  );
+  return [...new Set([...(tree.ok ? lines(tree.stdout) : []), ...branches])].sort();
 }
 
 /**
@@ -76,7 +80,8 @@ const stageIdChars = (id: string): boolean => /^[A-Za-z0-9._-]+$/.test(id) && !i
 /** Why `id` cannot be the stage id (AC-7), or null when it can. */
 export function stageIdProblem(ctx: Ctx, id: string): string | null {
   const dir = ctx.projectDir;
-  if (!stageIdChars(id)) return 'it may hold only letters, digits, ".", "_" and "-", and not start with "."';
+  // AC-48: one plain reason; the pattern check below would refuse any other character anyway.
+  if (!stageIdChars(id)) return "it must be letters then digits, like A1";
   const m = new RegExp(ctx.cfg.stagePattern).exec(`${id}-x`);
   if (!m || m[1] !== id) {
     return "it must be letters then digits, like A1";
@@ -85,6 +90,8 @@ export function stageIdProblem(ctx: Ctx, id: string): string | null {
   const specDir = `${ctx.cfg.specsDir}/${id}`;
   if (existsOnRef(dir, base, specDir)) return `${specDir}/ already exists on ${base}`;
   if (branchExists(dir, `spec/${id}`)) return `branch spec/${id} already exists`;
+  const nested = git(dir, ["for-each-ref", "--count=1", "--format=%(refname:short)", `refs/heads/spec/${id}/`]).stdout.trim();
+  if (nested !== "") return `branch ${nested} exists, so git cannot create spec/${id}`;
   return null;
 }
 
@@ -172,12 +179,11 @@ const answersGate: StepHandler = async (ctx) => {
     return { type: "epic" };
   }
   // AC-48: the default is always a valid id, so Enter never loops on a failed one.
-  const fallback = stageIdProblem(ctx, p.stage.id) === null ? p.stage.id : freeStageId(ctx, usedStageIds(ctx));
   let id = run.stagePrefill ?? p.stage.id;
   const first = stageIdProblem(ctx, id);
   if (first !== null) {
     ctx.out(`Stage id ${id} cannot be used: ${first}.`);
-    id = fallback;
+    id = id !== p.stage.id && stageIdProblem(ctx, p.stage.id) === null ? p.stage.id : freeStageId(ctx, usedStageIds(ctx));
   }
   for (;;) {
     ctx.out(`Stage id [${id}]: Enter keeps it, or type a new one`);
