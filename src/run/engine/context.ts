@@ -98,7 +98,7 @@ export class Interrupted extends Error {
 }
 
 export function newTask(id: string): RunTask {
-  return { id, taskBase: null, attempts: 0, blockingCount: null, lastFeedback: null, checks: [], notes: [], allowedChanges: [], commit: null };
+  return { id, taskBase: null, attempts: 0, blockingCount: null, lastFeedback: null, checks: [], notes: [], allowedChanges: [], pendingChanges: [], commit: null };
 }
 
 export function findTask(ctx: Ctx, id: string): RunTask {

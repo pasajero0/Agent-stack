@@ -8,7 +8,6 @@ import type { GateRecord, RunFile } from "../types.js";
 import { fuseText } from "./call.js";
 import { Interrupted, newTask, type Ctx, type StepHandler } from "./context.js";
 import { timedOutError } from "./steps-common.js";
-import { testChanges } from "./frozen.js";
 import { parseNext, taskNext, type StepEvent } from "./transitions.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
@@ -272,16 +271,18 @@ export const limitGate: StepHandler = async (ctx) => {
 };
 
 /**
- * gate:limit (tests changed), AC-66: `a` allows exactly the changes there are now, and the checks run; `r` and a
+ * gate:limit (tests changed), AC-66: `a` allows exactly the changes listed, and the checks run; `r` and a
  * comment send the task back to implement as a new attempt. Null for any other answer.
  */
 async function testsChangedAnswer(ctx: Ctx, s: string): Promise<StepEvent | null> {
   const { run } = ctx;
   const id = run.returnTo ? parseNext(run.returnTo).task : null;
   const t = run.tasks.find((x) => x.id === id);
-  if (!t || t.taskBase === null) throw new Error(`gate:limit (tests-changed) has no task with a base`);
+  if (!t) throw new Error(`gate:limit (tests-changed) has no task`);
   if (s === "a") {
-    for (const c of testChanges(ctx.projectDir, t.taskBase, ctx.cfg.testGlobs)) if (!t.allowedChanges.includes(c)) t.allowedChanges.push(c);
+    // Exactly what was listed: a change made while the gate waited stops again at the checks.
+    for (const c of t.pendingChanges) if (!t.allowedChanges.includes(c)) t.allowedChanges.push(c);
+    t.pendingChanges = [];
     recordGate(ctx, "gate:limit", "allow", null, { reason: "tests-changed" });
     return { type: "resume" };
   }
@@ -289,6 +290,7 @@ async function testsChangedAnswer(ctx: Ctx, s: string): Promise<StepEvent | null
   const c = await comment(ctx, s);
   if (c === null) return NO_INPUT;
   t.attempts += 1;
+  t.pendingChanges = [];
   t.lastFeedback = [t.lastFeedback, `FROM THE HUMAN: ${c}`].filter((x) => x !== null).join("\n");
   run.returnTo = taskNext("implement", t.id);
   recordGate(ctx, "gate:limit", "retry", c, { reason: "tests-changed" });

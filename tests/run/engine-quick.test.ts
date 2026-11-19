@@ -249,6 +249,23 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(text(r)).toContain("test change allowed: deleted test file tests/readme.test.ts");
   });
 
+  it("v04 AC-66: a allows only the changes listed; one made while the gate waited stops again", async () => {
+    const r = repo();
+    write(r.dir, "tests/a.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n});\n');
+    write(r.dir, "tests/b.test.ts", 'it("b", () => {\n  expect(1).toBe(1);\n});\n');
+    git(r.dir, "add", "-A");
+    git(r.dir, "commit", "-q", "-m", "test: two");
+    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" }, deletes: ["tests/a.test.ts"] })]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    expect(r.run().tasks[0]?.pendingChanges).toEqual(["deleted test file tests/a.test.ts"]);
+    rmSync(join(r.dir, "tests/b.test.ts"));
+    expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(3);
+    const run = r.run();
+    expect(run.tasks[0]?.allowedChanges).toEqual(["deleted test file tests/a.test.ts"]);
+    expect(run.limitReason).toBe("tests-changed");
+    expect(run.tasks[0]?.pendingChanges).toEqual(["deleted test file tests/b.test.ts"]);
+  });
+
   it("v04 AC-66: r at gate:limit (tests-changed) is a new attempt on Opus with the list and the comment", async () => {
     const r = repo();
     write(r.dir, "tests/readme.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n  expect(2).toBe(2);\n});\n');

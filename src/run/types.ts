@@ -44,6 +44,8 @@ export interface RunTask {
   notes: string[];
   /** Changes to frozen tests or check configs the human allowed at gate:limit (AC-66). */
   allowedChanges: string[];
+  /** The changes gate:limit (tests changed) listed; `a` allows exactly these (AC-66). */
+  pendingChanges: string[];
   /** sha, `"empty"` for an empty diff, or null before the commit. */
   commit: string | null;
 }

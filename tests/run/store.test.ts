@@ -37,6 +37,7 @@ const task = (over: Partial<RunTask> = {}): RunTask => ({
   checks: [{ cmd: "pnpm test", exit: 0, skipped: false }],
   notes: ["n"],
   allowedChanges: [],
+  pendingChanges: [],
   commit: null,
   ...over,
 });
@@ -192,9 +193,10 @@ describe("run id and run file", () => {
     writeRun(dir, run);
     expect(readRun(dir, run.id)?.tasks[0]?.allowedChanges).toEqual(["deleted test file a.test.ts"]);
     const file = join(runDir(dir, run.id), "run.json");
-    const { allowedChanges: _, ...old } = task();
+    const { allowedChanges: _, pendingChanges: __, ...old } = task();
     writeFileSync(file, JSON.stringify({ ...run, tasks: [old] }));
     expect(readRun(dir, run.id)?.tasks[0]?.allowedChanges).toEqual([]);
+    expect(readRun(dir, run.id)?.tasks[0]?.pendingChanges).toEqual([]);
     writeFileSync(file, JSON.stringify({ ...run, tasks: [{ ...old, allowedChanges: [1] }] }));
     expect(readRun(dir, run.id)).toBeNull();
   });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { cleanupProjects, git, write } from "../hooks/fixture.js";
 import { testChanges } from "../../src/run/engine/frozen.js";
@@ -50,23 +50,54 @@ describe("frozen tests and check configs (AC-66)", () => {
     expect(testChanges(dir, base, GLOBS)).toEqual([]);
   });
 
-  it("v04 AC-66: a check config that exists at the base and changed is a change; a new one is not", () => {
+  it("v04 AC-66: a check config that exists at the base and changed is a change, keyed by its content; a new one is not", () => {
     const { dir, base } = based({ "vitest.config.ts": "export default {};\n", ".github/workflows/ci.yml": "on: push\n", "pkg/x/.eslintrc.json": "{}\n" });
     write(dir, "vitest.config.ts", "export default { test: { exclude: ['**'] } };\n");
     write(dir, ".github/workflows/ci.yml", "on: workflow_dispatch\n");
     write(dir, "pkg/x/.eslintrc.json", '{"rules":{}}\n');
     write(dir, "jest.config.js", "module.exports = {};\n");
-    expect(testChanges(dir, base, GLOBS)).toEqual([
-      "changed check config .github/workflows/ci.yml",
-      "changed check config pkg/x/.eslintrc.json",
-      "changed check config vitest.config.ts",
+    const now = (p: string): string => sh(dir, "hash-object", "--", p).slice(0, 7);
+    const first = testChanges(dir, base, GLOBS);
+    expect(first).toEqual([
+      `changed check config .github/workflows/ci.yml (now ${now(".github/workflows/ci.yml")})`,
+      `changed check config pkg/x/.eslintrc.json (now ${now("pkg/x/.eslintrc.json")})`,
+      `changed check config vitest.config.ts (now ${now("vitest.config.ts")})`,
     ]);
+    // A later edit of the same config is a new change, so an allowed one cannot be rewritten for free.
+    write(dir, "vitest.config.ts", "export default { test: { exclude: ['src/**'] } };\n");
+    expect(testChanges(dir, base, GLOBS)[2]).not.toBe(first[2]);
   });
 
-  it("v04 AC-66: with testGlobs empty only the check configs are compared", () => {
+  it("v04 AC-66: with testGlobs empty only the check configs are compared; a deleted config says so", () => {
     const { dir, base } = based({ "src/a.test.ts": JS, "vitest.config.ts": "export default {};\n" });
     rmSync(join(dir, "src/a.test.ts"));
     rmSync(join(dir, "vitest.config.ts"));
-    expect(testChanges(dir, base, [])).toEqual(["changed check config vitest.config.ts"]);
+    expect(testChanges(dir, base, [])).toEqual(["deleted check config vitest.config.ts"]);
+  });
+
+  it("v04 AC-66: .skip in code that is not a test call is no skip mark; describe.skipIf, this.skip and @unittest.skip are", () => {
+    const { dir, base } = based({ "src/a.test.ts": JS, "tests/lib.rs": "fn f() { v.iter().skip(1); }\n", "tests/test_b.py": "def test_b():\n    assert 1\n" });
+    write(dir, "src/a.test.ts", `${JS.replace('it("a"', 'it.skipIf(ci)("a"')}// cursor.skip(1); state.todo\n`);
+    write(dir, "tests/lib.rs", "fn f() { v.iter().skip(1).skip(2); }\n");
+    write(dir, "tests/test_b.py", "@unittest.skip\ndef test_b():\n    assert 1\n");
+    expect(testChanges(dir, base, GLOBS)).toEqual(["src/a.test.ts: skip marks 0 → 1", "tests/test_b.py: skip marks 0 → 1"]);
+  });
+
+  it("v04 AC-66: Rust assert!, debug_assert! and unittest assertEqual are assertions", () => {
+    const rs = "#[test]\nfn a() {\n    assert!(x);\n    debug_assert!(y);\n    assert_eq!(1, 1);\n}\n";
+    const py = "def test_a(self):\n    self.assertEqual(1, 1)\n    self.assertTrue(x)\n";
+    const { dir, base } = based({ "tests/a.rs": rs, "tests/test_a.py": py });
+    write(dir, "tests/a.rs", "#[test]\nfn a() {\n    assert_eq!(1, 1);\n}\n");
+    write(dir, "tests/test_a.py", "def test_a(self):\n    pass\n");
+    expect(testChanges(dir, base, GLOBS)).toEqual(["tests/a.rs: assertions 3 → 1", "tests/test_a.py: assertions 2 → 0"]);
+  });
+
+  it("v04 AC-66: a test file that became a folder is replaced, not a crash; a file with a NUL byte is not counted", () => {
+    const { dir, base } = based({ "tests/a.test.ts": JS, "tests/blob.bin": "a\0expect(1)\n" });
+    rmSync(join(dir, "tests/a.test.ts"));
+    mkdirSync(join(dir, "tests/a.test.ts"));
+    write(dir, "tests/a.test.ts/x.txt", "x\n");
+    write(dir, "tests/blob.bin", "b\0\n");
+    expect(testChanges(dir, base, GLOBS)).toEqual(["replaced test file tests/a.test.ts"]);
   });
 });

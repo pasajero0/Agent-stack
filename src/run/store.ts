@@ -150,6 +150,7 @@ function task(v: unknown, f: string): RunTask {
     notes: strings(o.notes, `${f}.notes`),
     // A run file from before AC-66 has none.
     allowedChanges: o.allowedChanges === undefined ? [] : strings(o.allowedChanges, `${f}.allowedChanges`),
+    pendingChanges: o.pendingChanges === undefined ? [] : strings(o.pendingChanges, `${f}.pendingChanges`),
     commit: strOrNull(o.commit, `${f}.commit`),
   };
 }
