@@ -73,6 +73,15 @@ it here first.
   attempt runs on Opus.
 - **Limit gate** — where a run stops when attempts run out, review findings stop shrinking, or the fuse
   blows: one more attempt (on Opus), raise the fuse (only when the fuse blew), or cancel.
+  - **Decision** reason: the spec or plan role asked the human instead of doing its job. The human answers,
+    and the role runs again with its questions and the answer. A blind re-run would only ask again.
+- **Role** — what one Claude call is asked to be: clarify, spec, plan, implement or review. Each role has
+  its own tools, model and output schema. The role returns data, and the driver writes the files it owns,
+  such as `tasks.json` and the commits.
+- **Project-only call** — every call the driver makes loads only the project: its `.mcp.json`, project
+  settings and CLAUDE.md. It loads nothing of the user's: no global CLAUDE.md, memory, plugins or account
+  connectors. This keeps the user's private context out, and keeps the cost down (the account connectors
+  alone were about 150k tokens a turn).
 - **Fuse** — the run-wide cap (`run.fuse`). It is not a budget: it stops a run that went wrong. It comes in
   three kinds:
   - **calls**, the default: Claude calls per run. It fits a subscription, where what runs out is the usage
