@@ -201,8 +201,8 @@ claude.ai connectors (Gmail, Drive and so on), auto-memory and the git status sn
 vars. Besides privacy, this is the cost: the connectors alone added about 150k tokens to every turn.
 
 **Limits of this part.**
-- Experimental: one manual run with the real `claude` (a quick fix and a one-task stage); the rest is tested with a
-  fake `claude`.
+- Experimental: three manual runs with the real `claude` (one quick fix, two one-task stages); the rest is tested
+  with a fake `claude`.
 - With a claude.ai login, Claude Code still puts the account email into the session context. No switch removes
   it short of `--bare`, which needs an API key and skips the hooks. It stays in the model's context; nothing
   writes it to the repo.
