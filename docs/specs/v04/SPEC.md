@@ -336,7 +336,7 @@ rules, so an improved agent reaches the driver too.
     denied, so do not try it".
 - **review**:
   - the body of `.claude/agents/code-reviewer.md` (frontmatter removed), labelled as the review rules (AC-67);
-  - the task and its criteria;
+  - the task, its criteria and its verify command (`(none)` when empty);
   - the task diff;
   - the implementer's report, labelled "UNVERIFIED CLAIMS FROM THE IMPLEMENTER";
   - "return two verdicts and whether the task's verify proves its criteria".
@@ -487,15 +487,23 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-67:** WHEN the review or the implement role runs, THE SYSTEM SHALL put the body of the project's agent
   (`.claude/agents/code-reviewer.md`, `.claude/agents/implementer.md`; frontmatter removed) into its prompt as
   the rules, and add no rules of its own (One source of rules).
-  - The `implementer` agent SHALL keep two modes. In a chat it reads the task from `tasks.json`, runs
-    `.claude/bin/verify <id>` and reports in the contract, `TEST_CONFLICT` included. Under the driver it runs
-    only the commands the prompt lists, never `.claude/bin/verify`, and answers in the caller's schema.
+  - The `implementer` agent SHALL have two sections, "In a chat" and "Under the driver". In a chat it reads
+    the task from `tasks.json`, runs `.claude/bin/verify <id>` and reports in the contract, `TEST_CONFLICT`
+    included. Under the driver it runs only the commands the prompt lists, never `.claude/bin/verify`, and
+    answers in the caller's schema.
+  - The `code-reviewer` agent's task review SHALL judge only the criteria the caller gives; another task's
+    criteria are not a `fail`. With no criteria or no verify given, `verifyProves` is `true`.
+  - IF the agent's body is empty, or `implementer.md` has no `## Under the driver` section, or
+    `code-reviewer.md` has no "Task review" item, THEN THE SYSTEM SHALL keep `next` and exit with code 1:
+    `agent <path> is out of date: no <what> (run agent-stack update --force, or add it)`. A file the user
+    changed is kept by `update`, so an old copy must not run silently.
   - The `code-reviewer` agent SHALL say: when the caller gives a JSON schema, answer in it, with the same
     severities and the same need for evidence. For a task review it SHALL say what `spec`, `quality` and
     `verifyProves` mean, and give the check for `verifyProves`: imagine the line that does a criterion removed;
     if the task's verify would still pass, it proves nothing for that criterion.
   - IF the agent file is missing, THEN THE SYSTEM SHALL keep `next` and exit with code 1:
-    `agent not found: <path> (run agent-stack generate)`, as for a missing skill.
+    `agent not found: <path> (run agent-stack update)`, as for a missing skill (`update` restores a missing
+    harness file; `generate` refuses an existing harness).
 - **AC-21:** WHEN the last task is committed, THE SYSTEM SHALL stop at gate:accept and show:
   - the diff stat from `baseCommit`;
   - each task's checks;
@@ -760,6 +768,9 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-67, Role prompts (review), from review: an empty or out-of-date agent file exits 1 instead of
+  running silently; the review gets the task's verify; the task review judges only the given criteria; the
+  missing-file hint says `update`, since `generate` refuses an existing harness.
 - 2026-11-19 — AC-67, AC-64, Role prompts (implement): the implement role takes its rules from the
   `implementer` agent too. The agent gets a mode for the driver (no `verify`, the schema) and the test conflict
   exit in a chat as well.

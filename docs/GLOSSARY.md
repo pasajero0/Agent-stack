@@ -29,6 +29,9 @@ it here first.
 - **Every block has a test, and a legitimate input beside it.**
 - **Build only from a recorded miss.** A new mechanism needs a failure it would have prevented, or a need of
   the stage. Parts nobody uses are measured (`agent-stack usage`) and removed.
+- **One source of rules.** A rule lives in one place: a skill or an agent. The driver's steps load them and add
+  only data and bounds, so a fix to an agent reaches the driver too. Recorded miss: the driver's own review
+  text missed the agent's later fixes.
 - **The harness is stack-agnostic.** Stack-specific settings live in `.claude/gates.json`; fixed checks that
   are the same for every project live in the hooks, so `update` can deliver them.
 
