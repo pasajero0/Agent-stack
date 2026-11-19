@@ -29,7 +29,7 @@ function stageRepo(): string {
 
 const trace = (dir: string, ...args: string[]) => {
   const r = spawnSync(join(dir, ".claude/bin/trace"), args, { cwd: dir, encoding: "utf-8" });
-  return { code: r.status, out: r.stdout + r.stderr };
+  return { code: r.status, signal: r.signal, out: r.stdout + r.stderr + (r.error ? `\nspawn error: ${r.error.message}` : "") };
 };
 
 describe("trace", () => {
@@ -50,7 +50,8 @@ describe("trace", () => {
     write(dir, "src/ingest.test.ts", 'it("A0 AC-1", f); it("A0.AC-2", f); it("A0-AC-3", f);\n');
     write(dir, "src/other.test.ts", 'it("A1 AC-7: another stage, ignored", f);\n');
     const r = trace(dir);
-    expect(r.code).toBe(0);
+    // Failed once under full-suite load (19/11) and never again; the output names the cause next time.
+    expect(r.code, `exit ${String(r.code)}, signal ${String(r.signal)}: ${r.out}`).toBe(0);
     expect(r.out).toContain("3/3");
   });
 
