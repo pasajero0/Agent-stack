@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.4.1) — driver checks
+## 0.4.1 — driver checks
 
 - **run: a test conflict is a way out, not a cheat.** If an existing test or the task's verify contradicts a
   criterion, implement returns `TEST_CONFLICT` and leaves the test alone. The run stops at gate `limit`

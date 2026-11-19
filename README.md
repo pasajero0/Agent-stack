@@ -115,7 +115,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `packageManager`, `forbiddenPackageManagers` | the one package manager, the blocked ones |
 | `installPatterns`, `cheatPatterns` | what counts as an install / a cheat (POSIX regex) |
 | `commands.test`, `commands.lint`, `lintMatch` | test command; per-file lint command with `{file}`; files to lint |
-| `testGlobs` | where `trace` looks for tests that name criteria |
+| `testGlobs` | where `trace` looks for tests that name criteria; also the tests `agent-stack run` keeps frozen during a task |
 | `glossary` | the glossary `trace` checks spec Terms against: each `- **Term**` in a spec's `## Terms` is a headword there or is marked `(local)`. Default `docs/GLOSSARY.md` when it exists; `""` turns the check off. Optional, not in the seed |
 | `slo` | code-health limits on changed files: `maxFileLines` (400), `newDependencies` (null = report only) |
 | `health` | project metrics: `[{"name": "complexity", "command": "… {files} …", "max": 0}]` — detected for ESLint and ruff |
@@ -169,17 +169,29 @@ implement call. The driver runs the checks (the test command, plus lint on chang
    **You decide** by reviewing and merging that branch into the base branch yourself.
 3. `--resume` creates `<stage>-<slug>` and runs *plan* (Opus). The role returns the tasks and the driver writes
    `tasks.json`. **You decide** at gate `plan-approve`: approve, or reject with a comment (the plan is redone). Each task's `verify` command is allowed to the model
-   as written, so read the plan table.
+   as written, so read the plan table. A new plan with a `verify` that cannot fail (`|| true`, `; exit 0`,
+   `| tee` and the like) is not valid: the plan role is run again with the pattern.
 4. The driver runs your test command once, then per task: implement, checks (the task's `verify` plus lint),
    review on that task's diff, commit `<type>(<stage>): <subject>`. A red check or a blocking review goes
-   back to implement with the feedback, up to the attempt limit.
+   back to implement with the feedback, up to the attempt limit. The implement and review roles take their
+   rules from `.claude/agents/implementer.md` and `.claude/agents/code-reviewer.md`, so a change to an agent
+   reaches the driver too.
 5. **You decide** at gate `accept`: accept (the run finishes) or reject with a comment, which adds a fix task.
 
 **Gates.** At a terminal, answers are read from the prompt; `c` cancels at any gate. With no terminal the run
 is recorded as waiting and exits. A gate `limit` appears when attempts run out, a task is BLOCKED, the review
 loop does not improve, or the fuse is reached: `r` retries, `f <n>` raises the fuse, `c` cancels. When the spec
 or plan role asks you something instead of doing its job, gate `limit` (reason `decision`) shows the question:
-`r` and your answer re-run the role with it. Before gate `accept`, a task run with more than one task runs every
+`r` and your answer re-run the role with it.
+
+**Tests are the contract.** If implement finds that an existing test or the task's `verify` contradicts a
+criterion, it leaves the test alone: gate `limit` (reason `test-conflict`) shows the test, the criterion and the
+reason, and `r` with your answer retries without counting an attempt. If a task deletes or weakens a test that was
+there at its start (fewer tests or assertions, more skip marks, a changed CI or test config), gate `limit` (reason
+`tests-changed`) lists the changes: `a` allows exactly those, `r` sends the task back, `c` cancels. A weaker
+assertion that keeps the count (`toBe(3)` → `toBeTruthy()`) is not seen.
+
+Before gate `accept`, a task run with more than one task runs every
 task's verify once more and marks a red result.
 
 **Exit codes.** `0`: finished, cancelled or `--status`. `3`: waiting at the spec-merge gate, or at any gate
