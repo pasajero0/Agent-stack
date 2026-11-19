@@ -326,6 +326,24 @@ describe("quick mode: failures that exit 1", () => {
     expect(r.logged().length).toBe(0);
   });
 
+  it("v04 AC-62: a killed call counts as unknown cost, not $0, and the gate says so", async () => {
+    const r = repo({ run: { stepTimeoutMin: 0.005 } }); // 300 ms per call
+    r.script([{ ...impl({ writes: { "late.txt": "x\n" } }), sleepMs: 5000 }, impl({ model: "opus", writes: { "notes.txt": "n\n" } })]);
+    expect(await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC }), text(r)).toBe(0);
+    const run = r.run();
+    expect(run.costUnknownCalls).toBe(1);
+    expect(run.costUsd).toBeCloseTo(0.01);
+    expect(text(r)).toMatch(/over 2 calls, 1 with unknown cost/);
+    expect(text(r)).not.toContain("may count too little");
+  });
+
+  it("v04 AC-62: with a dollar fuse, unknown-cost calls are flagged as a fuse that may count too little", async () => {
+    const r = repo({ run: { stepTimeoutMin: 0.005, fuse: { usd: 5 } } });
+    r.script([{ ...impl({ writes: { "late.txt": "x\n" } }), sleepMs: 5000 }, impl({ model: "opus", writes: { "notes.txt": "n\n" } })]);
+    expect(await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC }), text(r)).toBe(0);
+    expect(text(r)).toContain("the dollar fuse may count too little");
+  });
+
   // The test command hangs while .git/slow exists (outside the task diff); the limit is 0.003 min = 180 ms.
   const SLOW = "if [ -f .git/slow ]; then sleep 5; fi";
   const FAST_LIMIT = { checkTimeoutMin: 0.003 };

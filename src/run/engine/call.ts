@@ -84,7 +84,9 @@ export async function roleCall<T>(
       validate: (v) => validateOutput(role, v),
       signal: ctx.signal,
     });
-    run.costUsd += o.costUsd;
+    // AC-62: an unknown cost is counted apart, never as $0.
+    if (o.costUsd === null) run.costUnknownCalls += 1;
+    else run.costUsd += o.costUsd;
     ctx.out(`   ${o.kind} in ${Math.round((Date.now() - started) / 1000)}s`);
     switch (o.kind) {
       case "aborted":

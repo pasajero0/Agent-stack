@@ -23,9 +23,8 @@ import {
   writeRun,
 } from "../store.js";
 import type { Mode, RunConfig, RunFile } from "../types.js";
-import { fuseText } from "./call.js";
 import { findTask, type Ctx, type ModeSteps } from "./context.js";
-import { cancelledText } from "./gates.js";
+import { cancelledText, costText } from "./gates.js";
 import { runLoop, type ExitCode } from "./loop.js";
 import { quickMode } from "./steps-quick.js";
 import { taskMode } from "./steps-task.js";
@@ -153,6 +152,7 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       answers: [],
       humanDecisions: [],
       costUsd: 0,
+      costUnknownCalls: 0,
       calls: 0,
       fuse: cfg.fuse,
     };
@@ -291,7 +291,7 @@ export async function statusRun(o: EngineOptions & { id?: string }): Promise<Exi
   out(`Branch: ${run.branch}${run.baseCommit ? ` (base ${run.baseCommit.slice(0, 7)})` : ""}`);
   if (run.limitReason) out(`Limit: ${run.limitReason}, returns to ${run.returnTo ?? "-"}`);
   for (const t of run.tasks) out(`  ${t.id}: attempts ${t.attempts}, commit ${t.commit ?? "none"}`);
-  out(`Usage: calls ${run.calls}, cost $${run.costUsd.toFixed(4)}, fuse ${fuseText(run.fuse)}`);
+  out(`Usage: ${costText(run)}`);
   return 0;
 }
 

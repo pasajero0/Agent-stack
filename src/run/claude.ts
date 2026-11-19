@@ -76,12 +76,13 @@ export const PROJECT_ONLY_ENV: Readonly<Record<string, string>> = {
 };
 
 export type CallOutcome =
-  | { kind: "ok"; output: unknown; costUsd: number; denials: string[]; turns: number }
-  | { kind: "infra"; message: string; costUsd: number }
+  // costUsd is null when the cost is unknown: a killed call, or a result without total_cost_usd (AC-62).
+  | { kind: "ok"; output: unknown; costUsd: number | null; denials: string[]; turns: number }
+  | { kind: "infra"; message: string; costUsd: number | null }
   | {
       kind: "turns" | "exec-error" | "timeout" | "aborted" | "budget" | "schema";
       message: string;
-      costUsd: number;
+      costUsd: number | null;
       turns: number;
     };
 
@@ -201,7 +202,8 @@ export function classify(result: Record<string, unknown>, validate?: (v: unknown
     return typeof v === "number" && Number.isFinite(v) ? v : 0;
   };
   const turns = num("num_turns");
-  const costUsd = num("total_cost_usd");
+  const rawCost = result["total_cost_usd"];
+  const costUsd = typeof rawCost === "number" && Number.isFinite(rawCost) && rawCost >= 0 ? rawCost : null;
   const subtype = typeof result["subtype"] === "string" ? result["subtype"] : "";
   const isError = result["is_error"] === true;
 
@@ -289,12 +291,12 @@ export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcom
   if (stopped !== null) {
     const turns = result && typeof result["num_turns"] === "number" ? result["num_turns"] : 0;
     const message = stopped === "timeout" ? `killed after ${io.timeoutMs} ms` : "killed: the run was interrupted";
-    return { kind: stopped, message, costUsd: 0, turns };
+    return { kind: stopped, message, costUsd: null, turns };
   }
   if (!result) {
     const stderr = typeof proc.stderr === "string" ? proc.stderr.trim() : "";
     const why = proc.failed && exitCode === null ? proc.shortMessage : `exit ${exitCode ?? "none"}`;
-    return { kind: "infra", message: `claude returned no result JSON (${why})${stderr ? `: ${stderr}` : ""}`, costUsd: 0 };
+    return { kind: "infra", message: `claude returned no result JSON (${why})${stderr ? `: ${stderr}` : ""}`, costUsd: null };
   }
   return classify(result, io.validate);
 }

@@ -68,7 +68,14 @@ export function humanFeedback(run: RunFile): string | null {
   return null;
 }
 
-const cost = (run: RunFile): string => `cost $${run.costUsd.toFixed(4)} over ${run.calls} calls (fuse ${fuseText(run.fuse)})`;
+/** The run's cost line (AC-21, AC-23, AC-62): unknown-cost calls are named, and a dollar fuse is flagged. */
+export function costText(run: RunFile): string {
+  const unknown = run.costUnknownCalls > 0 ? `, ${run.costUnknownCalls} with unknown cost` : "";
+  const usd = run.fuse !== "off" && "usd" in run.fuse;
+  const warn = unknown !== "" && usd ? "; the dollar fuse may count too little" : "";
+  return `cost $${run.costUsd.toFixed(4)} over ${run.calls} calls${unknown} (fuse ${fuseText(run.fuse)}${warn})`;
+}
+const cost = costText;
 
 /** Commands that were skipped because they are empty (AC-56). */
 function skipped(ctx: Ctx): string[] {

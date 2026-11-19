@@ -60,6 +60,7 @@ const mk = (id: string, over: Partial<RunFile> = {}): RunFile => ({
   answers: [],
   humanDecisions: [],
   costUsd: 0,
+  costUnknownCalls: 0,
   calls: 0,
   fuse: { calls: 40 },
   ...over,
@@ -141,6 +142,15 @@ describe("run id and run file", () => {
     expect(listRuns(dir)).toEqual(["r-20261118-000001", "r-20261118-000002", "r-20261118-000015"]);
   });
 
+  it("v04 AC-62: a run file without costUnknownCalls (written before it existed) reads it as 0", () => {
+    const run = start(mk("r-20261118-000017"));
+    const file = join(runDir(dir, run.id), "run.json");
+    const raw = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    delete raw.costUnknownCalls;
+    writeFileSync(file, JSON.stringify(raw));
+    expect(readRun(dir, run.id)?.costUnknownCalls).toBe(0);
+  });
+
   it("readRun accepts a full run file with tasks, gates and every next form", () => {
     const full = mk("r-20261118-000016", {
       mode: "quick",
@@ -163,6 +173,7 @@ describe("run id and run file", () => {
       answers: [{ question: "q", answer: "a" }],
       humanDecisions: ["h"],
       costUsd: 1.25,
+      costUnknownCalls: 2,
       calls: 7,
       fuse: "off",
     });
@@ -192,6 +203,7 @@ describe("run id and run file", () => {
       ["baseCommit", { baseCommit: undefined }],
       ["proposal", { proposal: "text" }],
       ["costUsd", { costUsd: -1 }],
+      ["costUnknownCalls", { costUnknownCalls: -1 }],
       ["calls", { calls: 1.5 }],
       ["fuse", { fuse: { calls: 0 } }],
       ["fuse", { fuse: "on" }],

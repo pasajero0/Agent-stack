@@ -55,7 +55,7 @@ describe("gates, resume and the lock", () => {
     r.out.length = 0;
     expect(await statusRun({ ...r.opts() })).toBe(0);
     const t = text(r);
-    for (const want of [run.id, "quick", "waiting", "gate:accept", BRANCH, "Q1", "attempts 1", "calls 1", "$0.01", "calls 40"]) {
+    for (const want of [run.id, "quick", "waiting", "gate:accept", BRANCH, "Q1", "attempts 1", "over 1 calls", "$0.01", "calls 40"]) {
       expect(t).toContain(want);
     }
     expect(readFileSync(file, "utf8")).toBe(before);

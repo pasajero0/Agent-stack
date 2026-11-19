@@ -192,6 +192,8 @@ function toRunFile(v: unknown, id: string): RunFile {
     answers: arr(o.answers, "answers", (x) => answer(x, "answers")),
     humanDecisions: strings(o.humanDecisions, "humanDecisions"),
     costUsd,
+    // AC-62: a run file from before this field reads as 0.
+    costUnknownCalls: o.costUnknownCalls === undefined ? 0 : count(o.costUnknownCalls, "costUnknownCalls"),
     calls: count(o.calls, "calls"),
     fuse: parseFuse(o.fuse) ?? bad("fuse"),
   };

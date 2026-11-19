@@ -85,6 +85,8 @@ export interface RunFile {
   answers: AnswerRecord[];
   humanDecisions: string[];
   costUsd: number;
+  /** Calls whose cost is unknown (killed, or no total_cost_usd); not counted in costUsd (AC-62). */
+  costUnknownCalls: number;
   calls: number;
   fuse: Fuse;
 }

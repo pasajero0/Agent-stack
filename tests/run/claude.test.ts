@@ -303,6 +303,7 @@ describe("callClaude with the fake claude", () => {
     const started = Date.now();
     const out = await callClaude(impl(), io([{ sleepMs: 20_000, output: { ok: true } }], { timeoutMs: 300 }));
     expect(out.kind).toBe("timeout");
+    expect(out.costUsd).toBeNull(); // v04 AC-62: a killed call's cost is unknown, not $0
     expect(Date.now() - started).toBeLessThan(8_000);
     expect(existsSync(join(dir, "calls", "1-implement.json"))).toBe(true);
   });
@@ -369,5 +370,15 @@ describe("callClaude with the fake claude", () => {
     ctl.abort();
     const out = await callClaude(impl(), io([{ sleepMs: 20_000 }], { signal: ctl.signal }));
     expect(out.kind).toBe("aborted");
+    expect(out.costUsd).toBeNull();
+  });
+
+  it("v04 AC-62: a result without total_cost_usd has an unknown cost, not $0", async () => {
+    const stdout = { type: "result", subtype: "success", is_error: false, num_turns: 2, structured_output: { ok: true } };
+    const out = await callClaude(spec("review"), io([{ stdout }]));
+    expect(out.kind).toBe("ok");
+    expect(out.costUsd).toBeNull();
+    const none = await callClaude(spec("review"), io([{ stdout: "not json", exit: 1 }], { callNo: 2 }));
+    expect(none).toMatchObject({ kind: "infra", costUsd: null });
   });
 });
