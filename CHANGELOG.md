@@ -9,6 +9,11 @@
 - **run: a verify that cannot fail makes a new plan not valid** (`|| true`, `|| echo`, `; exit 0`, `| tee`,
   `set +e` and the like). The plan role is re-run with the task and the pattern. An approved plan is not
   re-checked. The `/plan` skill says the same; `.claude/bin/verify` does not check it.
+- **run: a task that weakens a test it found stops for you.** Before the checks, the driver compares the tests that
+  were there at the task's start (`testGlobs`) and the check configs (CI, vitest, jest, eslint and the like): a
+  deleted test file, fewer tests or assertions, more skip marks, a changed config. Gate `limit` (reason
+  `tests-changed`) lists them: `a` allows exactly those, `r` sends the task back, `c` cancels. It does not see a
+  weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`). Tested with a fake `claude` only.
 
 ## 0.4.0 — the driver
 
