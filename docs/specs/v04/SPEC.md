@@ -128,7 +128,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | clarify | valid output | gate:answers | AC-6 |
 | gate:answers | size task/story confirmed, stage id valid | spec (driver created `spec/<stage>`) | AC-7, AC-8 |
 | gate:answers | size epic confirmed | run finished, `split.md` | AC-9 |
-| spec | SPEC.md written in bounds | driver commits → gate:spec-merge (exit 3) | AC-10 |
+| spec | SPEC.md written in bounds, terms checked | driver commits → gate:spec-merge (exit 3) | AC-10, AC-59 |
 | gate:spec-merge | `--resume`, spec on base ref | driver creates `<stage>-<slug>` → plan | AC-11 |
 | plan | valid plan in bounds | gate:plan-approve | AC-12, AC-13 |
 | gate:plan-approve | approve / reject + comment | base-check / plan (plan deleted first) | AC-14 |
@@ -160,7 +160,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | implement | BLOCKED | gate:limit (blocked) | AC-38 |
 | any | fuse reached | gate:limit (fuse) | AC-35 |
 | any | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
-| spec / plan | output missing or out of bounds twice | unchanged, exit 1 | AC-40, AC-44, AC-45 |
+| spec / plan | output missing, out of bounds or (spec) terms failing twice | unchanged, exit 1 | AC-40, AC-44, AC-45, AC-59 |
 | spec / plan | output missing and `needsHumanDecision` not empty | gate:limit (decision) | AC-57 |
 | base-check | `test` exits non-zero | unchanged, exit 1 | AC-41 |
 | commit | commit refused | implement (attempt + 1) | AC-42 |
@@ -280,7 +280,9 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   - the description, and the answers marked "these are the grill";
   - "write a full spec; the branch exists; do not commit, branch or push";
   - "skip step 7 (Hand over): the driver commits the spec and stops for the human's merge; do not ask about
-    committing, merging or handing over".
+    committing, merging or handing over";
+  - "the driver checks your `## Terms` with `trace --terms`: a word the project shares goes into the glossary
+    in this change, a word for this spec only is marked `(local)`".
 - **plan**:
   - the full text of the `/plan` skill, filled in;
   - "the spec is merged and the branch exists — skip the precondition and step 1; do not run verify,
@@ -385,8 +387,9 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-8:** WHEN size task or story is confirmed, THE SYSTEM SHALL:
   - create `spec/<stage>` from the base ref;
   - run the spec role;
-  - check that `<specsDir>/<stage>/SPEC.md` exists and that only `<specsDir>/<stage>/` and `<adrDir>/`
-    changed;
+  - check that `<specsDir>/<stage>/SPEC.md` exists and that only `<specsDir>/<stage>/`, `<adrDir>/` and the
+    glossary file changed (the glossary: `gates.json → glossary`, else `docs/GLOSSARY.md`; none when `""`);
+  - check the spec's terms (AC-59);
   - commit those paths as `docs(<stage>): spec — <title>`.
 - **AC-9:** WHEN size epic is confirmed, THE SYSTEM SHALL write `split.md` from `proposal.split` and print
   `agent-stack run task --stage <id> "<goal>"` for each part. It SHALL finish the run without writing code.
@@ -534,6 +537,9 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - It SHALL exit with code 1 if the branch cannot be restored without losing edits (partner of AC-16).
 - **AC-44:** IF the spec role ends without `<specsDir>/<stage>/SPEC.md`, THEN THE SYSTEM SHALL re-run it once
   with that feedback, then exit with code 1 (partner of AC-8).
+- **AC-59:** IF `.claude/bin/trace --terms <stage>` exits 1 after the spec role, THEN THE SYSTEM SHALL treat its
+  output as a bounds problem (AC-40): undo, re-run the role once with that output as feedback, then exit with
+  code 1 (partner of AC-8). A missing `trace`, or any other exit code, is no check.
 - **AC-45:** IF the plan role's `tasks` are not a valid plan, THEN THE SYSTEM SHALL re-run it once with the
   error, then exit with code 1 (partner of AC-12).
 - **AC-57:** IF the spec role ends without its SPEC.md, or the plan role without a valid plan, and its
@@ -646,6 +652,9 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-8, AC-59 (new), spec prompt: the glossary is in the spec role's bounds, and the driver checks
+  the spec's terms with `trace --terms` after the role. A term check that first fails at implement would sink
+  every attempt for a word in the spec.
 - 2026-11-19 — Terms: spec-only words marked `(local)`; Live run and Driver call moved to the glossary; the
   glosses for outside references moved to their own section. No criterion changed.
 - 2026-11-19 — AC-10, AC-47: without a remote, the spec-merge gate prints the local merge commands, not a push.
