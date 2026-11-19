@@ -227,6 +227,28 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(r.logged().length).toBe(2);
   });
 
+  it("v04 AC-57: r at gate:limit (decision) re-runs the spec role with its question and the answer", async () => {
+    const r = repo();
+    r.script([clarify(), spec({ writes: {}, needs: ["Which greeting language?"] }), spec()]);
+    expect(await startRun({ ...r.opts({ gate: ["", "", "", "r", "English"] }), mode: "task", description: TASK_DESC }), text(r)).toBe(3);
+    expect(r.run().next).toBe("gate:spec-merge");
+    expect(r.logged().length).toBe(3);
+    expect(r.logged()[2]?.prompt).toContain("FROM THE HUMAN: you asked: Which greeting language?; the answer: English");
+  });
+
+  it("v04 AC-57: the human's decision answer does not leak into a plan re-run after a plan-approve reject", async () => {
+    const r = repo();
+    await toSpecMerge(r, [plan({ tasks: [], needs: ["Which file?"] }), plan(), plan()]);
+    mergeSpec(r);
+    const gate = ["r", "use hello.txt", "r", "smaller tasks", "c"];
+    expect(await resumeRun({ ...r.opts({ gate }) }), text(r)).toBe(0);
+    expect(r.logged().length).toBe(5);
+    expect(r.logged()[3]?.prompt).toContain("FROM THE HUMAN: you asked: Which file?; the answer: use hello.txt");
+    const last = r.logged()[4]?.prompt ?? "";
+    expect(last).toContain("smaller tasks");
+    expect(last).not.toContain("use hello.txt");
+  });
+
   it("v04 AC-32: a denial is one short line, and the denials of an undone plan call are dropped", async () => {
     const r = repo();
     const long = "x".repeat(500);
