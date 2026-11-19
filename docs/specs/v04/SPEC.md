@@ -594,12 +594,16 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - `r` retries implement with the comment that follows: the role gets the conflict and the answer, labelled
     "FROM THE HUMAN". The human may fix the test or the spec by hand before `r`. `c` cancels.
   - No attempt is counted, and the model stays as it was. The attempt's edits are kept.
+  - The gate record keeps the reason, so the answer reaches only implement, never a spec or plan role (AC-57).
+  - A commit or branch switch in the same call is AC-43 first: a failed attempt, and the conflict is not shown.
   - IF `TEST_CONFLICT` comes without `conflict`, or `conflict` comes with another status, THEN that is a
     schema mismatch (AC-37).
 - **AC-65:** IF a task of the plan role has a verify that cannot fail, THEN THE SYSTEM SHALL treat the plan as
   not valid (AC-45), with the error `task <id>: verify cannot fail (<pattern>); remove it` (partner of AC-12).
   - A verify cannot fail when it holds `|| true`, `|| :`, `|| echo`, `|| exit 0`, `; true`, `; exit 0`,
-    `2>/dev/null ||` or `set +e`. The match is on whole words, so `-t "true value"` is not one.
+    `set +e` or `set +o errexit`, pipes into `| tee` or `| cat`, or ends, after other lines, with a line that is
+    only `true` or `exit 0`. A verify that is only `true` stays valid (a docs-only task). The match is on whole words, so `-t "true value"` is not one. It does not look inside quotes, so
+    `grep "a; true" f` is refused too; rewrite such a command.
   - Only a new plan is checked. A plan approved earlier is read as it is, so a run in progress is not stopped.
   - The `/plan` skill SHALL say the same. `.claude/bin/verify` does not check it.
 - **AC-46:** IF a task's checks pass with an empty task diff, THEN THE SYSTEM SHALL record `commit: "empty"`,
@@ -704,7 +708,9 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-64 (new): implement may return `TEST_CONFLICT`. With only DONE or BLOCKED, a role that met
   a wrong test could only change it; a legal way out cuts test cheating (ImpossibleBench: 54 % → 9 %).
 - 2026-11-19 — AC-65 (new), Valid plan: a verify that cannot fail (`|| true`) makes a new plan not valid. Such
-  a verify passes whatever the code does. Only the driver checks it; `.claude/bin/verify` does not.
+  a verify passes whatever the code does. Only the driver checks it; `.claude/bin/verify` does not. From review:
+  `2>/dev/null ||` is dropped (`test -f x 2>/dev/null || exit 1` can fail); `| tee`, `| cat`, `set +o errexit`
+  and a last line `true` or `exit 0` are added.
 - 2026-11-19 — AC-4 (implement prompt): it lists the allowed shell commands; the role tried
   `node --test <file>`, which is not on the list, and lost a turn.
 - 2026-11-19 — AC-57: the retried role gets the questions it asked with the answer; a short "yes" meant
