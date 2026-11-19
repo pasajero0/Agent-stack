@@ -493,8 +493,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 
 ### Unhappy path
 
-- **AC-33:** IF any check exits non-zero or times out, THEN THE SYSTEM SHALL record feedback and return to
-  implement as a new attempt (partner of AC-19).
+- **AC-33:** IF any check exits non-zero, THEN THE SYSTEM SHALL record feedback and return to implement as a
+  new attempt (partner of AC-19). A check that times out is AC-60, not a red check.
   - The feedback is the command, its exit code and the last 50 lines of its output; for verify, those lines
     come from `verify.log`.
   - A task that has used its attempts SHALL go to gate:limit, reason "attempts". Task mode and its fix tasks
@@ -537,6 +537,11 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - It SHALL exit with code 1 if the branch cannot be restored without losing edits (partner of AC-16).
 - **AC-44:** IF the spec role ends without `<specsDir>/<stage>/SPEC.md`, THEN THE SYSTEM SHALL re-run it once
   with that feedback, then exit with code 1 (partner of AC-8).
+- **AC-60:** IF a check or base-check's `test` runs longer than `checkTimeoutMin`, THEN THE SYSTEM SHALL exit
+  with code 1 and name the command and the limit (partner of AC-15, AC-19).
+  - It SHALL count no attempt and keep `next` at that step, so `--resume` runs the checks again.
+  - A hang is the environment's fault, for example a package manager waiting on the network. It is not a
+    reason to send the code back to implement on Opus.
 - **AC-59:** IF `.claude/bin/trace --terms <stage>` exits 1 after the spec role, THEN THE SYSTEM SHALL treat its
   output as a bounds problem (AC-40): undo, re-run the role once with that output as feedback, then exit with
   code 1 (partner of AC-8). A missing `trace`, or any other exit code, is no check.
@@ -652,6 +657,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-33, AC-60 (new): a check timeout exits 1 with no attempt counted, not a red check. A hung
+  `pnpm` had sent a task back to implement on Opus (found in the Compound V check).
 - 2026-11-19 — AC-8, AC-59 (new), spec prompt: the glossary is in the spec role's bounds, and the driver checks
   the spec's terms with `trace --terms` after the role. A term check that first fails at implement would sink
   every attempt for a word in the spec.
