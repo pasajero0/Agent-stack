@@ -65,6 +65,7 @@ describe("quick mode: the path", () => {
     const body = agent.slice(agent.indexOf("You are a code reviewer"));
     expect(r.logged()[1]?.prompt).toContain(body.split("\n")[0] ?? "x");
     expect(r.logged()[1]?.prompt).toContain("Verify, don't trust.");
+    expect(r.logged()[0]?.prompt).toContain("You implement one task.");
 
     const r2 = repo({ run: { quickReviewLines: 3 } });
     rmSync(join(r2.dir, ".claude/agents/code-reviewer.md"));

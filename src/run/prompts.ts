@@ -94,18 +94,25 @@ export function planPrompt(projectDir: string, p: { stage: string; title: string
   return lines.join("\n");
 }
 
-export function implementPrompt(p: {
-  taskId: string;
-  taskDesc: string;
-  criteria: string[];
-  feedback: string | null;
-  /** The commands its `--allowedTools` is built from; the prompt lists the same (AC-4). */
-  commands: CallCommands;
-}): string {
+export function implementPrompt(
+  projectDir: string,
+  p: {
+    taskId: string;
+    taskDesc: string;
+    criteria: string[];
+    feedback: string | null;
+    /** The commands its `--allowedTools` is built from; the prompt lists the same (AC-4). */
+    commands: CallCommands;
+  }
+): string {
   const lines = [
     "# Role: implement",
     "",
     "The driver has created the branch and recorded this task's base. The driver, not you, runs the checks, the review and the commit. You must not commit, branch or edit tasks.json.",
+    "",
+    "Rules (.claude/agents/implementer.md); follow 'Under the driver':",
+    "",
+    loadAgent(projectDir, "implementer"),
     "",
     `Task ${p.taskId}: ${p.taskDesc}`,
     "",
@@ -114,10 +121,6 @@ export function implementPrompt(p: {
   ];
   if (p.feedback) lines.push("", "FROM THE PROGRAM (checks or review of the previous attempt):", p.feedback);
   lines.push(
-    "",
-    "Write the failing test first, see it fail, then the code; touch only this task; do not commit, branch or edit `tasks.json`.",
-    "A change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report.",
-    "If an existing test, or the task's verify, contradicts a criterion, do not change it: return status TEST_CONFLICT with conflict {test, criterion, reason}. Existing means not written in this attempt: another task's test, a test the repo had, or the verify command. The human decides.",
     "",
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),

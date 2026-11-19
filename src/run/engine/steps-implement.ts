@@ -98,7 +98,7 @@ export const implement: StepHandler = async (ctx, id) => {
   }
   if (task.attempts === 0) task.attempts = 1;
   const commands = { test: ctx.cfg.commands.test, lint: ctx.cfg.commands.lint, verify: info.verify };
-  const prompt = implementPrompt({ taskId: task.id, taskDesc: info.desc, criteria: info.criteria, feedback: task.lastFeedback, commands });
+  const prompt = implementPrompt(ctx.projectDir, { taskId: task.id, taskDesc: info.desc, criteria: info.criteria, feedback: task.lastFeedback, commands });
   const r = await roleCall(ctx, { role: "implement", commands }, implementModel(info, task), prompt, parseImplement);
   const stray = undoGitSideEffects(ctx, task);
   if (r.kind === "fuse") {
