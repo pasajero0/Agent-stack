@@ -67,6 +67,14 @@ describe("buildHarnessFiles", () => {
     }
   });
 
+  it("spec-reviewer recomputes every example from the contract, literally", () => {
+    // A spec said greet() returns 'Hello, !' while its contract gave `Hello, ${name}!` with no default; in JS
+    // that is 'Hello, undefined!'. The spec was consistent with itself, so only recomputing catches it.
+    const rubric = byPath(".claude/agents/spec-reviewer.md")!.content;
+    expect(rubric).toContain("**Examples hold.**");
+    expect(rubric).toMatch(/recompute every example/i);
+  });
+
   it("ships the spec-driven skills with their templates", () => {
     for (const skill of ["grill", "adr", "spec", "plan"]) {
       const f = byPath(`.claude/skills/${skill}/SKILL.md`);

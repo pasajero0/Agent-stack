@@ -37,6 +37,11 @@ the code it touches or names. Do not edit files.
    status value — is an entry in `## Terms`. If the project has a glossary (`gates.json → glossary`, default
    `docs/GLOSSARY.md`), each Terms entry is either in it or marked `(local)`; `.claude/bin/trace` checks
    only the second part, so a word that never reaches Terms is yours to catch (**major**).
+   **Examples hold.** Recompute every example in the criteria and the contract from the contract, literally,
+   as the language or runtime would compute it. Do not trust the example's own text. A spec can agree with
+   itself and still be wrong: if the contract says `` `Hello, ${name}!` `` with no default, then in JS
+   `greet()` gives `'Hello, undefined!'`, not `'Hello, !'`. An example the contract does not give is a
+   **blocker**.
 9. **No implementation leaks** into criteria (how, instead of what) unless the contract requires it.
 10. **Verifiable.** "How to verify" gives concrete commands; tests can be filtered by AC id.
 11. **Claims about code are true.** Every file, symbol, dependency, endpoint, or existing behavior the
