@@ -34,6 +34,14 @@
 - **Hooks:** spec-gate's quick-mode bypass and evidence-gate's silence apply only to a live driver run on the
   run's branch; guard-file protects the run folder; path checks follow symlinks.
 - **/plan skill:** every task ends green; the test is written first inside the task, no test-only tasks.
+- **From the first run with the real `claude`:**
+  - the plan role returns its tasks and the driver writes `tasks.json`: Claude Code guards `.claude/`, so a
+    headless role could not;
+  - a spec or plan role that asks a question stops at gate `limit` (reason `decision`) instead of being re-run;
+  - a permission denial is shown as one short line;
+  - each call loads only the project: its `.mcp.json`, project settings, no user CLAUDE.md, no claude.ai
+    connectors, no auto-memory. About 165k → 15k tokens a turn;
+  - a line before and after every call, so a long call does not look hung.
 
 ## 0.3.0 — from the first trial
 

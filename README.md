@@ -163,8 +163,8 @@ implement call. The driver runs the checks (the test command, plus lint on chang
    here with a proposed split in `split.md`.
 2. *Spec* (Opus) on a new `spec/<stage>` branch. The driver commits it and stops with exit 3.
    **You decide** by reviewing and merging that branch into the base branch yourself.
-3. `--resume` creates `<stage>-<slug>` and runs *plan* (Opus). **You decide** at gate `plan-approve`: approve,
-   or reject with a comment (the plan is redone). Each task's `verify` command is allowed to the model
+3. `--resume` creates `<stage>-<slug>` and runs *plan* (Opus). The role returns the tasks and the driver writes
+   `tasks.json`. **You decide** at gate `plan-approve`: approve, or reject with a comment (the plan is redone). Each task's `verify` command is allowed to the model
    as written, so read the plan table.
 4. The driver runs your test command once, then per task: implement, checks (the task's `verify` plus lint),
    review on that task's diff, commit `<type>(<stage>): <subject>`. A red check or a blocking review goes
@@ -173,7 +173,9 @@ implement call. The driver runs the checks (the test command, plus lint on chang
 
 **Gates.** At a terminal, answers are read from the prompt; `c` cancels at any gate. With no terminal the run
 is recorded as waiting and exits. A gate `limit` appears when attempts run out, a task is BLOCKED, the review
-loop does not improve, or the fuse is reached: `r` retries, `f <n>` raises the fuse, `c` cancels.
+loop does not improve, or the fuse is reached: `r` retries, `f <n>` raises the fuse, `c` cancels. When the spec
+or plan role asks you something instead of doing its job, gate `limit` (reason `decision`) shows the question:
+`r` and your answer re-run the role with it.
 
 **Exit codes.** `0`: finished, cancelled or `--status`. `3`: waiting at the spec-merge gate, or at any gate
 without a terminal. `1`: a refusal or an error; the message says what to do.
@@ -193,8 +195,17 @@ step aside only for a live driver run on the run's own branch: spec-gate (quick 
 **Nothing is pushed or merged**: you push, and you merge the spec yourself.
 Each call is logged in `.claude/tmp/runs/<run id>/calls/` (argv, exit code, result; never the prompt).
 
+**Only the project goes in.** Each call gets the project's `.mcp.json` only (`--strict-mcp-config`), project and
+local settings only (no user plugins, permissions or hooks), and not your `~/.claude/CLAUDE.md`. Your
+claude.ai connectors (Gmail, Drive and so on), auto-memory and the git status snapshot are switched off by env
+vars. Besides privacy, this is the cost: the connectors alone added about 150k tokens to every turn.
+
 **Limits of this part.**
-- Experimental: it has been run end to end only with a fake `claude`, not yet with the real one.
+- Experimental: one manual run with the real `claude` (a quick fix and a one-task stage); the rest is tested with a
+  fake `claude`.
+- With a claude.ai login, Claude Code still puts the account email into the session context. No switch removes
+  it short of `--bare`, which needs an API key and skips the hooks. It stays in the model's context; nothing
+  writes it to the repo.
 - One run per repo; a waiting or interrupted run blocks a new one until `--cancel`.
 - Bug and refactor modes come later.
 - Bash can forge the run file (known gap): a model that writes `.claude/tmp/runs/<id>/run.json` through Bash
