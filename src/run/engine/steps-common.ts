@@ -212,7 +212,7 @@ function checkFeedback(ctx: Ctx, item: CheckItem, r: CheckRun): string {
  * A check that ran past `checkTimeoutMin` (AC-60): exit 1 with `next` kept and no attempt counted. A hang is the
  * environment's (a package manager waiting on the network), not the code's, so it does not go back to implement.
  */
-function timedOutError(ctx: Ctx, step: string, r: CheckRun): RunError {
+export function timedOutError(ctx: Ctx, step: string, r: CheckRun): RunError {
   return new RunError(
     `${step}: \`${r.cmd}\` timed out after ${ctx.cfg.checkTimeoutMin} min (checkTimeoutMin). No attempt was counted. Fix what hangs, or raise run.checkTimeoutMin in gates.json, then ${resumeHint(ctx.run.id)} runs the checks again.\n${r.tail}`,
     1

@@ -2,10 +2,12 @@
  * gate:accept and gate:limit, and the texts the run prints. Spec: "Gate input", AC-21, AC-22, AC-28, AC-29,
  * AC-31, AC-32, AC-46, AC-56. Task-mode gates (T9) reuse `ask`, `recordGate` and `showDecisions`.
  */
+import { runCheck, type CheckRun } from "../checks.js";
 import { diffStat, git } from "../git.js";
 import type { GateRecord, RunFile } from "../types.js";
 import { fuseText } from "./call.js";
 import { Interrupted, newTask, type Ctx, type StepHandler } from "./context.js";
+import { timedOutError } from "./steps-common.js";
 import { parseNext, type StepEvent } from "./transitions.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
@@ -81,7 +83,17 @@ function commitText(c: string | null): string {
 }
 
 /** The gate:accept summary (AC-21, AC-46). */
-function acceptSummary(ctx: Ctx): void {
+/** The mode's final check, run once more before gate:accept (AC-21, AC-61); null when the mode has none. */
+async function finalCheck(ctx: Ctx): Promise<CheckRun | null> {
+  const item = ctx.mode.finalCheck?.(ctx) ?? null;
+  if (item === null) return null;
+  const r = await runCheck(item.cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
+  if (r.aborted) throw new Interrupted();
+  if (r.timedOut) throw timedOutError(ctx, "final check", r);
+  return r;
+}
+
+function acceptSummary(ctx: Ctx, final: CheckRun | null): void {
   const { run } = ctx;
   ctx.out(`== gate:accept — run ${run.id} on ${run.branch} ==`);
   if (run.baseCommit) {
@@ -92,6 +104,14 @@ function acceptSummary(ctx: Ctx): void {
     const checks = t.checks.map((c) => (c.skipped ? `${c.cmd} skipped` : `${c.cmd} → ${c.exit}`)).join("; ");
     ctx.out(`${t.id}: ${commitText(t.commit)}; attempts ${t.attempts}; checks: ${checks || "none"}`);
     for (const n of t.notes) ctx.out(`  note: ${n}`);
+  }
+  if (final !== null) {
+    const red = final.exit !== 0;
+    ctx.out(`Final check: ${final.cmd} (every task) → ${final.exit}${red ? " RED" : ""}`);
+    if (red) {
+      ctx.out(final.tail);
+      ctx.out("A later task broke an earlier one: r with a comment adds a fix task; a accepts a red result.");
+    }
   }
   const skips = skipped(ctx);
   if (skips.length > 0) ctx.out(`Skipped: ${skips.join("; ")}`);
@@ -117,7 +137,7 @@ export function fixComment(run: RunFile, id: string): string {
 }
 
 export const acceptGate: StepHandler = async (ctx) => {
-  acceptSummary(ctx);
+  acceptSummary(ctx, await finalCheck(ctx));
   for (;;) {
     const a = await ask(ctx, "accept> ");
     if (a === null) return NO_INPUT;

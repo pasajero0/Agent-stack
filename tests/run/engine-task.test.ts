@@ -5,7 +5,7 @@ import { cleanupProjects, git, write } from "../hooks/fixture.js";
 import { resumeRun, startRun } from "../../src/run/engine/index.js";
 import { transition } from "../../src/run/engine/transitions.js";
 import { readLock } from "../../src/run/store.js";
-import { makeFakeExecutable, repo, sh, text } from "./engine-fixture.js";
+import { impl, makeFakeExecutable, repo, review, sh, text } from "./engine-fixture.js";
 import {
   clarify,
   mergeSpec,
@@ -352,6 +352,27 @@ describe("task mode: the whole path", () => {
     const tasks: unknown = JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"));
     expect(tasks).toMatchObject({ tasks: [{ id: "T1", passes: true }, { id: "T2", passes: true }] });
     expect(readLock(r.dir)).toBeNull();
+  });
+
+  it("v04 AC-21: with two plan tasks, gate:accept shows a final check of every task's verify", async () => {
+    const r = repo();
+    await toSpecMerge(r, [plan(), ...twoTasksDone()]);
+    mergeSpec(r);
+    expect(await resumeRun({ ...r.opts({ gate: ["a", "a"] }) }), text(r)).toBe(0);
+    expect(text(r)).toContain("Final check: .claude/bin/verify (every task) → 0");
+  });
+
+  it("v04 AC-61: a later task that breaks an earlier one's verify shows a red final check; a still accepts", async () => {
+    const r = repo();
+    // T2 makes bye.txt (its own verify passes) and deletes hello.txt, which T1's verify needs.
+    const breaker = impl({ writes: { "bye.txt": "bye\n" }, exec: "rm hello.txt", subject: "Add the bye file" });
+    await toSpecMerge(r, [plan(), impl({ writes: { "hello.txt": "hello\n" }, subject: "Add the hello file" }), review(), breaker, review()]);
+    mergeSpec(r);
+    expect(await resumeRun({ ...r.opts({ gate: ["a", "a"] }) }), text(r)).toBe(0);
+    const t = text(r);
+    expect(t).toMatch(/Final check: \.claude\/bin\/verify \(every task\) → [1-9]\d* RED/);
+    expect(t).toContain("r with a comment adds a fix task; a accepts a red result");
+    expect(r.run().status).toBe("finished");
   });
 
   it("v04 AC-20: each task's checks are its verify plus lint, then review, then the commit; the next task follows", async () => {

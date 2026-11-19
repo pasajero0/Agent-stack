@@ -197,4 +197,14 @@ export const taskMode: ModeSteps = {
     return plan[i + 1]?.id ?? null;
   },
 
+  /**
+   * Every task's verify once more before gate:accept, so a later task that broke an earlier one shows up
+   * (AC-21, AC-61). Skipped with one plan task, and after a fix task, whose checks already are this.
+   */
+  finalCheck(ctx) {
+    const last = ctx.run.tasks.at(-1);
+    if (last === undefined || isFix(last.id)) return null;
+    return ctx.run.tasks.filter((t) => !isFix(t.id)).length > 1 ? { label: "verify", cmd: ".claude/bin/verify" } : null;
+  },
+
 };
