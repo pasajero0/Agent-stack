@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased (0.5)
+## Unreleased (0.4.1) — driver checks
 
 - **run: a test conflict is a way out, not a cheat.** If an existing test or the task's verify contradicts a
   criterion, implement returns `TEST_CONFLICT` and leaves the test alone. The run stops at gate `limit`
   (reason `test-conflict`) and shows the test, the criterion and the reason. `r` and your answer retry
-  implement; no attempt is counted. Tested with a fake `claude` only.
+  implement; no attempt is counted. Tested with a fake `claude` and in one manual run with the real `claude`.
 - **run: a verify that cannot fail makes a new plan not valid** (`|| true`, `|| echo`, `; exit 0`, `| tee`,
   `set +e` and the like). The plan role is re-run with the task and the pattern. An approved plan is not
   re-checked. The `/plan` skill says the same; `.claude/bin/verify` does not check it.
@@ -13,13 +13,14 @@
   were there at the task's start (`testGlobs`) and the check configs (CI, vitest, jest, eslint and the like): a
   deleted test file, fewer tests or assertions, more skip marks, a changed config. Gate `limit` (reason
   `tests-changed`) lists them: `a` allows exactly those, `r` sends the task back, `c` cancels. It does not see a
-  weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`). Tested with a fake `claude` only.
+  weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`). Tested with a fake `claude` and in two
+  manual runs with the real `claude`.
 - **run: review and implement take their rules from your agents.** The driver no longer keeps its own copy: the
   review prompt carries `.claude/agents/code-reviewer.md`, the implement prompt `.claude/agents/implementer.md`
   (frontmatter removed). A fix to an agent now reaches the driver too. The implementer agent has a section for a
   chat and one for the driver; both have the test conflict exit.
 
-### Upgrading from 0.4
+### Upgrading from 0.4.0
 
 - **Run `agent-stack update`.** The driver needs the new `implementer.md` (a `## Under the driver` section) and
   `code-reviewer.md` (a "Task review" item). If you changed one of them, `update` keeps your copy, and the run
