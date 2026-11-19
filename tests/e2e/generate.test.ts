@@ -50,13 +50,15 @@ describe("generate → full gate cycle on a TypeScript repo", () => {
     // 2. Writing the spec and an ADR is always open.
     expect(runHook(dir, "spec-gate.sh", writeTool(join(dir, "docs/specs/A0/SPEC.md"))).code).toBe(0);
     expect(runHook(dir, "spec-gate.sh", writeTool(join(dir, "docs/adr/0001-x.md"))).code).toBe(0);
-    // 3. Human merges the spec; the plan activates the stage.
+    // 3. Human merges the spec; code still waits for the plan.
     write(dir, "docs/specs/A0/SPEC.md", "---\nstage: A0\n---\n- **AC-1:** THE SYSTEM SHALL exist.\n");
     git(dir, "add", "docs");
     git(dir, "commit", "-q", "-m", "spec: A0");
     git(dir, "checkout", "-q", "-b", "A0-work");
-    expect(runHook(dir, "spec-gate.sh", edit(src)).code).toBe(0);
-    // 4. The plan can be written once, unproven.
+    const noPlan = runHook(dir, "spec-gate.sh", edit(src));
+    expect(noPlan.code).toBe(2);
+    expect(noPlan.stderr).toContain("Run /plan A0 first");
+    // 4. The plan can be written once, unproven; then code opens.
     const plan = JSON.stringify({
       stage: "A0",
       tasks: [{ id: "T1", ac: ["AC-1"], tier: "S", verify: "test -f src/app.ts", passes: false }],
@@ -64,6 +66,7 @@ describe("generate → full gate cycle on a TypeScript repo", () => {
     const planPath = join(dir, ".claude/tmp/A0/tasks.json");
     expect(runHook(dir, "guard-file.sh", writeTool(planPath, plan)).code).toBe(0);
     write(dir, ".claude/tmp/A0/tasks.json", plan);
+    expect(runHook(dir, "spec-gate.sh", edit(src)).code).toBe(0);
     // 5. Claiming done before verify is blocked; cheating is blocked.
     const stop = (msg: string) =>
       runHook(dir, "evidence-gate.sh", { stop_hook_active: false, last_assistant_message: msg });

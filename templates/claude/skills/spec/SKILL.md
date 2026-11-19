@@ -28,15 +28,28 @@ every code edit for the stage. So the spec must be good enough to build from wit
    from `${CLAUDE_SKILL_DIR}/template.md`.
 3. **Acceptance criteria** — each one:
    - has a unique id (`AC-1`, `AC-2`, …) — tests will carry these ids in their names;
-   - uses an EARS pattern (table in the template) and an observable outcome — something a test can check;
+   - uses an EARS pattern and an observable outcome — something a test can check. The patterns (reference
+     only — do not copy this table into the spec):
+
+     | Pattern | Form |
+     | --- | --- |
+     | Always | `THE SYSTEM SHALL …` |
+     | Event | `WHEN <trigger>, THE SYSTEM SHALL …` |
+     | State | `WHILE <state>, THE SYSTEM SHALL …` |
+     | Unwanted | `IF <condition>, THEN THE SYSTEM SHALL …` |
+     | Option | `WHERE <feature is enabled>, THE SYSTEM SHALL …` |
+
    - **every happy-path criterion has at least one unhappy-path partner** (`IF … THEN THE SYSTEM SHALL …`);
    - every edge case from the grill is either a criterion or listed under "Out of scope";
    - a criterion that follows from a decision cites its ADR: `(ADR-0003)`, and that ADR is in the
      Decisions table. The ADR lists this stage under "Applies to", unless it is project-wide.
    - A stage with several parts (Backend and Frontend, api and web) groups criteria by part; ids run on.
+   - a new named concept (a state, role, reason, mode, gate) is an entry in `## Terms`. If the project has a
+     glossary, add a shared word there in the same change, or mark it `(local)`. Check it with
+     `.claude/bin/trace --terms <stage>` (terms only, so it works before there are tests).
 4. **NFRs only with numbers** ("p99 < 300 ms at 50 rps"), never "fast" or "scalable".
 5. **How to verify** — the exact commands (tests filtered by AC id, load profile, manual check).
-6. **Review.** Run the `spec-reviewer` subagent on the file. Fix every blocker; argue or fix the rest.
+6. **Review.** Run `.claude/bin/trace --terms <stage>` and fix what it names. Then run the `spec-reviewer` subagent on the file. Fix every blocker; argue or fix the rest.
    Repeat until it returns PASS (max 3 rounds — then list what is left under NEEDS HUMAN DECISION).
    Skipping the review is allowed only when the human says so; then say in the report that it was skipped.
 7. **Hand over.** Commit the spec (and its ADRs) on a branch `spec/<stage>` and tell the human it is ready:

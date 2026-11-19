@@ -18,7 +18,9 @@ stage: <stage id>
 
 ## Terms
 
-<Domain words used below, one line each. Use the same word for the same thing everywhere.>
+<Domain words used below, one line each: "- **Word** — meaning". Use the same word for the same thing everywhere.
+A word the whole project shares goes into the glossary (gates.json → glossary, default docs/GLOSSARY.md) in the
+same change; a word for this spec only is marked "- **Word** (local): …". `.claude/bin/trace` checks this.>
 
 ## Model and state transitions
 
@@ -32,14 +34,6 @@ stage: <stage id>
 If the shapes live in a contract package, name them here; fields are described only there.>
 
 ## Acceptance criteria (EARS)
-
-| Pattern | Form |
-| --- | --- |
-| Always | `THE SYSTEM SHALL …` |
-| Event | `WHEN <trigger>, THE SYSTEM SHALL …` |
-| State | `WHILE <state>, THE SYSTEM SHALL …` |
-| Unwanted | `IF <condition>, THEN THE SYSTEM SHALL …` |
-| Option | `WHERE <feature is enabled>, THE SYSTEM SHALL …` |
 
 <!-- A stage that spans parts (Backend and Frontend, api and web) groups the three headings below under a
      heading per part: "### Backend" → "#### Happy path" … AC ids run on through all parts, so each stays

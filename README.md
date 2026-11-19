@@ -33,7 +33,7 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 │   │                        #   and-run (npx, dlx, curl | sh) and reading secrets: ask / deny
 │   ├── guard-file.sh        # protect the harness itself, generated files, lockfiles, tasks.json; confirm
 │   │                        #   editing .env; reading env files and keys: ask / deny
-│   ├── spec-gate.sh         # the spec leads the code: first spec merged, later changes committed first
+│   ├── spec-gate.sh         # the spec leads the code: first spec merged, later changes committed first, then /plan
 │   ├── cheat-guard.sh       # block edits that add .skip/.only, @ts-ignore, eslint-disable, any, …
 │   ├── arch-guard.sh        # block new imports across layer boundaries set in gates.json
 │   ├── evidence-gate.sh     # Stop: no "STATUS: DONE" while a task fails or without EVIDENCE
@@ -43,7 +43,9 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 │   ├── stop-flag-reflect.sh # Stop: after a memory change, suggests /reflect next session
 │   └── gates-lib.sh         # shared helpers (not a hook)
 ├── bin/verify             # runs each task's verify command — the only writer of `passes`
-├── bin/trace              # links spec criteria ↔ tests ("A0 AC-3: …"): missing tests, invented criteria
+├── bin/trace              # links spec criteria ↔ tests ("A0 AC-3: …"): missing tests, invented criteria;
+│                          #   and spec Terms ↔ glossary: a term not in it and not marked (local);
+│                          #   --terms checks only the terms (before a spec has tests)
 ├── bin/health             # code-health SLIs on the branch's changes vs SLOs; time series in tmp/health.jsonl
 ├── agents/                # spec-reviewer, implementer, test-writer, code-reviewer, task-analyzer,
 │                          # researcher, pattern-scout — each with a model and effort level
@@ -55,10 +57,12 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 
 ## The workflow
 
-Hooks enforce three points of it: no code before the spec is merged (**spec-gate**), no skipped tests or
-suppressed checks (**cheat-guard**), no "done" that the task results contradict (**evidence-gate**). The
-order of the other steps is kept by skills, which the model may skip: in the first trial `/plan` was never
-called. Keeping the whole order outside the model is the next step for this project.
+Hooks enforce four points of it: no code before the spec is merged and the plan is written
+(**spec-gate**), no skipped tests or suppressed checks (**cheat-guard**), no "done" without evidence or
+against the task results (**evidence-gate**). The order of the other steps is kept by skills, which the model
+may skip. Keeping the whole order outside the model is the job of the driver, `agent-stack run`
+([ADR 0001](docs/adr/0001-pipeline-driver.md)); it exists as an experimental first part, see
+[Driving the pipeline](#driving-the-pipeline-agent-stack-run-experimental).
 
 1. **`/grill`** — the agent interviews you in numbered rounds, each question with a recommended answer,
    until no decision is open. Decisions become ADRs (**`/adr`**), edge cases go into the spec.
@@ -70,7 +74,8 @@ called. Keeping the whole order outside the model is the next step for this proj
    item with the command that proves it; no review, not traced to tests.
 3. **`/plan <stage>`** on a branch named after the stage (`A0-ingest` — the gates read the stage from it):
    `.claude/tmp/<stage>/tasks.json`, every criterion → a task with a `verify` command and a tier (S/M/L)
-   that picks the implementer's model.
+   that picks the implementer's model. Until it exists **spec-gate** keeps code closed: in the first trial
+   `/plan` was never called, and nothing checked the "done".
    **Requirements change?** The spec changes first, in the same branch: a `spec: …` commit with a
    "## Changes" entry, then tests and code. spec-gate keeps code closed while the spec has uncommitted
    edits or an unexplained change — so history always shows the spec before the code it explains.
@@ -78,7 +83,8 @@ called. Keeping the whole order outside the model is the next step for this proj
 5. **One task at a time** by the **implementer** subagent; **`.claude/bin/verify`** is the only thing that
    marks a task as passing.
 6. **Report** with STATUS / DONE / NOT DONE / EVIDENCE / RISKS / NEEDS HUMAN DECISION.
-   **evidence-gate** blocks a "done" that the task results contradict.
+   **evidence-gate** blocks a "done" without EVIDENCE (with or without a task list), and one that the task
+   results contradict.
 
 ## Drift — measured like a service
 
@@ -110,6 +116,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `installPatterns`, `cheatPatterns` | what counts as an install / a cheat (POSIX regex) |
 | `commands.test`, `commands.lint`, `lintMatch` | test command; per-file lint command with `{file}`; files to lint |
 | `testGlobs` | where `trace` looks for tests that name criteria |
+| `glossary` | the glossary `trace` checks spec Terms against: each `- **Term**` in a spec's `## Terms` is a headword there or is marked `(local)`. Default `docs/GLOSSARY.md` when it exists; `""` turns the check off. Optional, not in the seed |
 | `slo` | code-health limits on changed files: `maxFileLines` (400), `newDependencies` (null = report only) |
 | `health` | project metrics: `[{"name": "complexity", "command": "… {files} …", "max": 0}]` — detected for ESLint and ruff |
 | `docsLayout` | where Markdown files belong; `health` lists a changed `.md` outside these globs (a hint, never a block). Root-level `*.md` always fits. Set for a monorepo (see below), empty otherwise |
@@ -132,13 +139,97 @@ The agent cannot edit `gates.json`, `settings*.json`, `hooks/` or `bin/` — gua
 | `agent-stack usage` | What the harness did in this project, read from Claude Code's session logs: hook blocks and context, Stop-hook runs, subagents, skills, commands, `bin/` runs, tokens by agent and model, and installed parts that never acted. `--days <n>`, `--logs <dir>`, `--json`; `--save` keeps the summary in `.claude/tmp/usage/<date>.json`, since Claude Code deletes old logs. How to read it: [docs/usage-analytics.md](docs/usage-analytics.md) |
 | `agent-stack detect` | Report project context + whether Claude Code is installed |
 | `agent-stack mcp install` / `list` | MCP servers from the catalog |
+| `agent-stack run` | Experimental pipeline driver: `quick` / `task` modes, `--resume`, `--status`, `--cancel`. See [Driving the pipeline](#driving-the-pipeline-agent-stack-run-experimental) |
+
+## Driving the pipeline: `agent-stack run` (experimental)
+
+A program holds the step order, so the model cannot skip `/plan`. The program creates the branches, makes
+every commit, runs the checks itself and stops for you at fixed gates. The model only reads and edits files
+inside the step it is given. Design: [ADR 0001](docs/adr/0001-pipeline-driver.md), spec:
+[docs/specs/v04/SPEC.md](docs/specs/v04/SPEC.md), terms: [docs/GLOSSARY.md](docs/GLOSSARY.md).
+
+```text
+agent-stack run quick "<description>"                  a small fix
+agent-stack run task [--stage <id>] "<description>"    a spec, a plan and one or two tasks
+agent-stack run --resume [<run id>]                    continue a waiting or interrupted run
+agent-stack run --status [<run id>]                    print the run; change nothing
+agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
+```
+
+**Quick mode.** Creates `quick/<slug>` from HEAD, runs your test command on it (it must pass), then one
+implement call. The driver runs the checks (the test command, plus lint on changed files). A diff above
+`quickReviewLines` is also reviewed. Then the driver commits (`<type>: <subject>`) and stops at the accept gate.
+
+**Task mode.**
+1. *Clarify* (Opus): up to 5 questions with recommended answers, a size (task, story, epic) and a stage id.
+   **You decide** at gate `answers`: accept or change each answer, the size and the stage id. An epic ends
+   here with a proposed split in `split.md`.
+2. *Spec* (Opus) on a new `spec/<stage>` branch. The driver checks its terms (`trace --terms`; the role may add
+   a shared word to the glossary in the same commit), commits it and stops with exit 3.
+   **You decide** by reviewing and merging that branch into the base branch yourself.
+3. `--resume` creates `<stage>-<slug>` and runs *plan* (Opus). The role returns the tasks and the driver writes
+   `tasks.json`. **You decide** at gate `plan-approve`: approve, or reject with a comment (the plan is redone). Each task's `verify` command is allowed to the model
+   as written, so read the plan table.
+4. The driver runs your test command once, then per task: implement, checks (the task's `verify` plus lint),
+   review on that task's diff, commit `<type>(<stage>): <subject>`. A red check or a blocking review goes
+   back to implement with the feedback, up to the attempt limit.
+5. **You decide** at gate `accept`: accept (the run finishes) or reject with a comment, which adds a fix task.
+
+**Gates.** At a terminal, answers are read from the prompt; `c` cancels at any gate. With no terminal the run
+is recorded as waiting and exits. A gate `limit` appears when attempts run out, a task is BLOCKED, the review
+loop does not improve, or the fuse is reached: `r` retries, `f <n>` raises the fuse, `c` cancels. When the spec
+or plan role asks you something instead of doing its job, gate `limit` (reason `decision`) shows the question:
+`r` and your answer re-run the role with it. Before gate `accept`, a task run with more than one task runs every
+task's verify once more and marks a red result.
+
+**Exit codes.** `0`: finished, cancelled or `--status`. `3`: waiting at the spec-merge gate, or at any gate
+without a terminal. `1`: a refusal or an error; the message says what to do.
+
+**Config.** The optional `run` key of `.claude/gates.json` (defaults live in code, so `update` need not touch it):
+
+```json
+{ "run": { "maxTurns": 60, "fuse": { "calls": 40 }, "stepTimeoutMin": 30, "checkTimeoutMin": 15, "quickReviewLines": 120 } }
+```
+
+`fuse` is one of three kinds: `{ "calls": <n> }` (the default, 40; fits a subscription), `{ "usd": <n> }`
+(for API billing; every call also gets what is left as its `--max-budget-usd`), or `"off"`.
+Turns per call, attempts per task and the review-loop stop apply whatever the kind.
+A call that was killed, or whose result has no cost, counts as unknown cost, and the gates name those calls.
+A check that runs past `checkTimeoutMin` stops the run with exit 1 and counts no attempt: fix what hangs, then
+`--resume`.
+
+**Hooks stay on.** Claude is never started with `--bare`, `bypassPermissions` or `disableAllHooks`. Two hooks
+step aside only for a live driver run on the run's own branch: spec-gate (quick mode) and evidence-gate.
+**Nothing is pushed or merged**: you push, and you merge the spec yourself.
+Each call is logged in `.claude/tmp/runs/<run id>/calls/` (argv, exit code, result; never the prompt).
+
+**Only the project goes in.** Each call gets the project's `.mcp.json` only (`--strict-mcp-config`), project and
+local settings only (no user plugins, permissions or hooks), and not your `~/.claude/CLAUDE.md`. Your
+claude.ai connectors (Gmail, Drive and so on), auto-memory and the git status snapshot are switched off by env
+vars. Besides privacy, this is the cost: the connectors alone added about 150k tokens to every turn.
+
+**Limits of this part.**
+- Experimental: five manual runs with the real `claude` (two quick fixes, two one-task stages, one two-task
+  stage); the rest is tested with a fake `claude`.
+- **`/plan` needs a person in a plain session.** Claude Code guards `.claude/` itself, even with an allow rule,
+  so writing `tasks.json` asks for approval. With no one to approve (a headless or autonomous session), `/plan`
+  cannot write it; use `agent-stack run task`, where the driver writes the plan.
+- With a claude.ai login, Claude Code still puts the account email into the session context. No switch removes
+  it short of `--bare`, which needs an API key and skips the hooks. It stays in the model's context; nothing
+  writes it to the repo.
+- One run per repo; a waiting or interrupted run blocks a new one until `--cancel`.
+- Bug and refactor modes come later.
+- Bash can forge the run file (known gap): a model that writes `.claude/tmp/runs/<id>/run.json` through Bash
+  can make a hook believe a driver run is live. Do not run it on a repo you do not trust the model with.
 
 ## Limits — read before trusting it
 
 - **Blocklists, not a sandbox.** Guards catch an agent's mistakes, not a determined bypass: a file written
   through Bash (`sed -i`, `>`) skips the Edit/Write gates, and command matching is regex-based (known false
-  positive: `git push` quoted inside another command's argument is blocked). Put the same checks in CI for
-  anything that must hold.
+  positive: `git push` quoted inside another command's argument is blocked, and so is a heredoc that writes a
+  file containing `git push` or another package manager's command. Use the Edit or Write tool for such a file.
+  The guard does not skip heredoc text, because a heredoc fed to a shell runs it). Put the same checks in CI
+  for anything that must hold.
 - **Hooks fail open** when they crash. Stop hooks can only nudge once per turn (`stop_hook_active`).
 - `verify` runs commands from an agent-written plan; it is not allow-listed and refuses commands guard-bash
   would block. Review the plan table before implementation starts.
@@ -165,7 +256,7 @@ weekly summaries is removed in a later version.
 
 | Part | What the trial showed |
 | --- | --- |
-| `/plan` → `tasks.json` → `bin/verify` → `evidence-gate` | no `tasks.json` written; `evidence-gate` ran 218 times, stopped nothing |
+| `/plan` → `tasks.json` → `bin/verify` → `evidence-gate` | no `tasks.json` written; `evidence-gate` ran 218 times, stopped nothing. Since 0.4 spec-gate waits for `tasks.json`, so the chain is no longer optional |
 | `task-analyzer`, `pattern-scout` subagents | never called |
 | `spec-reviewer` subagent | called once (~47k tokens), result discarded |
 | `/grill`, `/migration`, `/mr-description` skills | never called |

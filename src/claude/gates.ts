@@ -110,13 +110,16 @@ export function monorepoDocsLayout(docsDir: string): string[] {
   return [`${docsDir}*`, "apps/*/README.md", "packages/*/README.md", "packages/*/CHANGELOG.md", ".claude/*", ".github/*"];
 }
 
+/** Default `stagePattern`: the stage id is the leading letters+digits of the branch's last segment. */
+export const DEFAULT_STAGE_PATTERN = "^([A-Za-z]+[0-9]+)([-_.]|$)";
+
 export function buildGatesConfig(p: HarnessParams): GatesConfig {
   const generated = p.generatedGlobs ? p.generatedGlobs.split("|") : [];
   return {
     mode: "interactive",
     baseBranch: p.mainBranch,
     specsDir: `${p.docsDir}specs`,
-    stagePattern: "^([A-Za-z]+[0-9]+)([-_.]|$)",
+    stagePattern: DEFAULT_STAGE_PATTERN,
     adrDir: `${p.docsDir}adr`,
     specGate: "strict",
     openPaths: [`${p.docsDir}*`, "*.md", ".claude/*", ".gitignore"],

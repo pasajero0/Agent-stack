@@ -1,5 +1,95 @@
 # Changelog
 
+## 0.4.0 — the driver
+
+A program, `agent-stack run`, now holds the pipeline order. Before, the order lived in hooks and skills that the
+model could skip. The driver was checked in five manual runs with the real `claude`; the gates for plain sessions
+and a glossary check come with it.
+
+### Upgrading from 0.3
+
+- **After `update`, code on a stage branch waits for `/plan`.** spec-gate now also needs
+  `.claude/tmp/<stage>/tasks.json`. A stage you were already coding without a plan stops at the next edit
+  with "Run /plan first". Run `/plan`, or set `specGate: "off"` in `gates.json` to opt out.
+- **A spec with `## Terms` may now fail `trace`** when the repo has `docs/GLOSSARY.md`: each Terms entry must be
+  a glossary headword or be marked `- **Word** (local): …`. Mark the spec's own words `(local)`, move the shared
+  ones to the glossary, or set `"glossary": ""` in `gates.json` to opt out.
+- **Copy the new "Explaining to the human" section by hand.** `CLAUDE.md` is a seed file, so `update` keeps
+  your copy. Take the section from `templates/claude/_normative.md`.
+
+### Gates
+
+- **spec-gate: no code without a plan.** After the spec checks pass, code edits wait for the stage's
+  `tasks.json`. In the first trial `/plan` was never called, so `verify` and `evidence-gate` had nothing to
+  check. Docs, `.claude/` and other `openPaths` stay open, so `/plan` can write the file.
+- **evidence-gate: no "done" without evidence, task list or not.** `STATUS: DONE` without an `EVIDENCE`
+  section is blocked outside a stage too (still once per stop, and only with `evidenceGate: true`).
+- **session-start names the next step** on a stage branch with no task list: `/spec` if the spec is not
+  merged yet, `/plan` if it is.
+
+### Docs
+
+- [ADR 0001](docs/adr/0001-pipeline-driver.md): a driver program, `agent-stack run`, holds the pipeline
+  order.
+- **Five sentence rules in the generated `CLAUDE.md`.** "Explaining to the human" now asks for about 20 words
+  a step and 25 an explanation, the condition first, who acts, one word for one thing, plain verbs, and
+  short text that keeps the facts. The rules hold for replies, docs, prompts and commit bodies. The old
+  "everyday words" pushed the model to swap a glossary term for a synonym. The rules come from ASD-STE100
+  (Issue 9) and Google's "Writing for a global audience", without the STE dictionary. In one test a strict
+  "write in ASD-STE100" prompt lost 46.8% of the facts about code, so the harness does not use one.
+
+### Driver (experimental)
+
+- **`agent-stack run`**: `quick "<fix>"` and `task "<what to build>"` modes; `--resume`, `--status`,
+  `--cancel`. Exit codes 0 / 3 (waiting) / 1. Tested with a fake `claude`, plus five manual runs with the
+  real one (three task, one of them with two tasks; two quick).
+- **Gates:** answers, spec merge, plan approval, accept and limit, from the terminal. The driver makes the
+  branches and commits (headers pass commitlint), runs the checks, and never pushes or merges.
+- **Fuse:** `gates.json` -> `run`, three kinds: calls (default 40), dollars, or off.
+- **Resume:** a waiting or interrupted run continues from its run file; one run per repo.
+- **Hooks:** spec-gate's quick-mode bypass and evidence-gate's silence apply only to a live driver run on the
+  run's branch; guard-file protects the run folder; path checks follow symlinks.
+- **/plan skill:** every task ends green; the test is written first inside the task, no test-only tasks.
+- **`trace` checks spec terms against the glossary.** Each `- **Term**` in a spec's `## Terms` must be a
+  headword of the glossary (`gates.json → glossary`, default `docs/GLOSSARY.md` when it exists; `""` turns it
+  off) or be marked `(local)`. `trace --terms` checks only that, so `/spec` runs it before the review and the
+  driver after its spec role. spec-reviewer and code-reviewer flag a new word that never reached Terms. A rule
+  kept only as text in CLAUDE.md was skipped three times in one session.
+- **/spec skill:** the EARS pattern table moved from `template.md` into the skill, so a spec written from the
+  template no longer carries it.
+- **From the first run with the real `claude`:**
+  - the plan role returns its tasks and the driver writes `tasks.json`: Claude Code guards `.claude/`, so a
+    headless role could not;
+  - a spec or plan role that asks a question stops at gate `limit` (reason `decision`) instead of being re-run;
+  - a permission denial is shown as one short line;
+  - each call loads only the project: its `.mcp.json`, project settings, no user CLAUDE.md, no claude.ai
+    connectors, no auto-memory. About 165k → 15k tokens a turn;
+  - a line before and after every call, so a long call does not look hung.
+- **From the second run:**
+  - without a remote, the spec-merge gate prints `git checkout <base> && git merge spec/<stage>`;
+  - a stage or type prefix the model repeats in a commit subject is dropped (no more `feat(a2): a2: …`);
+  - the spec role is told the driver commits, so it does not ask;
+  - each answers prompt says that Enter takes the recommended answer;
+  - a decision retry gives the role its questions with your answer;
+  - the implement role is told which shell commands it may run;
+  - clarify gets the stage-id rule and the ids in use, and a stage id that cannot be used is never the
+    default: the gate offers the proposal or a free id, so Enter no longer loops;
+  - a change to documentation only needs no test (a quick fix of one README line had got one);
+  - the start check: before a task's first attempt the driver runs `.claude/bin/verify --dry <task>` once,
+    and a verify that is already green gets a note at gate:accept, because it cannot show the task's work.
+    `--dry` guards and runs like verify but records nothing;
+  - a verify killed on timeout leaves no stale lock: the driver drops it, or the next verify waited 60 s;
+  - `/plan` puts `test -f <file> &&` in front of each named test file, so a missing file is red, not skipped.
+- **From a check against Compound V:**
+  - a check that times out is the environment's fault: the driver exits 1, names the command and the limit,
+    and counts no attempt. Before, a hung package manager sent the task back to implement on Opus;
+  - in task mode with more than one task, gate:accept first runs every task's verify again. A later task that
+    broke an earlier one shows up red;
+  - a killed call, or one with no cost in its result, counts as unknown cost, not $0. A dollar fuse says it
+    may count too little;
+  - spec-reviewer recomputes every example from the contract, literally. It had passed a spec whose
+    `greet()` example was wrong in JS.
+
 ## 0.3.0 — from the first trial
 
 Fixes and changes from the first real trial (lex-poc, 10 sessions), and a way to see what the harness does.

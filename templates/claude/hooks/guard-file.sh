@@ -34,6 +34,14 @@ case "$rel_lc" in
     ;;
 esac
 
+# The driver's run folder (run file, lock, call records): the spec-gate and evidence-gate bypasses trust it.
+case "$rel_lc" in
+  .claude/tmp/runs/*|*/.claude/tmp/runs/*)
+    echo "Blocked: $rel is in the run folder — only the driver (agent-stack run) writes there." >&2
+    exit 2
+    ;;
+esac
+
 # A stage plan: only .claude/bin/verify updates `passes`. A new plan may be written, all tasks unproven.
 case "$rel_lc" in
   .claude/tmp/*/tasks.json)
@@ -42,8 +50,8 @@ case "$rel_lc" in
       exit 2
     fi
     if ! printf '%s' "$input" | jq -r '.tool_input.content // ""' |
-      jq -e '(.tasks | type == "array") and ([.tasks[] | .passes == true] | any | not)' >/dev/null 2>&1; then
-      echo "Blocked: a new $rel must be valid JSON with a tasks array and every task at \"passes\": false — only verify proves them." >&2
+      jq -e '(.tasks | type == "array") and (.tasks | length > 0) and ([.tasks[] | .passes == true] | any | not)' >/dev/null 2>&1; then
+      echo "Blocked: a new $rel must be valid JSON with a non-empty tasks array and every task at \"passes\": false — only verify proves them; an empty plan would open spec-gate with nothing to check." >&2
       exit 2
     fi
     ;;

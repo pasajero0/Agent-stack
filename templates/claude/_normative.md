@@ -9,9 +9,19 @@ These sections are project-agnostic and must transfer unchanged.
 Explain as simply as possible — the human decides from your reply, so it must be readable when tired.
 
 - Lead with the answer in one or two plain sentences. Details come after, or go into a file.
-- Short sentences, everyday words. Explain a term the first time, or do not use it.
 - When proposing a change, show **now → proposed** side by side, with one concrete example.
 - Few options: recommend one. End with one question the human can answer with yes/no or a choice.
+
+Write every sentence for a reader whose English may not be native. These rules hold for replies, docs,
+prompts and commit bodies:
+
+- **Short.** About 20 words for a step, 25 for an explanation. One action per step. Put the condition
+  first: "If X, do Y".
+- **Name who acts:** "spec-gate blocks the edit", not "the edit is blocked".
+- **One thing, one word.** Once you name a thing, use that word every time — the glossary word, if the
+  project has a glossary. Explain a term the first time, or do not use it.
+- **Plain verbs, no phrasal verbs or idioms:** "start", not "kick off"; "remove", not "get rid of".
+- **Shorter must not change the facts:** keep numbers, names, the reason why, and what was not checked.
 
 ## Spec-driven workflow
 
@@ -26,7 +36,8 @@ Each stage of work goes through these steps; hooks enforce the ones marked 🔒.
    every AC → a task with a `verify` command and a tier.
    🔒 The spec leads the code: a requirement change is first a committed `spec: …` with a "## Changes"
    entry, then tests and code — in the same branch and MR (spec-gate checks the order).
-4. **Red tests first** — the **test-writer** subagent writes failing tests named `"<stage> AC-n: …"`.
+4. **Tests first, inside the task** — every task ends green: the **test-writer** subagent (or the implementer)
+   writes the failing tests named `"<stage> AC-n: …"` first, then the code makes them pass; no test-only tasks.
    🔒 `.claude/bin/trace` links criteria and tests: a criterion without a test, or a test for a criterion
    the spec does not have (feature drift), keeps `STATUS: DONE` blocked (a light spec is not traced).
    🔒 cheat-guard blocks adding skipped tests or suppressed checks (`.skip`, `@ts-ignore`, `any`, …).
@@ -77,7 +88,8 @@ context — so do trivial things directly and delegate when it buys a cheaper mo
 | tests from acceptance criteria | test-writer | sonnet |
 | spec review, code review, task analysis | spec-reviewer, code-reviewer, task-analyzer | opus |
 
-A task that fails `verify` twice moves one tier up.
+Every task ends green. By hand, a task that fails `verify` twice moves one tier up; under the driver
+(`agent-stack run`), a retry runs on Opus.
 
 ## Multi-step migrations
 

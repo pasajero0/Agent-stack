@@ -54,19 +54,33 @@ lex_norm() {
   printf '%s' "${out:-/}"
 }
 
-# rel_path <path> → path relative to the project root, both sides symlink-resolved, so a file_path
-# under /private/var still matches a project dir under /var. Paths outside the project stay absolute.
-rel_path() {
-  local p=$1 dir rest root full
-  case "$p" in /*) ;; *) p="$PROJECT_DIR/${p#./}" ;; esac
-  dir=$(dirname "$p")
-  rest=$(basename "$p")
-  # The file (and its parent dirs) may not exist yet — resolve the deepest existing ancestor.
+# resolve_abs <abs path> → physical path: the deepest existing ancestor through `cd -P`, the rest (which may
+# not exist yet) folded by text.
+resolve_abs() {
+  local dir rest
+  dir=$(dirname "$1")
+  rest=$(basename "$1")
   while [ ! -d "$dir" ] && [ "$dir" != "/" ]; do
     rest="$(basename "$dir")/$rest"
     dir=$(dirname "$dir")
   done
-  full=$(lex_norm "$(canon_dir "$dir")/$rest")
+  lex_norm "$(canon_dir "$dir")/$rest"
+}
+
+# rel_path <path> → path relative to the project root, both sides symlink-resolved, so a file_path
+# under /private/var still matches a project dir under /var. Paths outside the project stay absolute.
+# A last component that is a symlink is followed (max 40 hops; a relative target is read against the
+# link's folder), so a Write to `notes/l.json -> ../.claude/tmp/runs/lock` is judged as the lock.
+rel_path() {
+  local p=$1 root full target hops=0
+  case "$p" in /*) ;; *) p="$PROJECT_DIR/${p#./}" ;; esac
+  full=$(resolve_abs "$p")
+  while [ -L "$full" ] && [ "$hops" -lt 40 ]; do
+    target=$(readlink "$full") || break
+    case "$target" in /*) ;; *) target="$(dirname "$full")/$target" ;; esac
+    full=$(resolve_abs "$target")
+    hops=$((hops + 1))
+  done
   root=$(canon_dir "$PROJECT_DIR")
   case "$full" in
     "$root"/*) printf '%s' "${full#"$root"/}" ;;
@@ -161,4 +175,26 @@ tasks_file() {
   local s
   s=$(active_stage)
   [ -n "$s" ] && printf '%s' "$PROJECT_DIR/.claude/tmp/$s/tasks.json"
+}
+
+# driver_run_on_branch [mode] — true only while AGENT_STACK_RUN names a live driver run on this branch:
+#   - the id is a well-formed run id (r-<yyyymmdd>-<hhmmss>), so it cannot point outside the runs folder;
+#   - .claude/tmp/runs/lock holds that id and a positive pid that is alive (kill -0; 0 and -1 would
+#     address a process group, so they never count);
+#   - the run file says status running, branch = the current branch and, when given, mode = <mode>.
+# The variable alone opens nothing. guard-file blocks Edit/Write to the runs folder; forging it with Bash
+# is the known blocklist gap.
+driver_run_on_branch() {
+  local id=${AGENT_STACK_RUN:-} want=${1:-} runs pid branch id_re='^r-[0-9]{8}-[0-9]{6}$' pid_re='^[1-9][0-9]*$'
+  [[ "$id" =~ $id_re ]] || return 1
+  runs="$PROJECT_DIR/.claude/tmp/runs"
+  [ -f "$runs/lock" ] && [ -f "$runs/$id/run.json" ] || return 1
+  pid=$(jq -r --arg id "$id" 'if .id == $id and (.pid | type) == "number" then .pid else empty end' \
+    "$runs/lock" 2>/dev/null) || return 1
+  [[ "$pid" =~ $pid_re ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  branch=$(git -C "$PROJECT_DIR" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 1
+  [ -n "$branch" ] || return 1
+  jq -e --arg b "$branch" --arg m "$want" \
+    '.status == "running" and .branch == $b and ($m == "" or .mode == $m)' "$runs/$id/run.json" >/dev/null 2>&1
 }

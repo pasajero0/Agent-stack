@@ -70,7 +70,21 @@ if [ -n "$stage" ]; then
     progress=$(jq -r '"\([.tasks[] | select(.passes == true)] | length)/\(.tasks | length) tasks passing"' "$tasks" 2>/dev/null || echo "tasks.json unreadable")
     echo "📋 Active stage: $stage — $progress (.claude/bin/verify to re-check)."
   else
-    echo "📋 Active stage: $stage — no tasks.json yet (run /plan)."
+    # The next step, so the model does not have to remember the order: spec first, then plan.
+    specs=$(gate_get '.specsDir')
+    spec="${specs:-docs/specs}/$stage/SPEC.md"
+    ref=$(base_ref)
+    closed=""
+    [ "$(gate_get '.specGate')" = "off" ] || closed=" (code is closed until then)"
+    if [ -z "$ref" ]; then
+      echo "📋 Active stage: $stage — base branch '$(gate_get '.baseBranch')' not found; set baseBranch in .claude/gates.json."
+    elif ! git -C "$PROJECT_DIR" cat-file -e "$ref:$spec" 2>/dev/null; then
+      echo "📋 Active stage: $stage — no merged spec yet. Next: /spec $stage, then a human merges its MR."
+    elif ! git -C "$PROJECT_DIR" cat-file -e "HEAD:$spec" 2>/dev/null; then
+      echo "📋 Active stage: $stage — the spec is merged into $ref but not in this branch. Next: merge or rebase on $ref."
+    else
+      echo "📋 Active stage: $stage — spec merged, no tasks.json yet. Next: /plan $stage$closed."
+    fi
   fi
   echo
 fi
