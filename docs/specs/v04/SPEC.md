@@ -89,9 +89,14 @@ word for this spec only is marked `(local)`.
 - **Frozen tests** (local): the files matching `gates.json → testGlobs` that exist at the task's base commit. In
   each one the driver counts, over the whole text:
   - tests: `it(`, `test(` (also with a modifier: `it.skip(`, `test.each(`), `def test_`, `func Test`, `#[test]`;
-  - assertions: `expect(`, `assert` (also `assert.x(`, `assert_eq!(`), `t.Error(`, `t.Fatal(` and their `f` forms;
-  - skip marks: `.skip`, `.only`, `.todo`, `xit(`, `xdescribe(`, `xtest(`, `@pytest.mark.skip`,
-    `@pytest.mark.xfail`, `t.Skip`, `#[ignore]`.
+  - assertions: `expect(`, `assert` (also `assert.x(`, `assert_eq!(`, `assert!(`, `debug_assert!(`,
+    `assertEqual(`, `assertThat(`), `t.Error(`, `t.Fatal(` and their `f` forms;
+  - skip marks: `.skip`, `.only`, `.todo` (and `.skipIf`) after `it`, `test`, `describe`, `suite`, `context` or
+    `bench`; `xit(`, `xdescribe(`, `xtest(`, `this.skip(`, `pytest.skip(`, `@pytest.mark.skip`,
+    `@pytest.mark.xfail`, `@unittest.skip`, `t.Skip`, `#[ignore]`. So `iter().skip(1)` is not one.
+
+  A file that is no longer a regular file (a folder, a submodule) is "replaced"; a file with a NUL byte is not
+  counted.
 
   Tests the task adds after its base are not frozen.
 - **Check config** (local): a file that decides how checks run: `.github/workflows/*`, `.gitlab-ci.yml`,
@@ -625,9 +630,11 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   with the task's base, before it runs the checks.
   - IF a frozen test file is gone, has fewer tests or fewer assertions, or more skip marks, or a check config that
     exists at the base has changed, THEN THE SYSTEM SHALL go to gate:limit, reason "tests changed", and list each
-    change: `deleted test file a.test.ts`, `a.test.ts: assertions 12 → 10`, `changed check config vitest.config.ts`.
-  - `a` allows exactly the changes listed; the run goes on to the checks. A later change that is not on the list
-    stops again. Gate:accept shows the allowed changes (AC-21).
+    change: `deleted test file a.test.ts`, `a.test.ts: assertions 12 → 10`, `changed check config vitest.config.ts
+    (now 1a2b3c4)`, `deleted check config jest.config.js`. The run file keeps the list.
+  - `a` allows exactly the changes listed, as the run file keeps them; the run goes on to the checks. A change that
+    is not on the list stops again: one made while the gate waited, or a later edit of an allowed check config
+    (its content hash differs). Gate:accept shows the allowed changes (AC-21).
   - `r` retries implement with the list and the comment that follows; this is a new attempt (on Opus). `c`
     cancels.
   - With `testGlobs` empty, only the check configs are compared. A test renamed or merged is a change too; the
@@ -735,6 +742,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-66 (new), Frozen tests, Check config: the driver stops when a task weakens a test it found, or
   changes a check config. With TEST_CONFLICT (AC-64) the role has a legal way out; this checks it was not
   bypassed. It stops at a gate, not as a failed attempt, because a legal rename would only use up the attempts.
+  From review: skip marks only after a test call; more assertion forms; `a` allows the listed changes, and a
+  check config is keyed by its content.
 - 2026-11-19 — AC-64 (new): implement may return `TEST_CONFLICT`. With only DONE or BLOCKED, a role that met
   a wrong test could only change it; a legal way out cuts test cheating (ImpossibleBench: 54 % → 9 %).
 - 2026-11-19 — AC-65 (new), Valid plan: a verify that cannot fail (`|| true`) makes a new plan not valid. Such
