@@ -22,6 +22,8 @@
 
 ### Upgrading from 0.4.0
 
+A caret range (`^0.4.0`) installs 0.4.1 by itself, so do this step even if you did not upgrade on purpose.
+
 - **Run `agent-stack update`.** The driver needs the new `implementer.md` (a `## Under the driver` section) and
   `code-reviewer.md` (a "Task review" item). If you changed one of them, `update` keeps your copy, and the run
   stops with `agent … is out of date`: add the section, or run `agent-stack update --force`.
