@@ -195,7 +195,8 @@ When the file runs out, the gate behaves as AC-29: it is recorded, and the drive
   - per question: Enter accepts the recommended answer; text replaces it. Each question's prompt says so:
     `answer <n> (Enter = recommended, or type your own)>`;
   - size: Enter keeps it, or type `task` / `story` / `epic`;
-  - stage id: Enter keeps it, or type a new one;
+  - stage id: Enter keeps it, or type a new one. A proposal that fails AC-7 is not offered: the prompt says
+    why and offers a free id instead (AC-48);
   - `c` cancels.
 - **plan-approve** and **accept**: `a` approve, `r` reject (a comment follows), `c` cancel.
 - **limit**:
@@ -274,7 +275,9 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 - **clarify**:
   - ask at most 5 questions, each with a recommended answer;
   - size the work;
-  - propose a stage id; for an epic, a split.
+  - propose a stage id; for an epic, a split;
+  - the stage-id rule, "letters then digits, like A1", and the ids already in use (spec folders on the base
+    ref and `spec/*` branches), which the driver lists (AC-48).
 - **spec**:
   - the full text of the `/spec` skill, with `$ARGUMENTS` = `<stage> <title>` and `${CLAUDE_SKILL_DIR}`
     filled in;
@@ -297,6 +300,7 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   - the last feedback, labelled "FROM THE PROGRAM";
   - "write the failing test first, see it fail, then the code; touch only this task; do not commit,
     branch or edit `tasks.json`";
+  - "a change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report";
   - the shell commands it may run, built from the same list as its `--allowedTools`: "anything else is
     denied, so do not try it".
 - **review**:
@@ -575,6 +579,11 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   gate:spec-merge, print the same steps as AC-10 and exit with code 3 (partner of AC-11).
 - **AC-48:** IF a stage id fails AC-7, THEN THE SYSTEM SHALL say why and ask again at the same gate (partner
   of AC-7).
+  - The reason SHALL be plain: "it must be letters then digits, like A1", not the pattern.
+  - The failed id SHALL NOT stay the default. The gate SHALL offer clarify's proposal when it passes AC-7.
+    Otherwise it SHALL offer a free id: the letters of the id in use with the highest number, and the next
+    number, or `A1` when none is in use. The offered id passes AC-7.
+  - This holds for clarify's proposal too.
 
 ### Edge cases
 
@@ -672,6 +681,9 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — AC-48, Gate input, clarify and implement prompts: clarify gets the stage-id rule and the
+  ids in use; a failed id is never the default, so Enter no longer loops; a docs-only change needs no test.
+  From the first manual run (`greet` as the stage id, a test for a README line).
 - 2026-11-19 — AC-21: the gate names a final check that ran on uncommitted changes (from review).
 - 2026-11-19 — AC-62 (new), run file `costUnknownCalls`: a killed call or a result with no cost is unknown,
   not $0, so a dollar fuse does not count too little without saying so.
