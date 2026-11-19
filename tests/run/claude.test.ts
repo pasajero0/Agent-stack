@@ -156,6 +156,41 @@ describe("buildArgs", () => {
     }
   });
 
+  it("v04 AC-58: the user CLAUDE.md to exclude follows CLAUDE_CONFIG_DIR when it is set", () => {
+    const d = mkdtempSync(join(tmpdir(), "as-scope-"));
+    try {
+      expect(callScope(d, "/home/u", "/cfg/claude").userClaudeMd).toBe("/cfg/claude/CLAUDE.md");
+      expect(callScope(d, "/home/u", "").userClaudeMd).toBe("/home/u/.claude/CLAUDE.md");
+      expect(callScope(d, "/home/u", undefined).userClaudeMd).toBe("/home/u/.claude/CLAUDE.md");
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("v04 AC-58: callClaude passes CLAUDE_CONFIG_DIR from its env into the excluded path", async () => {
+    // Uses the fake below through a fresh io; only the argv matters here.
+    const dir2 = mkdtempSync(join(tmpdir(), "as-cfg-"));
+    try {
+      const script = join(dir2, "s.json");
+      writeFileSync(script, JSON.stringify([{ output: { ok: true } }]));
+      chmodSync(FAKE, 0o755);
+      const io: CallIo = {
+        cwd: dir2,
+        prompt: "# Role: review",
+        runId: "r-20261119-000000",
+        callsDir: join(dir2, "calls"),
+        callNo: 1,
+        timeoutMs: 10_000,
+        env: { AGENT_STACK_CLAUDE: FAKE, FAKE_CLAUDE_SCRIPT: script, CLAUDE_CONFIG_DIR: "/cfg/claude" },
+      };
+      await callClaude(spec("review"), io);
+      const rec = JSON.parse(readFileSync(join(dir2, "calls", "1-review.json"), "utf8")) as { argv: string[] };
+      expect(rec.argv).toContain(JSON.stringify({ claudeMdExcludes: ["/cfg/claude/CLAUDE.md"] }));
+    } finally {
+      rmSync(dir2, { recursive: true, force: true });
+    }
+  });
+
   it("v04 AC-58: the env turns off account connectors, auto-memory and the git status snapshot", () => {
     expect(PROJECT_ONLY_ENV).toEqual({
       ENABLE_CLAUDEAI_MCP_SERVERS: "false",
@@ -213,7 +248,7 @@ describe("callClaude with the fake claude", () => {
     const out = await callClaude(s, io([{ expectRole: "review", output: { ok: true } }]));
     expect(out).toEqual({ kind: "ok", output: { ok: true }, costUsd: 0.01, denials: [], turns: 3 });
     const [entry] = logged();
-    expect(entry.argv).toEqual(buildArgs(s, callScope(dir, homedir())));
+    expect(entry.argv).toEqual(buildArgs(s, callScope(dir, homedir(), process.env["CLAUDE_CONFIG_DIR"])));
     expect(entry.env.AGENT_STACK_RUN).toBe("20261118-120000");
   });
 

@@ -60,9 +60,11 @@ export interface CallScope {
 
 const NO_MCP = '{"mcpServers":{}}';
 
-export function callScope(projectDir: string, home: string): CallScope {
+/** `configDir` is `$CLAUDE_CONFIG_DIR`: Claude Code keeps the user's CLAUDE.md there when it is set (AC-58). */
+export function callScope(projectDir: string, home: string, configDir?: string): CallScope {
   const mcp = join(projectDir, ".mcp.json");
-  return { mcpConfig: existsSync(mcp) ? mcp : NO_MCP, userClaudeMd: join(home, ".claude", "CLAUDE.md") };
+  const userDir = configDir ? configDir : join(home, ".claude");
+  return { mcpConfig: existsSync(mcp) ? mcp : NO_MCP, userClaudeMd: join(userDir, "CLAUDE.md") };
 }
 
 /**
@@ -253,7 +255,8 @@ function killGroup(pid: number | undefined, killChild: () => void): void {
  */
 export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcome> {
   const bin = io.env?.["AGENT_STACK_CLAUDE"] ?? process.env["AGENT_STACK_CLAUDE"] ?? "claude";
-  const args = buildArgs(spec, callScope(io.cwd, homedir()));
+  const configDir = io.env?.["CLAUDE_CONFIG_DIR"] ?? process.env["CLAUDE_CONFIG_DIR"];
+  const args = buildArgs(spec, callScope(io.cwd, homedir(), configDir));
   const sub = execa(bin, args, {
     cwd: io.cwd,
     input: io.prompt,
