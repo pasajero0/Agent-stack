@@ -68,6 +68,15 @@
   - each answers prompt says that Enter takes the recommended answer;
   - a decision retry gives the role its questions with your answer;
   - the implement role is told which shell commands it may run.
+- **From a check against Compound V:**
+  - a check that times out is the environment's fault: the driver exits 1, names the command and the limit,
+    and counts no attempt. Before, a hung package manager sent the task back to implement on Opus;
+  - in task mode with more than one task, gate:accept first runs every task's verify again. A later task that
+    broke an earlier one shows up red;
+  - a killed call, or one with no cost in its result, counts as unknown cost, not $0. A dollar fuse says it
+    may count too little;
+  - spec-reviewer recomputes every example from the contract, literally. It had passed a spec whose
+    `greet()` example was wrong in JS.
 
 ## 0.3.0 — from the first trial
 

@@ -179,7 +179,8 @@ implement call. The driver runs the checks (the test command, plus lint on chang
 is recorded as waiting and exits. A gate `limit` appears when attempts run out, a task is BLOCKED, the review
 loop does not improve, or the fuse is reached: `r` retries, `f <n>` raises the fuse, `c` cancels. When the spec
 or plan role asks you something instead of doing its job, gate `limit` (reason `decision`) shows the question:
-`r` and your answer re-run the role with it.
+`r` and your answer re-run the role with it. Before gate `accept`, a task run with more than one task runs every
+task's verify once more and marks a red result.
 
 **Exit codes.** `0`: finished, cancelled or `--status`. `3`: waiting at the spec-merge gate, or at any gate
 without a terminal. `1`: a refusal or an error; the message says what to do.
@@ -193,6 +194,9 @@ without a terminal. `1`: a refusal or an error; the message says what to do.
 `fuse` is one of three kinds: `{ "calls": <n> }` (the default, 40; fits a subscription), `{ "usd": <n> }`
 (for API billing; every call also gets what is left as its `--max-budget-usd`), or `"off"`.
 Turns per call, attempts per task and the review-loop stop apply whatever the kind.
+A call that was killed, or whose result has no cost, counts as unknown cost, and the gates name those calls.
+A check that runs past `checkTimeoutMin` stops the run with exit 1 and counts no attempt: fix what hangs, then
+`--resume`.
 
 **Hooks stay on.** Claude is never started with `--bare`, `bypassPermissions` or `disableAllHooks`. Two hooks
 step aside only for a live driver run on the run's own branch: spec-gate (quick mode) and evidence-gate.
