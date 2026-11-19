@@ -81,6 +81,8 @@ it here first.
   blows: one more attempt (on Opus), raise the fuse (only when the fuse blew), or cancel.
   - **Decision** reason: the spec or plan role asked the human instead of doing its job. The human answers,
     and the role runs again with its questions and the answer. A blind re-run would only ask again.
+  - **Test conflict** reason: the implementer found an existing test or verify that contradicts a criterion,
+    and left it alone. The human fixes the test or the spec, or answers; no attempt is counted.
 - **Role** — what one Claude call is asked to be: clarify, spec, plan, implement or review. Each role has
   its own tools, model and output schema. The role returns data, and the driver writes the files it owns,
   such as `tasks.json` and the commits.

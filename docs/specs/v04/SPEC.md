@@ -61,7 +61,7 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
 ## Terms
 
 Shared words are defined in [docs/GLOSSARY.md](../../GLOSSARY.md): stage, spec, plan, task, tier, verify,
-driver, mode, size, gate, attempt, fuse, live run, driver call. Below is only what this spec makes precise; a
+driver, mode, size, gate, attempt, fuse, live run, driver call, test conflict. Below is only what this spec makes precise; a
 word for this spec only is marked `(local)`.
 
 - **Step**: one unit of the pipeline that the driver executes. Steps are clarify, spec, plan, base-check,
@@ -80,7 +80,7 @@ word for this spec only is marked `(local)`.
   - a unique `id` that is not `Q1` and does not start with `F`;
   - a non-empty `ac` array;
   - a `tier` of S, M or L;
-  - a non-empty `verify`;
+  - a non-empty `verify` that can fail (AC-65);
   - `passes: false`.
 
   Every criterion id of the merged spec appears in some task.
@@ -158,6 +158,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | checks / review | red or blocking, attempts used | gate:limit (attempts) | AC-33, AC-34 |
 | review | blocking count not lower than last time | gate:limit (review loop) | AC-39 |
 | implement | BLOCKED | gate:limit (blocked) | AC-38 |
+| implement | TEST_CONFLICT | gate:limit (test conflict) | AC-64 |
 | any | fuse reached | gate:limit (fuse) | AC-35 |
 | any | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
 | spec / plan | output missing, out of bounds or (spec) terms failing twice | unchanged, exit 1 | AC-40, AC-44, AC-45, AC-59 |
@@ -165,6 +166,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | base-check | `test` exits non-zero | unchanged, exit 1 | AC-41 |
 | commit | commit refused | implement (attempt + 1) | AC-42 |
 | gate:limit | retry / raise fuse / cancel | `returnTo` (on Opus) / `returnTo` / cancelled | AC-31 |
+| gate:limit (decision, test conflict) | retry with a comment | `returnTo`, no attempt, same model | AC-57, AC-64 |
 
 ## Contract
 
@@ -202,6 +204,7 @@ When the file runs out, the gate behaves as AC-29: it is recorded, and the drive
 - **limit**:
   - reasons attempts, blocked or review loop: `r` retry, `c` cancel;
   - reason decision: `r` retry (a comment follows), `c` cancel (AC-57);
+  - reason test conflict: `r` retry (a comment follows), `c` cancel (AC-64);
   - reason fuse: `f <n>` sets a new limit for this run, in the fuse's own unit (calls or dollars); it must be
     above what is used so far. `c` cancels.
 
@@ -230,7 +233,7 @@ Any other value is refused when a run starts, with code 1.
 | `status` | `running` \| `waiting` \| `finished` \| `cancelled` |
 | `next` | one of the values listed above |
 | `returnTo` | the `next` value that gate:limit returns to, or null |
-| `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| null |
+| `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| `test-conflict` \| null |
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
 | `stagePrefill` | the `--stage` id that gate:answers proposes, or null |
@@ -321,7 +324,8 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 - **plan**: `{ summary, tasks, needsHumanDecision: string[] }`. `tasks` holds the fields of a "Valid plan"
   task: `{id, ac, tier, desc, verify, passes: false}[]`. The driver, not the role, writes it to `tasks.json`.
 - **implement**:
-  - `status`: `DONE` \| `BLOCKED`;
+  - `status`: `DONE` \| `BLOCKED` \| `TEST_CONFLICT`;
+  - `conflict`: `{test, criterion, reason}`, required with `TEST_CONFLICT` and only then (AC-64);
   - `report`;
   - `commit`: `{type: feat|fix|refactor|test|docs|chore|perf, subject}`;
   - `needsHumanDecision`: `string[]`.
@@ -582,6 +586,22 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - The gate record keeps the items as `asked`. The retried role gets them with the answer: "FROM THE HUMAN:
     you asked: <items>; the answer: <comment>".
   - The attempts and the fuse are unchanged.
+- **AC-64:** IF implement returns `TEST_CONFLICT`, THEN THE SYSTEM SHALL go to gate:limit, reason "test
+  conflict", and show the conflict: the test, the criterion and the reason (partner of AC-16).
+  - The implement prompt SHALL say: if an existing test, or the task's verify, contradicts a criterion, do
+    not change it; return `TEST_CONFLICT`. Existing means not written in this attempt: another task's test,
+    a test the repo had, or the verify command.
+  - `r` retries implement with the comment that follows: the role gets the conflict and the answer, labelled
+    "FROM THE HUMAN". The human may fix the test or the spec by hand before `r`. `c` cancels.
+  - No attempt is counted, and the model stays as it was. The attempt's edits are kept.
+  - IF `TEST_CONFLICT` comes without `conflict`, or `conflict` comes with another status, THEN that is a
+    schema mismatch (AC-37).
+- **AC-65:** IF a task of the plan role has a verify that cannot fail, THEN THE SYSTEM SHALL treat the plan as
+  not valid (AC-45), with the error `task <id>: verify cannot fail (<pattern>); remove it` (partner of AC-12).
+  - A verify cannot fail when it holds `|| true`, `|| :`, `|| echo`, `|| exit 0`, `; true`, `; exit 0`,
+    `2>/dev/null ||` or `set +e`. The match is on whole words, so `-t "true value"` is not one.
+  - Only a new plan is checked. A plan approved earlier is read as it is, so a run in progress is not stopped.
+  - The `/plan` skill SHALL say the same. `.claude/bin/verify` does not check it.
 - **AC-46:** IF a task's checks pass with an empty task diff, THEN THE SYSTEM SHALL record `commit: "empty"`,
   make no commit, and show it at gate:accept (partner of AC-20).
 - **AC-47:** IF `--resume` finds the spec missing on the base ref, THEN THE SYSTEM SHALL stay at
@@ -681,6 +701,10 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-19 — AC-64 (new): implement may return `TEST_CONFLICT`. With only DONE or BLOCKED, a role that met
+  a wrong test could only change it; a legal way out cuts test cheating (ImpossibleBench: 54 % → 9 %).
+- 2026-11-19 — AC-65 (new), Valid plan: a verify that cannot fail (`|| true`) makes a new plan not valid. Such
+  a verify passes whatever the code does. Only the driver checks it; `.claude/bin/verify` does not.
 - 2026-11-19 — AC-4 (implement prompt): it lists the allowed shell commands; the role tried
   `node --test <file>`, which is not on the list, and lost a turn.
 - 2026-11-19 — AC-57: the retried role gets the questions it asked with the answer; a short "yes" meant
