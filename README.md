@@ -164,7 +164,8 @@ implement call. The driver runs the checks (the test command, plus lint on chang
 1. *Clarify* (Opus): up to 5 questions with recommended answers, a size (task, story, epic) and a stage id.
    **You decide** at gate `answers`: accept or change each answer, the size and the stage id. An epic ends
    here with a proposed split in `split.md`.
-2. *Spec* (Opus) on a new `spec/<stage>` branch. The driver commits it and stops with exit 3.
+2. *Spec* (Opus) on a new `spec/<stage>` branch. The driver checks its terms (`trace --terms`; the role may add
+   a shared word to the glossary in the same commit), commits it and stops with exit 3.
    **You decide** by reviewing and merging that branch into the base branch yourself.
 3. `--resume` creates `<stage>-<slug>` and runs *plan* (Opus). The role returns the tasks and the driver writes
    `tasks.json`. **You decide** at gate `plan-approve`: approve, or reject with a comment (the plan is redone). Each task's `verify` command is allowed to the model
