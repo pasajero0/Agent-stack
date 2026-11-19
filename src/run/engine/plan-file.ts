@@ -48,8 +48,13 @@ const NEVER_FAILS: readonly [RegExp, string][] = [
   [/\|\|\s*exit\s+0\b/, "|| exit 0"],
   [/;\s*true\b/, "; true"],
   [/;\s*exit\s+0\b/, "; exit 0"],
-  [/2>\s*\/dev\/null\s*\|\|/, "2>/dev/null ||"],
   [/\bset\s+\+[A-Za-z]*e/, "set +e"],
+  [/\bset\s+\+o\s+errexit\b/, "set +o errexit"],
+  [/\|\s*tee\b/, "| tee"],
+  [/\|\s*cat\b/, "| cat"],
+  // After other lines only: a verify that is just `true` is a docs-only task's.
+  [/\n\s*true\s*$/, "a last line true"],
+  [/\n\s*exit\s+0\s*$/, "a last line exit 0"],
 ];
 
 /** The pattern that keeps `verify` from failing, or null. */

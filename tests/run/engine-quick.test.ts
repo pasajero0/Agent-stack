@@ -11,6 +11,7 @@ import type { Ctx, ModeSteps } from "../../src/run/engine/context.js";
 import { runLoop } from "../../src/run/engine/loop.js";
 import { quickMode } from "../../src/run/engine/steps-quick.js";
 import { selectPrompter } from "../../src/run/gate.js";
+import { humanFeedback } from "../../src/run/engine/gates.js";
 import { BRANCH, DESC, impl, lines, makeFakeExecutable, repo, review, sh, text } from "./engine-fixture.js";
 
 beforeAll(makeFakeExecutable);
@@ -209,7 +210,9 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(run.status).toBe("finished");
     expect(run.tasks[0]?.attempts).toBe(1);
     const g = run.gates.find((x) => x.gate === "gate:limit");
-    expect(g).toMatchObject({ decision: "retry", comment: "the test is right, follow it" });
+    expect(g).toMatchObject({ decision: "retry", comment: "the test is right, follow it", reason: "test-conflict" });
+    // The answer is the implementer's: a spec or plan role never reads it as FROM THE HUMAN (AC-57).
+    expect(g && humanFeedback({ ...run, gates: [g] })).toBeNull();
     const prompt = r.logged()[1]?.prompt ?? "";
     expect(prompt).toContain("FROM THE HUMAN: the test is right, follow it");
     expect(prompt).toContain("the test wants broken");

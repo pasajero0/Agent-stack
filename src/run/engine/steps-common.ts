@@ -185,7 +185,7 @@ const implement: StepHandler = async (ctx, id) => {
     task.lastFeedback = `The implementer reported BLOCKED: ${r.value.report}`;
     return toLimit(ctx, "blocked", taskNext("implement", task.id));
   }
-  if (r.value.status === "TEST_CONFLICT" && r.value.conflict) {
+  if (r.value.status === "TEST_CONFLICT") {
     // AC-64: the human decides; the attempt is not counted and its edits stay.
     task.lastFeedback = conflictText(r.value.conflict, info.criteria);
     return toLimit(ctx, "test-conflict", taskNext("implement", task.id));

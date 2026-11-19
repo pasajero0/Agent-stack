@@ -117,7 +117,9 @@ export function implementPrompt(p: {
 
 /** The test conflict as gate:limit shows it and the retried implement reads it (AC-64). */
 export function conflictText(c: TestConflict, criteria: string[]): string {
-  const text = criteria.find((t) => t.includes(`${c.criterion}:`));
+  // By id at the line start, as criterionText cuts it: a body that mentions the id does not match.
+  const id = c.criterion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const text = criteria.find((t) => new RegExp(`^\\s*[-*]\\s*\\*\\*${id}:\\*\\*`).test(t));
   return [
     "The implementer reported TEST_CONFLICT and left the test alone.",
     `Test: ${c.test}`,

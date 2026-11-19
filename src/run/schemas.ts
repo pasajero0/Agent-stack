@@ -159,14 +159,16 @@ export interface TestConflict {
   reason: string;
 }
 
-export interface ImplementOutput {
-  status: "DONE" | "BLOCKED" | "TEST_CONFLICT";
-  /** Set exactly when the status is TEST_CONFLICT (AC-64). */
-  conflict?: TestConflict;
+interface ImplementBase {
   report: string;
   commit: { type: CommitType; subject: string };
   needsHumanDecision: string[];
 }
+
+/** A conflict comes exactly with TEST_CONFLICT (AC-64). */
+export type ImplementOutput =
+  | (ImplementBase & { status: "DONE" | "BLOCKED"; conflict?: undefined })
+  | (ImplementBase & { status: "TEST_CONFLICT"; conflict: TestConflict });
 
 type Obj = Record<string, unknown>;
 
@@ -326,18 +328,14 @@ export function parseImplement(v: unknown): ImplementOutput | string {
   if (err !== null) return err;
   if (!isObj(v) || !isObj(v.commit) || !isStr(v.report) || !isStr(v.commit.subject)) return "output must be an object";
   const type = commitTypeOf(v.commit.type);
-  const status = v.status === "DONE" || v.status === "BLOCKED" || v.status === "TEST_CONFLICT" ? v.status : null;
-  if (type === null || status === null) return "commit must be {type, subject} with a known type";
-  const out: ImplementOutput = {
-    status,
-    report: v.report,
-    commit: { type, subject: v.commit.subject },
-    needsHumanDecision: strings(v.needsHumanDecision),
-  };
-  if (isConflict(v.conflict)) {
-    out.conflict = { test: v.conflict.test, criterion: v.conflict.criterion, reason: v.conflict.reason };
+  if (type === null) return "commit must be {type, subject} with a known type";
+  const base: ImplementBase = { report: v.report, commit: { type, subject: v.commit.subject }, needsHumanDecision: strings(v.needsHumanDecision) };
+  if (v.status === "TEST_CONFLICT") {
+    if (!isConflict(v.conflict)) return "TEST_CONFLICT needs conflict: {test, criterion, reason}, all non-empty";
+    return { ...base, status: "TEST_CONFLICT", conflict: { test: v.conflict.test, criterion: v.conflict.criterion, reason: v.conflict.reason } };
   }
-  return out;
+  if (v.status === "DONE" || v.status === "BLOCKED") return { ...base, status: v.status };
+  return "status must be DONE, BLOCKED or TEST_CONFLICT";
 }
 
 function severityOf(v: unknown): Finding["severity"] | null {

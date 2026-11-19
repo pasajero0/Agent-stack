@@ -159,6 +159,7 @@ function gate(v: unknown, f: string): GateRecord {
     g.planSha256 = typeof o.planSha256 === "string" && /^[0-9a-f]{64}$/.test(o.planSha256) ? o.planSha256 : bad(`${f}.planSha256`);
   }
   if (o.asked !== undefined) g.asked = strings(o.asked, `${f}.asked`);
+  if (o.reason !== undefined) g.reason = oneOf(LIMITS, o.reason, `${f}.reason`);
   return g;
 }
 

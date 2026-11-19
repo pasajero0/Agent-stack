@@ -6,6 +6,7 @@ import { RunError } from "../../src/run/errors.js";
 import {
   clarifyPrompt,
   criterionText,
+  conflictText,
   implementPrompt,
   isRisky,
   loadSkill,
@@ -147,9 +148,20 @@ describe("role prompts", () => {
     const skill = readFileSync(new URL("../../templates/claude/skills/plan/SKILL.md", import.meta.url), "utf8");
     const flat = skill.replace(/\s+/g, " ");
     expect(flat).toMatch(/`verify` must be able to fail/);
-    for (const p of ["|| true", "|| :", "|| echo", "|| exit 0", "; true", "; exit 0", "2>/dev/null ||", "set +e"]) {
+    for (const p of ["|| true", "|| :", "|| echo", "|| exit 0", "; true", "; exit 0", "set +e", "set +o errexit", "| tee", "| cat"]) {
       expect(flat).toContain(`\`${p}\``);
     }
+  });
+
+  it("v04 AC-64: the conflict text quotes the criterion it names, found by its id at the line start", () => {
+    const criteria = ["- **AC-1:** see AC-2: below", "- **AC-2:** greet with Hello", "- **AC-21:** other"];
+    const t = conflictText({ test: "a.test.ts:greets", criterion: "AC-2", reason: "wants Hi" }, criteria);
+    expect(t).toContain("Test: a.test.ts:greets");
+    expect(t).toContain("- **AC-2:** greet with Hello");
+    expect(t).not.toContain("see AC-2: below");
+    expect(t).not.toContain("AC-21");
+    expect(t).toContain("Reason: wants Hi");
+    expect(conflictText({ test: "t", criterion: "the README says fixed", reason: "r" }, [])).toContain("Criterion: the README says fixed");
   });
 
   it("v04 AC-4: implement labels feedback FROM THE PROGRAM", () => {

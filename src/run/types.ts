@@ -55,6 +55,8 @@ export interface GateRecord {
   planSha256?: string;
   /** A gate:limit (decision) retry: the items the role asked, given back with the answer (AC-57). */
   asked?: string[];
+  /** A gate:limit retry with a comment: the reason it answered, so a test conflict's answer stays implement's (AC-64). */
+  reason?: LimitReason;
 }
 
 export interface AnswerRecord {

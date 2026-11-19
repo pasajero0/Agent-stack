@@ -14,8 +14,12 @@ describe("plan-file: a verify that cannot fail", () => {
     ["pnpm test || exit 0", "|| exit 0"],
     ["pnpm test; true", "; true"],
     ["pnpm test ; exit 0", "; exit 0"],
-    ["pnpm test 2>/dev/null || false", "2>/dev/null ||"],
     ["set +e; pnpm test", "set +e"],
+    ["set +o errexit; pnpm test", "set +o errexit"],
+    ["pnpm test | tee test.log", "| tee"],
+    ["pnpm test | cat", "| cat"],
+    ["pnpm test\ntrue", "a last line true"],
+    ["pnpm test\n  exit 0\n", "a last line exit 0"],
   ];
   for (const [verify, pattern] of never) {
     it(`v04 AC-65: ${JSON.stringify(verify)} makes a new plan not valid, naming the task and ${pattern}`, () => {
@@ -31,6 +35,8 @@ describe("plan-file: a verify that cannot fail", () => {
     "true",
     ".claude/bin/trace && .claude/bin/health && pnpm test",
     "grep -q trueValue src/a.ts",
+    "test -f x 2>/dev/null || exit 1",
+    "pnpm test 2>/dev/null",
   ];
   for (const verify of fine) {
     it(`v04 AC-65: ${JSON.stringify(verify)} is a verify that can fail`, () => {

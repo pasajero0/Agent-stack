@@ -27,7 +27,7 @@ export async function ask(ctx: Ctx, prompt: string): Promise<string | null> {
   }
 }
 
-export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256" | "asked"> = {}): void {
+export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256" | "asked" | "reason"> = {}): void {
   ctx.run.gates.push({ gate, at: new Date().toISOString(), decision, comment, ...extra });
   // Shown at this gate; a decision clears them (AC-32).
   ctx.run.humanDecisions = [];
@@ -62,7 +62,8 @@ export function humanFeedback(run: RunFile): string | null {
     const g = run.gates[i];
     if (g === undefined || g.gate !== "gate:limit") return null;
     if (g.decision === "raise") continue;
-    if (g.decision !== "retry" || !g.comment) return null;
+    // A test conflict's answer is implement's (AC-64); an older record has no reason and is a decision.
+    if (g.decision !== "retry" || !g.comment || g.reason === "test-conflict") return null;
     return g.asked && g.asked.length > 0 ? `FROM THE HUMAN: you asked: ${g.asked.join("; ")}; the answer: ${g.comment}` : `FROM THE HUMAN: ${g.comment}`;
   }
   return null;
@@ -235,7 +236,7 @@ export const limitGate: StepHandler = async (ctx) => {
       const c = await comment(ctx, s);
       if (c === null) return NO_INPUT;
       // recordGate clears humanDecisions, so the questions are kept in the record for the retried role.
-      recordGate(ctx, "gate:limit", "retry", c, { asked: [...run.humanDecisions] });
+      recordGate(ctx, "gate:limit", "retry", c, { asked: [...run.humanDecisions], reason: "decision" });
       return { type: "resume" };
     }
     if (run.limitReason === "test-conflict" && (s === "r" || s.startsWith("r "))) {
@@ -245,7 +246,7 @@ export const limitGate: StepHandler = async (ctx) => {
       const task = run.returnTo ? parseNext(run.returnTo).task : null;
       const t = run.tasks.find((x) => x.id === task);
       if (t) t.lastFeedback = [t.lastFeedback, `FROM THE HUMAN: ${c}`].filter((x) => x !== null).join("\n");
-      recordGate(ctx, "gate:limit", "retry", c);
+      recordGate(ctx, "gate:limit", "retry", c, { reason: "test-conflict" });
       return { type: "resume" };
     }
     if (s === "r") {
