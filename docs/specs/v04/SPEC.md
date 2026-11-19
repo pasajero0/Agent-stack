@@ -61,21 +61,22 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
 ## Terms
 
 Shared words are defined in [docs/GLOSSARY.md](../../GLOSSARY.md): stage, spec, plan, task, tier, verify,
-driver, mode, size, gate, attempt, fuse. Below is only what this spec makes precise.
+driver, mode, size, gate, attempt, fuse, live run, driver call. Below is only what this spec makes precise; a
+word for this spec only is marked `(local)`.
 
 - **Step**: one unit of the pipeline that the driver executes. Steps are clarify, spec, plan, base-check,
   implement, checks, review and commit. A gate is a step that waits for the human. A *stage* is the unit of
   work with a spec; never call a step a stage.
-- **Run id**: `r-<yyyymmdd>-<hhmmss>`.
-- **Run folder**: `.claude/tmp/runs/<run id>/`. It holds:
+- **Run id** (local): `r-<yyyymmdd>-<hhmmss>`.
+- **Run folder** (local): `.claude/tmp/runs/<run id>/`. It holds:
   - the run file `run.json`;
   - one file per Claude call, `calls/<n>-<role>.json`, with its argv (without the prompt), exit code and raw
     result;
   - `split.md` for an epic.
-- **Lock**: `.claude/tmp/runs/lock`. It is created atomically and holds the run id and the driver's pid.
+- **Lock** (local): `.claude/tmp/runs/lock`. It is created atomically and holds the run id and the driver's pid.
 - **Live run**: status `running` and its lock pid is alive. A `running` run whose pid is dead is
   **interrupted**. A `waiting` run has no live process; its pid is ignored.
-- **Valid plan**: `tasks.json` with a non-empty `tasks` array where each task has:
+- **Valid plan** (local): `tasks.json` with a non-empty `tasks` array where each task has:
   - a unique `id` that is not `Q1` and does not start with `F`;
   - a non-empty `ac` array;
   - a `tier` of S, M or L;
@@ -83,25 +84,28 @@ driver, mode, size, gate, attempt, fuse. Below is only what this spec makes prec
   - `passes: false`.
 
   Every criterion id of the merged spec appears in some task.
-- **Task diff**: changes since the task's base commit (HEAD when its first attempt started). It counts
+- **Task diff** (local): changes since the task's base commit (HEAD when its first attempt started). It counts
   tracked changes plus untracked files, and always excludes `.claude/tmp/`.
-- **Diff lines**: added plus deleted lines of the task diff (`git diff --numstat`), plus all lines of each
+- **Diff lines** (local): added plus deleted lines of the task diff (`git diff --numstat`), plus all lines of each
   untracked file.
-- **Clean tree**: `git status --porcelain`, excluding `.claude/tmp/`, is empty.
-- **Lint files**: files in the task diff that still exist and match `gates.json → lintMatch`.
-- **Lint prefix**: the lint command up to `{file}`.
-- **Risk words**:
+- **Clean tree** (local): `git status --porcelain`, excluding `.claude/tmp/`, is empty.
+- **Lint files** (local): files in the task diff that still exist and match `gates.json → lintMatch`.
+- **Lint prefix** (local): the lint command up to `{file}`.
+- **Risk words** (local):
   - security, auth, authentication, authorization, permission, password, token, secret;
   - payment, money, billing;
   - migration, concurrency, race, lock.
 
   They match case-insensitively, as whole words.
-- **Criterion text**: in the merged spec, the line starting `- **AC-n:**` and its continuation lines, up to
+- **Criterion text** (local): in the merged spec, the line starting `- **AC-n:**` and its continuation lines, up to
   the next criterion or heading.
 - **Driver call**: a Claude process the driver started, with `AGENT_STACK_RUN=<run id>` in its environment.
   Its hooks inherit that variable. A command the model runs cannot set the environment of a hook process.
 
-**Glosses for references kept outside git**
+## References
+
+Glosses for references kept outside git.
+
 - **D2**: push and merge are always manual.
 - **2.W1–2.W7**: open worktree issues.
 - **7.11**: browser check as a user.
@@ -642,6 +646,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-19 — AC-4 (spec prompt): skip the skill's hand-over step; the role asked whether to commit.
 - 2026-11-19 — Commits: a stage or type prefix the model repeated in the subject is removed
   (`feat(a2): a2: …`).
+- 2026-11-19 — Terms: spec-only words marked `(local)`; Live run and Driver call moved to the glossary; the
+  glosses for outside references moved to their own section. No criterion changed.
 - 2026-11-19 — AC-10, AC-47: without a remote, the spec-merge gate prints the local merge commands, not a push.
 - 2026-11-19 — from the manual check with the real `claude`:
   - **AC-12, AC-45, role table, role outputs:** the plan role returns its tasks and the driver writes
