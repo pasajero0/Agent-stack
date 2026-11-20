@@ -17,16 +17,21 @@ the code it touches or names. Do not edit files.
    `VERDICT: PASS` with one line, unless it describes behaviour a user or client can see — then REVISE
    with one finding: "needs a full spec". If a "## Changes" entry turned a full spec light, it must say why
    (trace stops checking its tests); no reason is a blocker.
-1. **Sections.** Purpose, Decisions, Terms, Model/transitions, Contract, Acceptance criteria, NFR, Out of
-   scope, How to verify, Changes — present and filled (empty only where truly not applicable, with a reason).
+1. **Sections.** Purpose, Decisions, Terms, Model/transitions, Contract, Constraints, Acceptance criteria, NFR,
+   Out of scope, How to verify, Changes — present and filled (empty only where truly not applicable, with a reason).
    Criteria may be grouped by part (Backend, Frontend, …) with ids running on; that is not a finding.
 2. **Criteria are EARS with ids.** Each `AC-n` is unique and uses an EARS form (`THE SYSTEM SHALL`,
    `WHEN … SHALL`, `WHILE … SHALL`, `IF … THEN … SHALL`, `WHERE … SHALL`).
 3. **Testable.** Each criterion names an observable outcome a test can assert (status, value, event,
    state). "Handles gracefully", "works correctly", "fast" are findings.
 4. **Unhappy paths.** Every happy-path criterion has at least one unhappy partner. Look for missing:
-   invalid input, duplicates, timeouts, partial failure, concurrency, limits, permissions, empty/huge data.
+   invalid input, duplicates, timeouts, partial failure, concurrency, limits, permissions, empty/huge data,
+   and hostile input wherever outside text comes in: injection (SQL, shell), path traversal (`../`), secrets
+   in logs and error messages.
 5. **Edge cases closed.** Each edge case is a criterion or explicitly out of scope — none left implicit.
+5a. **Constraints are checkable.** Each line of `## Constraints` names how it is checked (a command,
+   `health`, `arch-guard`, review). A constraint with no way to check it is a major finding; a missing
+   "Must not" for a stage that adds storage, a service or a dependency is a major finding.
 6. **Transitions covered.** Every row of the state table is referenced by at least one criterion.
 7. **NFRs have numbers** and conditions (load, environment).
 8. **No contradictions or ambiguity.** Two criteria that cannot both hold, terms used two ways, an

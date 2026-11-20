@@ -26,8 +26,11 @@ down. Nothing gets built during a grill. (Method after `grilling` in mattpocock/
 4. **Recompute after each answer.** Answers settle branches and reveal new ones. Keep going until the
    frontier is empty and every branch has been visited.
 5. **Hunt for the unhappy paths.** For every happy path ask what fails: invalid input, duplicates,
-   timeouts, partial failure, concurrency, limits, permissions, empty and huge data. These become edge
-   cases in the spec.
+   timeouts, partial failure, concurrency, limits, permissions, empty and huge data. Ask about hostile input
+   too: injection (SQL, shell), path traversal (`../`), secrets in logs and error messages. These become
+   edge cases in the spec, so an attack becomes a criterion and then a test.
+6. **Ask about limits.** What must the builder not add (tables, services, languages, dependencies), what
+   must stay compatible, and which goal wins when two conflict. These fill the spec's `## Constraints`.
 
 ## Output (only after the user confirms the shared understanding)
 

@@ -33,6 +33,17 @@ same change; a word for this spec only is marked "- **Word** (local): …". `.cl
 <API shape, types, events, CLI flags — whatever the outside world sees. Not the implementation.
 If the shapes live in a contract package, name them here; fields are described only there.>
 
+## Constraints
+
+<!-- What the builder may not change or add, and what wins when goals conflict. Each line names how it is
+     checked (a command, health, arch-guard, review); a constraint nobody can check is only a wish. -->
+
+- **Must not:** <means the builder may not add without asking: new tables, services, languages, dependencies>.
+  Check: <how>.
+- **Must keep:** <what stays as it is: contract versions and backward compatibility; how outside input is
+  checked>. Check: <how>.
+- **When goals conflict:** <order, e.g. correctness > security > memory > speed>.
+
 ## Acceptance criteria (EARS)
 
 <!-- A stage that spans parts (Backend and Frontend, api and web) groups the three headings below under a

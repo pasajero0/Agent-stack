@@ -16,6 +16,12 @@ light: true
 - **AC-1:** <fact, e.g. `pnpm build` succeeds for apps/api and apps/web>. Check: `<command>`
 - **AC-2:** <fact>. Check: `<command>`
 
+## Constraints
+
+<!-- Optional: one line, e.g. "Must not: add a dependency or a service". -->
+
+- **Must not:** <what this setup work may not add>.
+
 ## Out of scope
 
 - <what this stage leaves for a feature spec>.
