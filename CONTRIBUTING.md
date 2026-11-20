@@ -48,6 +48,9 @@ fix(hooks): a bare install asks first
 chore(release): 0.4.2 — readable gates
 ```
 
+Two release headers, on purpose: the version bump inside the branch is `chore(release): …`; the PR title, which
+becomes the one commit on `main`, is `feat(release): …` (see Pull requests).
+
 ## Tests
 
 Two groups (`vitest.config.ts`):
