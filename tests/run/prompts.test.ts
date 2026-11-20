@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 import { RunError } from "../../src/run/errors.js";
+import { NEVER_FAILS_NAMES, neverFails } from "../../src/run/engine/plan-file.js";
 import {
   clarifyPrompt,
   criterionText,
@@ -151,13 +152,12 @@ describe("role prompts", () => {
     expect(p).toMatch(/marked `\(local\)`/);
   });
 
-  it("v04 AC-17: plan says every task ends green, tests first, no test-only tasks", () => {
+  it("v04 AC-17: plan embeds the /plan skill, the one source of 'every task ends green'; the prompt has no copy", () => {
     const dir = project("plan", "PLAN SKILL $ARGUMENTS");
     const p = planPrompt(dir, { stage: "A1", title: "Login", comment: "make it smaller" });
     expect(p).toContain("PLAN SKILL A1");
-    expect(p).toContain("every task ends green");
-    expect(p).toMatch(/test is written first inside the task/);
-    expect(p).toMatch(/no test-only tasks/);
+    // One source (0.4.5): the rule is the skill's, so a fake skill without it gives a prompt without it.
+    expect(p).not.toContain("every task ends green");
     expect(p).toContain("make it smaller");
     expect(p).toMatch(/skip the precondition and step 1/);
   });
@@ -174,9 +174,19 @@ describe("role prompts", () => {
     const skill = readFileSync(new URL("../../templates/claude/skills/plan/SKILL.md", import.meta.url), "utf8");
     const flat = skill.replace(/\s+/g, " ");
     expect(flat).toMatch(/`verify` must be able to fail/);
-    for (const p of ["|| true", "|| :", "|| echo", "|| exit 0", "; true", "; exit 0", "set +e", "set +o errexit", "| tee", "| cat"]) {
-      expect(flat).toContain(`\`${p}\``);
+    // One source: the names come from the driver's list, so a pattern added there must reach the skill (0.4.5).
+    for (const name of NEVER_FAILS_NAMES) {
+      const last = /^a last line (.+)$/.exec(name);
+      if (last) expect(flat).toMatch(new RegExp(`last line[^.]*\`${last[1]}\``));
+      else expect(flat).toContain(`\`${name}\``);
     }
+    expect(NEVER_FAILS_NAMES.length).toBe(12);
+  });
+
+  it("0.4.5: the /plan skill allows a verify that is only `true` for a docs-only task, as the driver does", () => {
+    const skill = readFileSync(new URL("../../templates/claude/skills/plan/SKILL.md", import.meta.url), "utf8").replace(/\s+/g, " ");
+    expect(neverFails("true")).toBeNull();
+    expect(skill).toMatch(/Never `true`, except a task that changes only documentation/);
   });
 
   it("v04 AC-64: the conflict text quotes the criterion it names, found by its id at the line start", () => {

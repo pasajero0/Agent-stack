@@ -95,8 +95,6 @@ export function planPrompt(projectDir: string, p: { stage: string; title: string
     "The spec is merged and the branch exists: skip the precondition and step 1; do not run verify, commit or implement.",
     "",
     "Do not write tasks.json: return the tasks in your output (`tasks`); the program writes the file.",
-    "",
-    "Rule: **every task ends green**: its test is written first inside the task and its verify passes when the task is done; no test-only tasks.",
   ];
   if (p.comment) lines.push("", "The human rejected the previous plan. Their comment:", p.comment);
   lines.push("", "The /plan skill follows.", "", skill);
