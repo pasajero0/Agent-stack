@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.4.2) — the driver from a chat
+## 0.4.2 — the driver from a chat
 
 - **run: each gate prints one card.** A title, the facts, what is needed from you, and the answers it takes, instead
   of a page of text. A plan task is two lines: id, tier, model, risky mark, criteria and description, then its verify.
@@ -11,10 +11,13 @@
 - **`/drive` and `codeBy: "driver"`.** In Claude Code, `/drive <task>` makes the chat run the task through the
   driver and show you each card; it does none of the work itself. `"codeBy": "driver"` in `gates.json` makes
   spec-gate refuse a chat's code edits, so only a driver call edits code. `"language"` sets the chat language
-  (English by default); terms stay as they are.
+  (English by default); terms stay as they are. The chat never merges, pushes or hand-fixes: it gives the command,
+  and a later fix is a new run. Checked in one live run from a chat (task, 2 tasks, 7 calls, $1.66).
 - **run: hints name the command as you started it** (`node …/cli.mjs run …` when `agent-stack` on `PATH` is not
   this driver). Ctrl-C says the run keeps the lock and prints both `--resume` and `--cancel`. The test-conflict
   retry asks for the answer for the implementer.
+- **run: a verify with command substitution (`$(…)`) is marked at the plan gate:** implement cannot run it itself
+  (Claude Code allows no command substitution by a rule); the driver's checks still do.
 - **run: an old harness is refused before any call** ("the harness is 0.4.0; this driver needs 0.4.1 or later"),
   not halfway with `agent … is out of date`.
 - **Tests:** fast and slow groups; CI runs the slow ones in 2 processes, and a failing shell test prints why.
