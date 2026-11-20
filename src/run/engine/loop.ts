@@ -7,7 +7,7 @@ import { nonePrompter } from "../gate.js";
 import { releaseLock, writeRun } from "../store.js";
 import type { RunFile } from "../types.js";
 import { GateChanged } from "./card.js";
-import { Interrupted, resumeHint, type Ctx, type StepHandler } from "./context.js";
+import { cancelHint, Interrupted, resumeHint, type Ctx, type StepHandler } from "./context.js";
 import { acceptGate, cancelledText, finishedText, limitGate } from "./gates.js";
 import { commonHandlers } from "./steps-common.js";
 import { parseNext, transition, type StepKind } from "./transitions.js";
@@ -80,7 +80,10 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
   } catch (e) {
     writeRun(ctx.projectDir, run);
     if (e instanceof Interrupted) {
-      ctx.out(`Interrupted at ${run.next}; the run is kept. Continue with: ${resumeHint(run.id)}`);
+      // AC-74: the lock stays with the run, so a new run is refused until this one goes on or is cancelled.
+      ctx.out(`Interrupted at ${run.next}. The run is kept and holds the lock: no other run starts in this repo until it goes on or is cancelled.`);
+      ctx.out(`  continue: ${resumeHint(run.id)}`);
+      ctx.out(`  cancel:   ${cancelHint(run.id)}`);
       return 1;
     }
     if (e instanceof RunError) {

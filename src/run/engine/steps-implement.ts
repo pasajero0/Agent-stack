@@ -17,6 +17,7 @@ import { roleCall } from "./call.js";
 import { Interrupted, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
 import { baseOf, failAttempt, taskOf, timedOutError, toLimit } from "./task-core.js";
 import { taskNext } from "./transitions.js";
+import { commandName } from "./command.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
 const CONTINUE = "continue from `git status`.";
@@ -156,7 +157,7 @@ export function lastImplement(ctx: Ctx): ImplementOutput {
   const out = lastCallOutput(ctx, "implement", parseImplement);
   if (out === null) {
     const dir = join(runDir(ctx.projectDir, ctx.run.id), "calls");
-    throw new RunError(`No valid implement output in ${dir}; the run cannot go on. Cancel it: agent-stack run --cancel ${ctx.run.id}.`, 1);
+    throw new RunError(`No valid implement output in ${dir}; the run cannot go on. Cancel it: ${commandName()} run --cancel ${ctx.run.id}.`, 1);
   }
   return out;
 }

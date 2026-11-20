@@ -194,6 +194,10 @@ describe("kills and resume after a side effect", () => {
     expect(existsSync(join(r.dir, "late.txt"))).toBe(false);
     expect(r.run().next).toBe("implement:Q1");
     expect(text(r)).toContain("Interrupted at implement:Q1");
+    // AC-74: the text says the lock stays, and gives both ways on.
+    expect(text(r)).toContain("holds the lock");
+    expect(text(r)).toMatch(/continue: agent-stack run --resume r-/);
+    expect(text(r)).toMatch(/cancel: {3}agent-stack run --cancel r-/);
   });
 
   it("v04 AC-55: a kill after the task commit is resumed by recording HEAD, without a second commit", async () => {

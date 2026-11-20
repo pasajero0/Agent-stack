@@ -5,12 +5,13 @@ import { allowedCommandLines, type CallCommands } from "./claude.js";
 import { RunError } from "./errors.js";
 import type { TestConflict } from "./schemas.js";
 import type { AnswerRecord } from "./types.js";
+import { commandName } from "./engine/command.js";
 
 /** Reads `.claude/skills/<name>/SKILL.md` and fills `$ARGUMENTS` and `${CLAUDE_SKILL_DIR}`. */
 export function loadSkill(projectDir: string, name: string, args: string): string {
   const skillDir = join(projectDir, ".claude", "skills", name);
   const file = join(skillDir, "SKILL.md");
-  if (!existsSync(file)) throw new RunError(`skill not found: ${file} (run agent-stack update)`, 1);
+  if (!existsSync(file)) throw new RunError(`skill not found: ${file} (run ${commandName()} update)`, 1);
   return readFileSync(file, "utf8")
     .split("${CLAUDE_SKILL_DIR}")
     .join(skillDir)
@@ -28,12 +29,12 @@ const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$
  */
 export function loadAgent(projectDir: string, name: string, need?: { re: RegExp; what: string }): string {
   const file = join(projectDir, ".claude", "agents", `${name}.md`);
-  if (!existsSync(file)) throw new RunError(`agent not found: ${file} (run agent-stack update)`, 1);
+  if (!existsSync(file)) throw new RunError(`agent not found: ${file} (run ${commandName()} update)`, 1);
   const text = readFileSync(file, "utf8");
   const m = FRONTMATTER.exec(text);
   const body = (m ? text.slice(m[0].length) : text.replace(/^\uFEFF/, "")).trim();
   const missing = body === "" ? "rules" : need && !need.re.test(body) ? need.what : null;
-  if (missing !== null) throw new RunError(`agent ${file} is out of date: no ${missing} (run agent-stack update --force, or add it)`, 1);
+  if (missing !== null) throw new RunError(`agent ${file} is out of date: no ${missing} (run ${commandName()} update --force, or add it)`, 1);
   return body;
 }
 

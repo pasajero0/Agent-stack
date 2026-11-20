@@ -18,16 +18,17 @@ import { decisionFacts, Facts, showCard } from "./card.js";
 import { specPath } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, under, withFeedback, type RoleMark } from "./role-bounds.js";
 import { toLimit } from "./task-core.js";
+import { commandName } from "./command.js";
 
 /** The stored clarify output; a run file without a valid one cannot go on. */
 export function proposalOf(run: RunFile): ClarifyOutput {
   const p = parseClarify(run.proposal);
-  if (typeof p === "string") throw new RunError(`Run ${run.id} has no valid clarify proposal (${p}); cancel it: agent-stack run --cancel ${run.id}.`, 1);
+  if (typeof p === "string") throw new RunError(`Run ${run.id} has no valid clarify proposal (${p}); cancel it: ${commandName()} run --cancel ${run.id}.`, 1);
   return p;
 }
 
 export function stageOf(run: RunFile): string {
-  if (run.stage === null) throw new RunError(`Run ${run.id} has no confirmed stage id; cancel it: agent-stack run --cancel ${run.id}.`, 1);
+  if (run.stage === null) throw new RunError(`Run ${run.id} has no confirmed stage id; cancel it: ${commandName()} run --cancel ${run.id}.`, 1);
   return run.stage;
 }
 

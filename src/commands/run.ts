@@ -7,6 +7,7 @@ import {
   statusRun,
   type ExitCode,
 } from "../run/engine/index.js";
+import { commandName } from "../run/engine/command.js";
 
 export interface RunOptions {
   /** `true` for the flag alone, a run id when one is given. */
@@ -68,7 +69,7 @@ export async function runCommand(
   if (given(options.cancel)) return cancelRun({ ...base, id: idOf(options.cancel) });
   if (given(options.resume)) return withSignals((signal) => resumeRun({ ...base, signal, id: idOf(options.resume), ...(answers.length > 0 ? { answers } : {}) }));
   if (mode === undefined) {
-    out('Say what to run: agent-stack run quick "<description>" or run task "<description>"; or --resume, --status, --cancel.');
+    out(`Say what to run: ${commandName()} run quick "<description>" or run task "<description>"; or --resume, --status, --cancel.`);
     return 1;
   }
   if (mode !== "quick" && mode !== "task") {

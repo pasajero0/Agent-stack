@@ -5,6 +5,7 @@
 import type { Prompter } from "../gate.js";
 import type { Next, RunConfig, RunFile, RunTask } from "../types.js";
 import type { StepEvent, StepKind } from "./transitions.js";
+import { commandName } from "./command.js";
 
 export interface Ctx {
   projectDir: string;
@@ -112,4 +113,8 @@ export function findTask(ctx: Ctx, id: string): RunTask {
   return t;
 }
 
-export const resumeHint = (id: string): string => `agent-stack run --resume ${id}`;
+/** The hint to continue a run, with the command name (AC-73). */
+export const resumeHint = (id: string): string => `${commandName()} run --resume ${id}`;
+
+/** The hint to cancel a run, with the command name (AC-73, AC-74). */
+export const cancelHint = (id: string): string => `${commandName()} run --cancel ${id}`;

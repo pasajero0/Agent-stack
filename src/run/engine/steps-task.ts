@@ -21,6 +21,7 @@ import { lintItems, toLimit } from "./task-core.js";
 import { planHandlers, planTaskInfo } from "./steps-plan.js";
 import { proposalOf, specHandlers, stageOf } from "./steps-spec.js";
 import type { StepEvent } from "./transitions.js";
+import { commandName } from "./command.js";
 
 const isFix = (id: string): boolean => /^F\d+$/.test(id);
 
@@ -129,7 +130,7 @@ function writeSplit(ctx: Ctx, p: ClarifyOutput): void {
   const all = p.split ?? [];
   const parts = all.filter((s) => stageIdChars(s.id));
   const dropped = all.filter((s) => !stageIdChars(s.id));
-  const cmds = parts.map((s) => `agent-stack run task --stage ${s.id} ${quote(s.goal)}`);
+  const cmds = parts.map((s) => `${commandName()} run task --stage ${s.id} ${quote(s.goal)}`);
   const body = [
     `# Epic split — ${p.stage.title}`,
     "",
@@ -137,7 +138,7 @@ function writeSplit(ctx: Ctx, p: ClarifyOutput): void {
     "",
     ...(parts.length > 0
       ? parts.flatMap((s, i) => [`- **${s.id}**: ${s.goal}`, `  \`${cmds[i] ?? ""}\``])
-      : ["No usable split was proposed. Split the work by hand and start each part with agent-stack run task --stage <id> \"<goal>\"."]),
+      : [`No usable split was proposed. Split the work by hand and start each part with ${commandName()} run task --stage <id> "<goal>".`]),
     ...dropped.map((s) => `- dropped: the proposed id ${JSON.stringify(s.id)} is not a valid stage id (letters, digits, ".", "_", "-"); goal: ${s.goal}`),
     "",
   ].join("\n");
@@ -258,7 +259,7 @@ export const taskMode: ModeSteps = {
 
   firstTask(ctx) {
     const first = ctx.run.tasks.find((t) => !isFix(t.id));
-    if (!first) throw new RunError(`Run ${ctx.run.id} has no approved tasks; cancel it: agent-stack run --cancel ${ctx.run.id}.`, 1);
+    if (!first) throw new RunError(`Run ${ctx.run.id} has no approved tasks; cancel it: ${commandName()} run --cancel ${ctx.run.id}.`, 1);
     return first.id;
   },
 

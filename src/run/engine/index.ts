@@ -29,6 +29,7 @@ import { runLoop, type ExitCode } from "./loop.js";
 import { quickMode } from "./steps-quick.js";
 import { taskMode } from "./steps-task.js";
 import { parseNext } from "./transitions.js";
+import { commandName, requireHarness } from "./command.js";
 
 export type { ExitCode } from "./loop.js";
 
@@ -69,7 +70,7 @@ async function guard(o: EngineOptions, fn: () => Promise<ExitCode>): Promise<Exi
 
 function modeSteps(mode: Mode): ModeSteps {
   const steps = MODES[mode];
-  if (!steps) throw new RunError(`${mode} mode: not built yet. Use agent-stack run quick "<description>" for now.`, 1);
+  if (!steps) throw new RunError(`${mode} mode: not built yet. Use ${commandName()} run quick "<description>" for now.`, 1);
   return steps;
 }
 
@@ -107,14 +108,14 @@ function refuseDirty(dir: string, when: string): void {
 /** AC-50: names the locked run and its commands. */
 function lockRefusal(dir: string): RunError {
   const lock = readLock(dir);
-  if (!lock) return new RunError("A run lock exists (.claude/tmp/runs/lock) but cannot be read. Remove it with: agent-stack run --cancel", 1);
+  if (!lock) return new RunError(`A run lock exists (.claude/tmp/runs/lock) but cannot be read. Remove it with: ${commandName()} run --cancel`, 1);
   const state = lockedRunState(dir);
   return new RunError(
     [
       `Run ${lock.id} holds the lock (${state}); one run per repo.`,
-      `  agent-stack run --resume ${lock.id}`,
-      `  agent-stack run --status ${lock.id}`,
-      `  agent-stack run --cancel ${lock.id}`,
+      `  ${commandName()} run --resume ${lock.id}`,
+      `  ${commandName()} run --status ${lock.id}`,
+      `  ${commandName()} run --cancel ${lock.id}`,
     ].join("\n"),
     1
   );
@@ -124,8 +125,10 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
   return guard(o, async () => {
     const dir = o.projectDir;
     const description = o.description.trim();
-    if (description === "") throw new RunError('The description is empty: say what to do, e.g. agent-stack run quick "fix the README typo".', 1);
+    if (description === "") throw new RunError(`The description is empty: say what to do, e.g. ${commandName()} run quick "fix the README typo".`, 1);
     const cfg = loadRunConfig(dir);
+    // AC-72: an old harness stops the run here, before any call, not halfway at a missing agent section.
+    requireHarness(dir);
     if (o.mode === "task" && cfg.stagePattern !== DEFAULT_STAGE_PATTERN) {
       throw new RunError(`gates.json sets a custom stagePattern (${cfg.stagePattern}); task mode needs the default ${DEFAULT_STAGE_PATTERN}. Remove the key, or use run quick.`, 1);
     }
@@ -207,7 +210,7 @@ export function resumeRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
     const dir = o.projectDir;
     const lock = readLock(dir);
     const id = o.id ?? lock?.id;
-    if (!id) throw new RunError('No run to resume: no run holds the lock. Start one with agent-stack run quick "<description>".', 1);
+    if (!id) throw new RunError(`No run to resume: no run holds the lock. Start one with ${commandName()} run quick "<description>".`, 1);
     const run = readRunStrict(dir, id);
     if (run.status === "finished" || run.status === "cancelled") throw new RunError(`Run ${id} is ${run.status}; there is nothing to resume.`, 1);
     if (lock && lock.id !== id) throw lockRefusal(dir);
@@ -218,6 +221,7 @@ export function resumeRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
     if (o.answers !== undefined && o.answers.length > 0 && (run.status !== "waiting" || !run.next.startsWith("gate:") || run.next === "gate:spec-merge")) {
       throw new RunError(`--answer needs a run waiting at a gate that takes an answer; run ${id} is ${run.status} at ${run.next}. Nothing was applied.`, 1);
     }
+    requireHarness(dir);
     const cfg = loadRunConfig(dir);
     const mode = modeSteps(run.mode);
     const { kind, task } = parseNext(run.next);
@@ -268,7 +272,7 @@ export function cancelRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
       throw new RunError(`Run ${id} is already ${run.status}; there is nothing to cancel.`, 1);
     }
     if (ours && lock && run.status === "running" && pidAlive(lock.pid)) {
-      throw new RunError(`Run ${id} is live (pid ${lock.pid}): stop it first (Ctrl-C), then agent-stack run --cancel ${id}.`, 1);
+      throw new RunError(`Run ${id} is live (pid ${lock.pid}): stop it first (Ctrl-C), then ${commandName()} run --cancel ${id}.`, 1);
     }
     run.status = "cancelled";
     writeRun(dir, run);

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { DEFAULT_STAGE_PATTERN } from "../claude/gates.js";
 import { RunError } from "./errors.js";
 import type { Fuse, RunConfig } from "./types.js";
+import { commandName } from "./engine/command.js";
 
 const DEFAULTS = {
   maxTurns: 60,
@@ -97,7 +98,7 @@ export function loadRunConfig(projectDir: string): RunConfig {
     parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
-    throw new RunError(`Cannot read ${path}: ${why}. Run \`agent-stack generate\` or fix the file.`, 1);
+    throw new RunError(`Cannot read ${path}: ${why}. Run \`${commandName()} generate\` or fix the file.`, 1);
   }
   if (!isObj(parsed)) throw new RunError(`${path} must contain a JSON object.`, 1);
 
