@@ -322,6 +322,7 @@ terminal text stays English.
 
 - `gate`: `answers` | `spec-merge` | `plan-approve` | `limit` | `accept`; `stage`: string or null.
 - `facts`: strings, in the order AC-68 prints them, never cut: the terminal print cuts, the data does not.
+- `keep`: the indexes of the facts the terminal never cuts (AC-68).
 - `source`: the sha256 of the inputs the gate decides on (gate:plan-approve: the sha256 of `tasks.json`; gate:accept: the HEAD commit id, plus a hash of the
   uncommitted changes when there are any);
   null for other gates.
