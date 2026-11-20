@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4.3 — see the run; specs state their limits
+
+- **run: see a run while it works.** Each tool a role starts prints a line under its step (`· Read src/a.ts`,
+  `· Bash pnpm test`); calls run with `--output-format stream-json`. `run --watch` shows the run live in any
+  terminal, also inside VS Code: each step with its time, the step in progress with its last tool lines, the gate
+  it waits at. The run folder keeps `now.json` and `progress.log`.
+- **run: time.** The run file keeps each step's time. gate:accept shows the work time, the time spent waiting for
+  you, the time per step and per task, and the estimate against the actual; the plan card estimates the work from
+  the finished runs in the repo (none yet, it says so). All of it is in `--status --json`.
+- **run: cards read at a glance.** Short titles without the run id; gate:accept starts with a summary
+  (`2 task(s) · 2 commit(s) · checks green · final check green`), then the time and the cost; a skipped command is
+  named once; the waiting line lists the answers the gate takes.
+- **run: a quick commit carries the scope `quick`** (`fix(quick): …`), so a repo whose commitlint needs a scope
+  accepts it; the branch slug is cut at a whole word.
+- **Status line:** `.claude/bin/run-status` gives one line for Claude Code's status line in a terminal
+  (`run <id> · implement:T1 · 1:35 · $0.46 · Edit src/a.ts`). Off by default; README says how to turn it on.
+- **/drive:** the chat tells each step as it starts and ends, shows the spec short at the spec gate (purpose,
+  criteria, constraints, scope, a link), runs the driver apart from its watch, and gives `run --watch` once.
+- **Specs state their constraints.** The spec template has `## Constraints` (must not, must keep, when goals
+  conflict), each line with how it is checked; `/spec` asks for it, `/grill` asks about limits and hostile input
+  (SQL and shell injection, `../`, secrets in logs), and spec-reviewer flags a constraint nobody can check.
+- **Repo:** commitlint accepts a stage scope with a folder in `docs/specs/`, and `quick`; slow tests get 20 s each.
+- Checked in live runs with the real `claude`: three quick runs in this repo, made by the driver itself, and one
+  task run from a chat in a scratch repo (2 tasks, $1.35).
+
+### Upgrading from 0.4.2
+
+- Run `agent-stack update`: it brings the new spec template, `/grill`, spec-reviewer, `/drive` and
+  `.claude/bin/run-status`. The status line is not turned on for you; see README.
+
+
 ## 0.4.2 — the driver from a chat
 
 - **run: each gate prints one card.** A title, the facts, what is needed from you, and the answers it takes, instead
