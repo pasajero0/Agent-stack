@@ -35,8 +35,8 @@ const CHECK_CONFIGS: readonly string[] = [
 const TESTS = /(?<![.\w])(?:it|test)(?:\.\w+)*\s*\(|\bdef\s+test_|\bfunc\s+Test|#\[test\]/g;
 const ASSERTIONS = /\bexpect\s*\(|\b(?:debug_)?assert(?:_\w+|\.\w+|[A-Z]\w*)?!?\s*[\s(]|\bt\.(?:Errorf?|Fatalf?)\s*\(/g;
 // Only after a test call, so `iter().skip(1)` or `cursor.skip(n)` is not one.
-const SKIPS =
-  /(?<![.\w])(?:it|test|describe|suite|context|bench)\.(?:skip|only|todo)\w*|(?<![.\w])x(?:it|describe|test)\s*\(|\bthis\.skip\s*\(|\bpytest\.skip\s*\(|@pytest\.mark\.(?:skip|xfail)|@unittest\.skip|\bt\.Skip\w*\s*\(|#\[ignore\]/g;
+export const SKIPS =
+  /(?<![.\w])(?:it|test|describe|suite|context|bench)\.(?:skip|only|todo)\w*|(?<![.\w])[xf](?:it|describe|test)\s*\(|\bthis\.skip\s*\(|\bpytest\.skip\s*\(|@pytest\.mark\.(?:skip|xfail)|@unittest\.skip|\bt\.Skip\w*\s*\(|#\[ignore\]/g;
 
 const count = (text: string, re: RegExp): number => (text.match(re) ?? []).length;
 

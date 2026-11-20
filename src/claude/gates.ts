@@ -67,7 +67,9 @@ export interface LayerRule {
 // Union across stacks on purpose: a pattern for another language costs nothing and keeps the
 // guard stack-agnostic. POSIX ERE only (no \b) — must behave the same in BSD and GNU grep.
 export const CHEAT_PATTERNS = [
-  "(^|[^A-Za-z0-9_])(it|test|describe|suite|context|bench)\\.(skip|only)",
+  // Skip marks: the same forms as frozen.ts SKIPS (tests/run/skip-marks.test.ts keeps the two lists equal).
+  "(^|[^A-Za-z0-9_])(it|test|describe|suite|context|bench)\\.(skip|only|todo)",
+  "(^|[^A-Za-z0-9_.])this\\.skip[[:space:]]*\\(",
   "(^|[^A-Za-z0-9_.])(xit|xtest|xdescribe|fit|fdescribe)[[:space:]]*\\(",
   "@ts-ignore",
   "@ts-nocheck",
@@ -97,7 +99,6 @@ export const INSTALL_PATTERNS = [
   "gem[[:space:]]+install",
   "apt(-get)?[[:space:]]+install",
   "claude[[:space:]]+(plugin|mcp)[[:space:]]+(install|add)",
-  "(curl|wget)[^|]*\\|[[:space:]]*(sudo[[:space:]]+)?(ba|z)?sh",
 ];
 
 /**
