@@ -42,6 +42,17 @@ fix(hooks): a bare install asks first
 chore(release): 0.4.2 — readable gates
 ```
 
+## Tests
+
+Two groups (`vitest.config.ts`):
+
+- **fast** — no outside process, about 2 s: `pnpm test:fast`;
+- **slow** — spawns bash and git in temp repos (hooks, e2e, the driver engine, frozen, git): `pnpm test:slow`.
+
+`pnpm test` runs fast, then slow. CI runs slow in 2 processes, since many at once on a loaded runner made
+unrelated tests fail. A new test file that spawns bash or git goes into the `SLOW` list. A shell test prints the
+tool's exit and output when it fails, so a CI failure says why.
+
 ## Pull requests
 
 - One PR per release branch, into `main`.

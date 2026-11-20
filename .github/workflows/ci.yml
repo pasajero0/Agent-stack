@@ -26,7 +26,10 @@ jobs:
 
       - run: pnpm typecheck
 
-      - run: pnpm test
+      - run: pnpm test:fast
+
+      # Slow tests spawn bash and git; fewer at once keeps a loaded runner from failing unrelated tests.
+      - run: pnpm test:slow --minWorkers=1 --maxWorkers=2
 
       - name: Lint PR commit messages
         if: github.event_name == 'pull_request'

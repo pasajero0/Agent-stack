@@ -16,7 +16,9 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "vitest run",
+    "test": "pnpm test:fast && pnpm test:slow",
+    "test:fast": "vitest run --project fast",
+    "test:slow": "vitest run --project slow",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prepare": "husky || true",
