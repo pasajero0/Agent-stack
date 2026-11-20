@@ -346,6 +346,8 @@ terminal text stays English.
 | `next` | one of the values listed above |
 | `returnTo` | the `next` value that gate:limit returns to, or null |
 | `card` | the gate card of the gate the run waits at, or null (written when the run reaches the gate) |
+| `steps` | `[{ "step": <next>, "start": <ISO>, "end": <ISO or null> }]`, one entry per step as it ran (AC-81) |
+| `estimateSec` | the work time estimated at gate:plan-approve (task) or at start (quick), or null (AC-81) |
 | `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| `test-conflict` \| `tests-changed` \| null |
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
@@ -942,6 +944,21 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   `run.json` and `now.json`, and changes nothing. It is not turned on by `generate` or `update`: a project
   `statusLine` would replace the user's own. README says how to turn it on in `settings.local.json`.
   - IF any of those files is missing or not valid JSON, THEN it SHALL print nothing and exit 0.
+- **AC-81:** THE SYSTEM SHALL keep the time of every step in the run file (`steps`): a step's entry starts when
+  the step starts and ends when it ends; a gate's entry ends when the gate decides, in whichever process. A step
+  interrupted (AC-51) ends at the interrupt; its resume adds a new entry.
+  - **Work time** is the sum of the entries of steps that are not gates; **waiting time** is the sum of the gate
+    entries (the human's time).
+  - WHEN the run reaches gate:plan-approve (task) or starts (quick), THE SYSTEM SHALL estimate the work time
+    from the finished runs in this repo: the mean time of each step kind (base-check, implement, checks, review,
+    commit) over their entries, times the steps this run will take (base-check once, then each plan task's four).
+    It SHALL keep it as `estimateSec` and show `estimate: ≈ <m> min of work (from <n> earlier runs)` on the plan
+    card. IF no finished run has entries for those kinds, THEN `estimateSec` is null and the card says
+    `estimate: none yet (no earlier runs)`.
+  - gate:accept SHALL show `time: <m:ss> work + <m:ss> waiting for you`, the time per step kind and per task,
+    and, when there is an estimate, `estimate <m:ss> → actual <m:ss>`. `--status --json` SHALL give `workSec`,
+    `waitSec` and `estimateSec` in `run`.
+  - A run file from before this field reads with `steps: []` and `estimateSec: null`.
 - **AC-76:** THE SYSTEM SHALL read `gates.json → language` and give it in `--status --json` (AC-69), so the
   operator chat speaks `language.chat` and keeps terms in `language.terms`. With the key missing, both are `en`.
   - IF a value does not match the pattern in the Contract, or `language` is not an object, THEN THE SYSTEM SHALL
@@ -1004,6 +1021,10 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — AC-81 (new), run file `steps`, `estimateSec`: the time of each step, the work and waiting time, an
+  estimate from earlier runs and its check at gate:accept. Leonid: "estimated time и фактическое время … в
+  метрике, это нам очень поможет для анализа". Only `at` of gate records and `duration_ms` of calls existed.
 
 - 2026-11-20 — AC-78–AC-80 (new), "How Claude Code is invoked" (`stream-json --verbose`), AC-75 (the chat follows
   the run): a run was a blind spot. Leonid: "Ты ждёшь, а я ничего не вижу". The driver printed only the step and
