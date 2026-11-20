@@ -848,7 +848,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     (`AC-1,3,5`). The last fact is `full task text: <path of tasks.json>`. A verify command is never cut, since
     the human approves it as written.
   - The terminal cuts a one-line fact longer than 100 characters to 100, the last of them `…`. It never cuts a
-    verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), the cost line, or a multi-line output (the tails of
+    verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), the cost and time lines, the AC-77 note,
+    or a multi-line output (the tails of
     AC-33 and AC-61, a BLOCKED report): those print as they are. The card data is never cut.
   - The waiting line of AC-29 and the steps of AC-10 follow the card; they are its `hint`. The waiting line
     reads `Waiting at <gate> for your answer (<keys>): <hint> --answer <answer>`, the keys from the card's first
@@ -925,6 +926,11 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     or plan edits; a later fix is a new run;
   - never merge, push or open a pull request itself, also when the human agrees: at gate:spec-merge it gives the
     merge command and resumes when the human says it is done;
+  - at gate:spec-merge, show the spec short in the chat — its purpose, each criterion in one line, the
+    constraints and what is out of scope — and a link to the spec file, so the human decides without reading the
+    file in a terminal;
+  - run the driver as its own background job and follow its output file; never run the driver inside the watch
+    command, since stopping the watch would stop the run;
   - while a driver command runs, follow its output (Claude Code's Monitor) and tell the human in one line when a
     step starts and when it ends (`implement:T1 started`, `ok in 90s`), not each tool;
   - at the end, report what was done, the commits (sha and subject as they are), the cost, and what the human
@@ -1042,6 +1048,10 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — AC-75, AC-68 (from the live task run): the chat shows the spec short at gate:spec-merge (Leonid:
+  reading every spec in `less` is no way to work), and runs the driver apart from its watch (a stopped watch
+  killed a run); the time lines and the AC-77 note are never cut.
 
 - 2026-11-20 — AC-68 (layout): short titles without the run id, gate:accept starts with a summary, then time and
   cost; a skipped command named once; a waiting line that does not read as an error. From the first live look at
