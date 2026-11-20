@@ -96,9 +96,9 @@ word for this spec only is marked `(local)`.
   - tests: `it(`, `test(` (also with a modifier: `it.skip(`, `test.each(`), `def test_`, `func Test`, `#[test]`;
   - assertions: `expect(`, `assert` (also `assert.x(`, `assert_eq!(`, `assert!(`, `debug_assert!(`,
     `assertEqual(`, `assertThat(`), `t.Error(`, `t.Fatal(` and their `f` forms;
-  - skip marks: `.skip`, `.only`, `.todo` (and `.skipIf`) after `it`, `test`, `describe`, `suite`, `context` or
-    `bench`; `xit(`, `xdescribe(`, `xtest(`, `this.skip(`, `pytest.skip(`, `@pytest.mark.skip`,
-    `@pytest.mark.xfail`, `@unittest.skip`, `t.Skip`, `#[ignore]`. So `iter().skip(1)` is not one.
+  - skip marks: the forms in the one list `SKIP_MARKS` (`src/run/engine/skip-marks.ts`), which cheat-guard's seed
+    patterns are built from too — `.skip`, `.only`, `.todo`, `.skipIf` after a test call; `xit(`, `fit(` and the
+    like; `this.skip()`; pytest, unittest, Go and Rust marks. So `iter().skip(1)` or `this.skip(2)` is not one.
 
   A file that is no longer a regular file (a folder, a submodule) is "replaced"; a file with a NUL byte is not
   counted.
@@ -1051,6 +1051,10 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — Frozen tests (0.4.5, from review): the skip marks are one list in code, `SKIP_MARKS`, from which
+  both the frozen-tests count and cheat-guard's seed patterns are built; the Term points to it instead of copying
+  it. `fit(`/`fdescribe(` now count, `this.skip` only without arguments (Mocha's form).
 
 - 2026-11-20 — AC-17, Criterion text (0.4.5, one source of truth): the plan prompt no longer repeats "every task
   ends green" — the embedded `/plan` skill is its source; `trace` reads criterion lines in the driver's strict
