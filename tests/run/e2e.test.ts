@@ -50,7 +50,8 @@ async function cli(
 
 /** Execution throws on a non-zero exit, so a rejected header fails the test. */
 function commitlintAccepts(subjects: string[]): void {
-  for (const s of subjects) execFileSync("pnpm", ["exec", "commitlint"], { cwd: repoRoot, input: `${s}\n`, stdio: "pipe" });
+  const config = join(repoRoot, "tests/run/commitlint.conventional.mjs");
+  for (const s of subjects) execFileSync("pnpm", ["exec", "commitlint", "--config", config], { cwd: repoRoot, input: `${s}\n`, stdio: "pipe" });
 }
 
 function addBareRemote(r: Repo): string {

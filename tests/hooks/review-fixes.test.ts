@@ -126,9 +126,18 @@ describe("review fixes", () => {
     git(dir, "checkout", "-q", "-b", "A0-work");
     const tasks = Array.from({ length: 4 }, (_, i) => ({ id: `T${i}`, verify: "sleep 0.2", passes: false }));
     write(dir, ".claude/tmp/A0/tasks.json", JSON.stringify({ tasks }));
-    const script = tasks.map((t) => `${join(dir, ".claude/bin/verify")} ${t.id} >/dev/null &`).join("\n") + "\nwait";
-    spawnSync("bash", ["-c", script], { cwd: dir });
-    const after = JSON.parse(readFileSync(join(dir, ".claude/tmp/A0/tasks.json"), "utf-8")).tasks;
-    expect(after.every((t: { passes: boolean }) => t.passes)).toBe(true);
+    // Each run's output and exit go to the log, so a failure on a loaded CI runner says which run and why.
+    const script =
+      tasks.map((t) => `{ ${join(dir, ".claude/bin/verify")} ${t.id}; echo "exit $? (${t.id})"; } >"$PWD/.git/out-${t.id}" 2>&1 &`).join("\n") +
+      "\nwait";
+    const r = spawnSync("bash", ["-c", script], { cwd: dir, encoding: "utf-8" });
+    const text = readFileSync(join(dir, ".claude/tmp/A0/tasks.json"), "utf-8");
+    const why = [
+      `bash: exit ${String(r.status)}, signal ${String(r.signal)}, ${r.stderr}`,
+      ...tasks.map((t) => readFileSync(join(dir, ".git", `out-${t.id}`), "utf-8")),
+      `tasks.json: ${text}`,
+      `verify.log: ${readFileSync(join(dir, ".claude/tmp/A0/verify.log"), "utf-8")}`,
+    ].join("\n");
+    expect(JSON.parse(text).tasks.every((t: { passes: boolean }) => t.passes), why).toBe(true);
   });
 });

@@ -32,6 +32,11 @@ const trace = (dir: string, ...args: string[]) => {
   return { code: r.status, signal: r.signal, out: r.stdout + r.stderr + (r.error ? `\nspawn error: ${r.error.message}` : "") };
 };
 
+/** Fails with the exit, the signal and the output, so a flaky CI failure says why. */
+const expectExit = (r: { code: number | null; signal: NodeJS.Signals | null; out: string }, code: number): void => {
+  expect(r.code, `exit ${r.code}, signal ${r.signal}\n${r.out}`).toBe(code);
+};
+
 describe("trace", () => {
   it("reports criteria without tests and tests for criteria the spec lacks", () => {
     const dir = stageRepo();
@@ -39,7 +44,7 @@ describe("trace", () => {
     write(dir, "tests/test_ingest.py", "def test_A0_AC_2_rejects_empty(): ...\n");
     write(dir, "src/ingest.ts", "// A0 AC-3 is mentioned here, but this is not a test file\n");
     const r = trace(dir);
-    expect(r.code).toBe(1);
+    expectExit(r, 1);
     expect(r.out).toContain("trace A0: 2/3 criteria have tests");
     expect(r.out).toContain("missing tests: AC-3");
     expect(r.out).toContain("not in the spec: AC-9");
@@ -59,19 +64,19 @@ describe("trace", () => {
     const dir = stageRepo();
     write(dir, "docs/specs/A0/SPEC.md", "---\nstage: A0\nlight: true\n---\n- **AC-1:** build passes. Check: `pnpm build`\n");
     let r = trace(dir);
-    expect(r.code).toBe(0);
+    expectExit(r, 0);
     expect(r.out).toContain("light spec");
     write(dir, "docs/specs/A0/SPEC.md", "---\r\nstage: A0\r\nlight: true\r\n---\r\n- **AC-1:** x\r\n");
-    expect(trace(dir).code).toBe(0); // CRLF line endings
+    expectExit(trace(dir), 0); // CRLF line endings
     write(dir, "docs/specs/A0/SPEC.md", SPEC + "light: true\n");
     r = trace(dir);
-    expect(r.code).toBe(1);
+    expectExit(r, 1);
     expect(r.out).toContain("missing tests");
   });
 
   it("cannot run without a stage or a spec", () => {
     const dir = stageRepo();
-    expect(trace(dir, "B7").code).toBe(2);
+    expectExit(trace(dir, "B7"), 2);
     git(dir, "checkout", "-q", "main");
     expect(trace(dir).out).toContain("no stage");
   });
@@ -107,7 +112,7 @@ describe("trace: spec terms against the glossary", () => {
   it("fails on a Terms entry that is neither in the glossary nor marked (local), and names it", () => {
     const dir = termsRepo("- **Batch** — as in the glossary.\n- **Decision** — a new reason.\n- **Retry window**: new too.\n");
     const r = trace(dir);
-    expect(r.code).toBe(1);
+    expectExit(r, 1);
     expect(r.out).toContain("3/3 criteria have tests");
     expect(r.out).toContain("terms not in docs/GLOSSARY.md: Decision, Retry window");
     expect(r.out).toContain("(local)");
@@ -121,10 +126,10 @@ describe("trace: spec terms against the glossary", () => {
   });
 
   it("checks nothing without a glossary file, and with gates.json glossary set to an empty string", () => {
-    expect(trace(termsRepo("- **Decision** — new.\n", null)).code).toBe(0);
+    expectExit(trace(termsRepo("- **Decision** — new.\n", null)), 0);
     const dir = termsRepo("- **Decision** — new.\n");
     patchGates(dir, { glossary: "" });
-    expect(trace(dir).code).toBe(0);
+    expectExit(trace(dir), 0);
   });
 
   it("reads the glossary from gates.json glossary when it is set, and checks against that file", () => {
@@ -132,33 +137,33 @@ describe("trace: spec terms against the glossary", () => {
     write(dir, "handbook/words.md", "- **Batch** — no Decision here.\n");
     patchGates(dir, { glossary: "handbook/words.md" });
     let r = trace(dir);
-    expect(r.code).toBe(1);
+    expectExit(r, 1);
     expect(r.out).toContain("terms not in handbook/words.md: Decision");
     write(dir, "handbook/words.md", "- **Decision** — defined here.\n");
-    expect(trace(dir).code).toBe(0);
+    expectExit(trace(dir), 0);
     patchGates(dir, { glossary: join(dir, "handbook/words.md") }); // an absolute path works too
-    expect(trace(dir).code).toBe(0);
+    expectExit(trace(dir), 0);
   });
 
   it("says so on stderr when gates.json names a glossary that does not exist, and checks nothing", () => {
     const dir = termsRepo("- **Decision** — new.\n");
     patchGates(dir, { glossary: "docs/Glosary.md" });
     const r = trace(dir);
-    expect(r.code).toBe(0);
+    expectExit(r, 0);
     expect(r.out).toContain("gates.json → glossary names docs/Glosary.md, which does not exist");
   });
 
   it("ignores bold words outside the Terms section", () => {
     const dir = termsRepo("- **Batch** — fine.\n");
     write(dir, "docs/specs/A0/SPEC.md", withTerms("- **Batch** — fine.\n") + "- **Not a term** — in Changes.\n");
-    expect(trace(dir).code).toBe(0);
+    expectExit(trace(dir), 0);
   });
 
   it("accepts text after the Terms heading and a colon inside the bold", () => {
     const dir = termsRepo("- **Batch:** colon inside the bold.\n");
     write(dir, "docs/specs/A0/SPEC.md", withTerms("- **Batch:** fine.\n- **Novel** — not listed.\n").replace("## Terms", "## Terms (domain words)"));
     const r = trace(dir);
-    expect(r.code).toBe(1);
+    expectExit(r, 1);
     expect(r.out).toContain("terms not in docs/GLOSSARY.md: Novel");
     expect(r.out).not.toContain("Batch");
   });
@@ -167,15 +172,15 @@ describe("trace: spec terms against the glossary", () => {
     const dir = stageRepo();
     write(dir, "docs/GLOSSARY.md", GLOSSARY);
     write(dir, "docs/specs/A0/SPEC.md", withTerms("- **Batch** — fine.\n"));
-    expect(trace(dir).code).toBe(1); // the full trace: no tests yet
+    expectExit(trace(dir), 1); // the full trace: no tests yet
     let r = trace(dir, "--terms");
     expect(r.code, r.out).toBe(0);
     expect(r.out).toContain("trace A0: spec terms ok");
     write(dir, "docs/specs/A0/SPEC.md", withTerms("- **Batch** — fine.\n- **Novel** — new.\n"));
     r = trace(dir, "--terms", "A0");
-    expect(r.code).toBe(1);
+    expectExit(r, 1);
     expect(r.out).toContain("terms not in docs/GLOSSARY.md: Novel");
-    expect(trace(dir, "--terms", "B7").code).toBe(2);
+    expectExit(trace(dir, "--terms", "B7"), 2);
   });
 
   it("checks the terms of a light spec too", () => {
@@ -183,7 +188,7 @@ describe("trace: spec terms against the glossary", () => {
     write(dir, "docs/GLOSSARY.md", GLOSSARY);
     write(dir, "docs/specs/A0/SPEC.md", "---\nstage: A0\nlight: true\n---\n## Terms\n- **Novel** — new.\n## Checklist\n- **AC-1:** x\n");
     const r = trace(dir);
-    expect(r.code).toBe(1);
+    expectExit(r, 1);
     expect(r.out).toContain("light spec");
     expect(r.out).toContain("terms not in docs/GLOSSARY.md: Novel");
   });
