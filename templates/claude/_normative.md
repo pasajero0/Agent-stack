@@ -34,7 +34,7 @@ Each stage of work goes through these steps; hooks enforce the ones marked 🔒.
    🔒 The stage's first spec must be merged before any of its code (spec-gate).
 3. **`/plan <stage>`** — on a branch named after the stage (`A0-ingest`): `.claude/tmp/<stage>/tasks.json`,
    every AC → a task with a `verify` command and a tier.
-   🔒 The spec leads the code: a requirement change is first a committed `spec: …` with a "## Changes"
+   🔒 The spec leads the code: a requirement change is first a committed `docs(<stage>): spec — …` with a "## Changes"
    entry, then tests and code — in the same branch and MR (spec-gate checks the order).
 4. **Tests first, inside the task** — every task ends green: the **test-writer** subagent (or the implementer)
    writes the failing tests named `"<stage> AC-n: …"` first, then the code makes them pass; no test-only tasks.

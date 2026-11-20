@@ -71,7 +71,8 @@ Requirements change; the spec must stay true. Change it in the stage branch, **b
 
 1. Edit the criterion in place (do not leave the old one beside it) and add an entry under "## Changes":
    date — what changed (AC ids) — why (link the ADR if it was a decision).
-2. Commit it alone: `spec: <stage> <what changed>`.
+2. Commit it alone: `docs(<stage>): spec — <what changed>` (the form the driver uses; `spec:` is no Conventional
+   Commits type, so commitlint refuses it).
 3. Then update the tests for the changed criteria (they must fail first), then the code.
 
 The spec-gate enforces the order: code is closed while the spec has uncommitted edits, or when it differs

@@ -98,6 +98,8 @@ describe("spec-gate", () => {
     let r = runHook(dir, "spec-gate.sh", codeEdit(dir));
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("uncommitted changes");
+    // A form commitlint accepts: `spec:` is no Conventional Commits type (hotfix 0.4.4).
+    expect(r.stderr).toContain("docs(<stage>): spec — …");
 
     // 2. Committed without saying what changed → code waits.
     git(dir, "commit", "-q", "-am", "spec: A0 count duplicates");
