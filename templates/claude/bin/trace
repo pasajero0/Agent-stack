@@ -89,7 +89,10 @@ if awk '{ sub(/\r$/, "") } NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---"
 fi
 
 # Criteria are defined by list items that start with their id: "- **AC-3:** WHEN …".
-defined=$(grep -E '^[[:space:]]*[-*][[:space:]]*\**AC-[0-9]+' "$spec" | grep -Eo 'AC-[0-9]+' | sort -u)
+# A criterion is a line `- **AC-n:** …`, one id per line, as the driver reads it (plan-file.ts specAcIds): a loose
+# `- AC-3` line or a reference to another AC on the line is not one (0.4.5).
+defined=$(grep -E '^[[:space:]]*[-*][[:space:]]*\*\*AC-[0-9]+:\*\*' "$spec" |
+  sed -E 's/^[[:space:]]*[-*][[:space:]]*\*\*(AC-[0-9]+):\*\*.*/\1/' | sort -u)
 
 # Every tracked or new (not ignored) file matching testGlobs.
 stage_re=$(printf '%s' "$stage" | sed 's/[.]/\\./g')

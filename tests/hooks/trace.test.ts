@@ -11,7 +11,7 @@ stage: A0
 ## Acceptance criteria
 - **AC-1:** WHEN a valid batch arrives, THE SYSTEM SHALL accept it.
 - **AC-2:** IF the batch is empty, THEN THE SYSTEM SHALL reject it.
-* AC-3: WHEN an eventId repeats, THE SYSTEM SHALL count it.
+* **AC-3:** WHEN an eventId repeats, THE SYSTEM SHALL count it.
 Mentions of AC-9 in prose do not define a criterion.
 ## Changes
 `;
@@ -201,5 +201,26 @@ describe("trace: spec terms against the glossary", () => {
     expect(reason).toContain("trace failed");
     expect(reason).toContain("Novel");
     expect(reason).not.toContain("do not line up");
+  });
+});
+
+describe("trace reads criteria as the driver does (0.4.5)", () => {
+  it("v04 AC-12: only `- **AC-n:**` lines are criteria, one id per line; trace and specAcIds agree", async () => {
+    const { specAcIds } = await import("../../src/run/engine/plan-file.js");
+    const spec = [
+      "## Acceptance criteria (EARS)",
+      "- **AC-1:** WHEN x, THE SYSTEM SHALL y.",
+      "- **AC-2:** IF z, THEN THE SYSTEM SHALL w (partner of AC-1, see AC-9).",
+      "- AC-3 is a loose line, not a criterion.",
+      "- **AC-4** — bold but no colon, not a criterion.",
+      "",
+    ].join("\n");
+    const dir = stageRepo();
+    write(dir, "docs/specs/A0/SPEC.md", spec);
+    write(dir, "src/ingest.test.ts", 'it("A0 AC-1", f); it("A0 AC-2", f);\n');
+    const r = trace(dir);
+    expectExit(r, 0);
+    expect(r.out).toContain("trace A0: 2/2 criteria have tests");
+    expect(specAcIds(spec)).toEqual(["AC-1", "AC-2"]);
   });
 });
