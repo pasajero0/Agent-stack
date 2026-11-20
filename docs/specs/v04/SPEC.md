@@ -365,7 +365,8 @@ terminal text stays English.
 **How Claude Code is invoked**
 
 The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwise `claude`. Every call:
-- gets `-p --output-format json --max-turns <maxTurns> --model <model> --json-schema <role schema>`, plus
+- gets `-p --output-format stream-json --verbose --max-turns <maxTurns> --model <model> --json-schema <role
+  schema>`, plus
   `--max-budget-usd <dollars left>` only with a dollar fuse;
 - gets the role prompt on stdin;
 - gets `AGENT_STACK_RUN` in its environment;
@@ -913,6 +914,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     or plan edits; a later fix is a new run;
   - never merge, push or open a pull request itself, also when the human agrees: at gate:spec-merge it gives the
     merge command and resumes when the human says it is done;
+  - while a driver command runs, follow its output (Claude Code's Monitor) and tell the human in one line when a
+    step starts and when it ends (`implement:T1 started`, `ok in 90s`), not each tool;
   - at the end, report what was done, the commits (sha and subject as they are), the cost, and what the human
     should check.
   - IF a driver command exits 1 (a dirty tree, a red base, an old harness, a lock), THEN the skill SHALL tell
@@ -921,6 +924,24 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-77:** WHEN a plan task's verify holds command substitution (`$(` or a backtick), THE SYSTEM SHALL add a
   fact under that task at gate:plan-approve: `note: implement cannot run this verify itself (Claude Code does not
   allow command substitution by a rule); the driver's checks still run it`. The plan stays valid.
+### Seeing a run
+
+- **AC-78:** WHILE a Claude call runs, THE SYSTEM SHALL print one line for each tool the role starts, under the
+  step's `->` line: `   · <tool> <target>`, where the target is the file path, the command or the pattern,
+  cut to 80 characters with `…`; a tool with none of them prints its name only. It SHALL take the call's
+  result from the last event of type `result` in the stream; the `calls/` file keeps that result as before
+  (AC-3), not the whole stream.
+  - IF a stream line is not JSON, or no `result` event comes, THEN THE SYSTEM SHALL skip the line, and treat the
+    call as AC-36 treats a call with no result JSON.
+- **AC-79:** WHEN a step starts, a tool starts (AC-78) or a step ends, THE SYSTEM SHALL write
+  `<run folder>/now.json`: `{ "step": <next>, "since": <ISO time the step started>, "last": <the last line
+  printed> }`, by temp file and rename, and append the line with its time to `<run folder>/progress.log`.
+- **AC-80:** THE SYSTEM SHALL ship `.claude/bin/run-status` (bash 3.2 and jq) that prints one line for Claude
+  Code's status line: `run <id> · <step> · <m:ss in the step> · $<cost> · <last>` while a run holds the lock and
+  is live; `run <id> · waiting at <gate>` while it waits; nothing when no run holds the lock. It reads the lock,
+  `run.json` and `now.json`, and changes nothing. It is not turned on by `generate` or `update`: a project
+  `statusLine` would replace the user's own. README says how to turn it on in `settings.local.json`.
+  - IF any of those files is missing or not valid JSON, THEN it SHALL print nothing and exit 0.
 - **AC-76:** THE SYSTEM SHALL read `gates.json → language` and give it in `--status --json` (AC-69), so the
   operator chat speaks `language.chat` and keeps terms in `language.terms`. With the key missing, both are `en`.
   - IF a value does not match the pattern in the Contract, or `language` is not an object, THEN THE SYSTEM SHALL
@@ -983,6 +1004,10 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — AC-78–AC-80 (new), "How Claude Code is invoked" (`stream-json --verbose`), AC-75 (the chat follows
+  the run): a run was a blind spot. Leonid: "Ты ждёшь, а я ничего не вижу". The driver printed only the step and
+  "ok in 90s"; the chat said nothing until the next gate.
 
 - 2026-11-20 — AC-25, Commits: a quick commit is `<type>(quick): <subject>`, not `<type>: <subject>`. A repo
   whose commitlint requires a scope (this one, since 0.4.2) refused every quick commit.
