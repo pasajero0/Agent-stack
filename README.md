@@ -111,7 +111,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `baseBranch` | where merged specs are read from (`origin/<base>` if present, else local) |
 | `specGate` | `strict` (no code without a merged spec) · `stage` (only on a stage branch) · `off` |
 | `stagePattern` | bash regex on the **branch name** (its last `/` segment); capture group 1 is the stage id, and the spec lives at `<specsDir>/<group 1>/SPEC.md`. Default `^([A-Za-z]+[0-9]+)([-_.]\|$)`: branch `feat/A0-ingest` → `docs/specs/A0/SPEC.md`. To name specs after features, `^f-([a-z0-9]+(-[a-z0-9]+)*)$`: branch `f-request-review` → `docs/specs/request-review/SPEC.md`, and `fix-typo` is no stage. Stage ids with `-` cannot appear in Python test function names, so name such tests with a string (`pytest.mark.parametrize` ids, a docstring) or keep `A0`-style ids |
-| `openPaths` | paths editable without a spec (docs, `*.md`, `.claude/`) |
+| `openPaths` | paths editable without a spec; the seed lists them (docs, `*.md`, `.claude/`, `.gitignore`) |
 | `protectedGlobs` | generated files and lockfiles — never hand-edited |
 | `packageManager`, `forbiddenPackageManagers` | the one package manager, the blocked ones |
 | `installPatterns`, `cheatPatterns` | what counts as an install / a cheat (POSIX regex) |
