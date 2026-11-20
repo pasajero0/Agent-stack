@@ -1,7 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 import { RunError } from "../../src/run/errors.js";
 import {
   clarifyPrompt,
@@ -130,7 +133,13 @@ describe("role prompts", () => {
 
   it("v04 AC-4: spec skips the skill's hand-over step; the driver commits and stops for the merge", () => {
     const p = specPrompt(project("spec", "skill"), { stage: "A1", title: "t", description: "d", answers: [] });
-    expect(p).toMatch(/skip step 7 \(Hand over\)/i);
+    // By title, never by number: 0.4.3 added a step to /spec, and "step 7" became Review (hotfix 0.4.4).
+    expect(p).toContain("Skip the step **Hand over** of the skill");
+    expect(p).not.toMatch(/step \d/i);
+    // The skill still has that step, under that title.
+    const skill = readFileSync(join(repoRoot, "templates/claude/skills/spec/SKILL.md"), "utf8");
+    expect(skill).toMatch(/^\d+\. \*\*Hand over\.\*\*/m);
+    expect(skill).toMatch(/^\d+\. \*\*Review\.\*\*/m);
     expect(p).toMatch(/the driver commits the spec and stops for the human's merge/);
     expect(p).toMatch(/do not ask about committing, merging or handing over/i);
   });
