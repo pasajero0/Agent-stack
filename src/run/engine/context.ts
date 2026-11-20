@@ -13,6 +13,11 @@ export interface Ctx {
   run: RunFile;
   mode: ModeSteps;
   prompter: Prompter;
+  /**
+   * The gate the run waits at reads `--answer` lines (AC-70): an invalid answer is a refusal, and the answers
+   * reach only that gate. Cleared once it decides.
+   */
+  answering: boolean;
   out: (line: string) => void;
   /** Extra environment for Claude calls (AGENT_STACK_CLAUDE and the fake's variables in tests). */
   env: Record<string, string>;

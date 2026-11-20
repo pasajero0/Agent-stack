@@ -63,6 +63,7 @@ const mk = (id: string, over: Partial<RunFile> = {}): RunFile => ({
   humanDecisions: [],
   costUsd: 0,
   costUnknownCalls: 0,
+  card: null,
   calls: 0,
   fuse: { calls: 40 },
   ...over,

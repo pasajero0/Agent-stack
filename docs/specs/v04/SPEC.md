@@ -322,7 +322,8 @@ terminal text stays English.
 
 - `gate`: `answers` | `spec-merge` | `plan-approve` | `limit` | `accept`; `stage`: string or null.
 - `facts`: strings, in the order AC-68 prints them, never cut: the terminal print cuts, the data does not.
-- `source`: the sha256 of the inputs the gate decides on (gate:plan-approve: the sha256 of `tasks.json`; gate:accept: the HEAD commit id);
+- `source`: the sha256 of the inputs the gate decides on (gate:plan-approve: the sha256 of `tasks.json`; gate:accept: the HEAD commit id, plus a hash of the
+  uncommitted changes when there are any);
   null for other gates.
 - `prompts`: one per line of input the gate reads, in order. gate:answers has one per question, then the size
   (`answers`: `task`, `story`, `epic`, `c`), then the stage id; the stage-id prompt is read only when the size is
@@ -842,13 +843,13 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     (`AC-1,3,5`). The last fact is `full task text: <path of tasks.json>`. A verify command is never cut, since
     the human approves it as written.
   - The terminal cuts a one-line fact longer than 100 characters to 100, the last of them `…`. It never cuts a
-    verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), or a multi-line output (the tails of
+    verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), the cost line, or a multi-line output (the tails of
     AC-33 and AC-61, a BLOCKED report): those print as they are. The card data is never cut.
   - The waiting line of AC-29 and the steps of AC-10 follow the card; they are its `hint`.
   - The final check of gate:accept runs once, when the run reaches the gate; a resume at gate:accept shows the
     kept card and does not run it again. The card names the HEAD it ran on.
-  - IF, when the gate decides, its inputs differ from the card's `source` (`tasks.json` was replaced, or HEAD
-    moved), THEN THE SYSTEM SHALL rebuild the card (at gate:accept: run the final check again), print it, and
+  - IF, when the gate decides, its inputs differ from the card's `source` (`tasks.json` was replaced, HEAD
+    moved, or the uncommitted changes differ), THEN THE SYSTEM SHALL rebuild the card (at gate:accept: run the final check again), print it, and
     ask again at the terminal; under `--answer` it SHALL refuse with code 1: "the gate changed; read the card
     again". So the human approves only what the card showed. A gate:answers resume uses the card's `default`
     for the stage id; IF that id now fails AC-7, THEN AC-48 applies.

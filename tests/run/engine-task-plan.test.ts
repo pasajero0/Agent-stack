@@ -31,7 +31,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(run.next).toBe("gate:plan-approve");
     expect(run.status).toBe("waiting");
     const t = text(r);
-    expect(t).toMatch(/T1.*AC-1.*tier S.*sonnet/);
+    expect(t).toMatch(/T1 {2}S · sonnet · AC-1/);
     expect(t).toContain("verify: test -f hello.txt");
     expect(t).toMatch(/T2.*AC-2/);
   });
@@ -50,7 +50,7 @@ describe("task mode: plan and gate:plan-approve", () => {
       review(),
     ]);
     const t = text(r);
-    expect(t).toMatch(/T1.*risky.*opus/);
+    expect(t).toMatch(/T1 {2}\w · opus · risky/);
     expect(t).not.toMatch(/T2.*risky/);
     const code = await resumeRun({ ...r.opts({ gate: ["a", "a"] }) });
     expect(code, text(r)).toBe(0);
@@ -123,7 +123,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(r.run().next).toBe("gate:plan-approve");
     expect(r.logged().length).toBe(4);
     expect(r.logged()[3]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*T1;touch pwned/);
-    expect(text(r)).toMatch(/^T1 \[AC-1\]/m);
+    expect(text(r)).toMatch(/^ {2}T1 {2}\w · \w+ · AC-1 /m);
   });
 
   it("v04 AC-40: a plan role that writes outside .claude/tmp/<stage>/ is undone and, the second time, exits 1", async () => {
@@ -159,7 +159,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     await toPlanApprove(r, [plan({ tasks: [{ id: "Fixture", ac: ["AC-1", "AC-2"] }] })]);
     expect(r.run().next).toBe("gate:plan-approve");
     expect(r.logged().length).toBe(3);
-    expect(text(r)).toMatch(/^Fixture \[AC-1, AC-2\]/m);
+    expect(text(r)).toMatch(/^ {2}Fixture {2}\w · \w+ · AC-1,2 /m);
   });
 
   it("v04 AC-45: a task id F<digits> clashes with the fix tasks and makes the plan invalid", async () => {
@@ -403,7 +403,7 @@ describe("task mode: base-check, tasks and gate:accept", () => {
     expect(f1?.commit).toBe(sh(r.dir, "rev-parse", "HEAD"));
     expect(sh(r.dir, "log", "-1", "--format=%s")).toBe("fix(b1): greet the world");
     expect(sh(r.dir, "rev-list", "--count", `main..${WORK_BRANCH}`)).toBe("3");
-    expect(text(r).match(/== gate:accept/g)?.length).toBe(2);
+    expect(text(r).match(/━━ Accept:/g)?.length).toBe(2);
     // AC-21: F1's own checks are every task's verify, so the gate after it runs no final check.
     expect(text(r).match(/Final check:/g)?.length).toBe(1);
     // AC-63: a fix task is not start-checked (every verify is green before it, by design).

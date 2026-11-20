@@ -3,7 +3,7 @@
  * plan", AC-12, AC-13, AC-14, AC-40, AC-45.
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, relative } from "node:path";
 import { RunError } from "../errors.js";
 import { headSha } from "../git.js";
 import { isRisky, planPrompt } from "../prompts.js";
@@ -12,7 +12,8 @@ import { writeRun } from "../store.js";
 import type { GateRecord, RunFile } from "../types.js";
 import { judgeCall } from "./call.js";
 import { newTask, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
-import { ask, comment, humanFeedback, NO_INPUT, recordGate, showDecisions } from "./gates.js";
+import { A, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
+import { ask, comment, humanFeedback, NO_INPUT, recordGate } from "./gates.js";
 import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, tasksPath, type PlanTask } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, withFeedback, type RoleMark } from "./role-bounds.js";
 import { implementModel, lastCallOutput } from "./steps-implement.js";
@@ -118,26 +119,63 @@ const planStep: StepHandler = async (ctx) => {
   throw new RunError(`The plan role failed twice (${last.join("; ")}). The run stays at plan; ${resumeHint(run.id)} tries again.`, 1);
 };
 
-/** Shows each task with its criteria, tier, risky mark, model and verify (AC-12, AC-13); approve, reject or cancel (AC-14). */
-const planApproveGate: StepHandler = async (ctx) => {
-  const { run, cfg } = ctx;
-  const dir = ctx.projectDir;
-  const stage = stageOf(run);
-  const specMd = readSpec(dir, cfg, stage);
-  const tasks = readPlan(dir, cfg, stage);
-  ctx.out(`== gate:plan-approve — run ${run.id}, stage ${stage} on ${run.branch} ==`);
+/** `AC-1,3,5`: the ids with the `AC-` prefix written once (AC-68). */
+export function criteriaText(ids: string[]): string {
+  return ids.map((id, i) => (i === 0 ? id : id.replace(/^AC-/, ""))).join(",");
+}
+
+/** The plan-approve card: each task's tier, model, risky mark, criteria, description and verify (AC-12, AC-13, AC-68). */
+function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): CardInput {
+  const specMd = readSpec(ctx.projectDir, ctx.cfg, stage);
+  const f = new Facts();
   for (const t of tasks) {
     const info = planTaskInfo(t, specMd);
     const model = implementModel(info, { ...newTask(t.id), attempts: 1 });
-    ctx.out(`${t.id} [${t.ac.join(", ")}] tier ${t.tier}${info.risky ? ", risky" : ""} → ${model} — ${t.desc}`);
-    ctx.out(`    verify: ${t.verify}`);
+    f.add(`${t.id}  ${t.tier} · ${model}${info.risky ? " · risky" : ""} · ${criteriaText(t.ac)}   ${t.desc}`);
+    f.whole(`      verify: ${t.verify}`);
   }
-  showDecisions(ctx);
-  ctx.out("a approve, r reject (a comment follows), c cancel");
+  f.add(`full task text: ${relative(ctx.projectDir, tasksPath(ctx.projectDir, stage))}`);
+  f.whole(...decisionFacts(ctx));
+  return {
+    gate: "plan-approve",
+    title: `Plan ${stage}: ${tasks.length} task(s), run ${ctx.run.id} on ${ctx.run.branch}`,
+    facts: f.list,
+    keep: f.keep,
+    prompts: [{ text: "approve the plan; each verify runs as written", default: null, answers: [A.approve, { ...A.reject, label: "reject (a comment follows; the plan is redone)" }, A.cancel] }],
+    source: sha256(text),
+    hint: resumeHint(ctx.run.id),
+  };
+}
+
+/**
+ * Shows the plan card; a kept card for another tasks.json is rebuilt, and under `--answer` that is a refusal,
+ * so the human approves only the verify commands the card showed (AC-68).
+ */
+function planShown(ctx: Ctx, stage: string): PlanTask[] {
+  const text = readFileSync(tasksPath(ctx.projectDir, stage), "utf8");
+  const tasks = readPlan(ctx.projectDir, ctx.cfg, stage);
+  const kept = ctx.run.card;
+  const changed = kept !== null && kept.gate === "plan-approve" && kept.source !== sha256(text);
+  showCard(ctx, planCard(ctx, stage, tasks, text));
+  if (changed && ctx.answering) throw new GateChanged(resumeHint(ctx.run.id));
+  return tasks;
+}
+
+/** Approve, reject or cancel the plan (AC-12, AC-13, AC-14). */
+const planApproveGate: StepHandler = async (ctx) => {
+  const { run } = ctx;
+  const dir = ctx.projectDir;
+  const stage = stageOf(run);
+  let tasks = planShown(ctx, stage);
   for (;;) {
     const a = await ask(ctx, "plan> ");
     if (a === null) return NO_INPUT;
     const s = a.trim();
+    if ((s === "a" || s === "r" || s.startsWith("r ")) && run.card?.source !== sha256(readFileSync(tasksPath(dir, stage), "utf8"))) {
+      // The plan changed while the gate waited: show the new one before any decision (AC-68).
+      tasks = planShown(ctx, stage);
+      continue;
+    }
     if (s === "a") {
       recordGate(ctx, "gate:plan-approve", "approve");
       run.tasks = tasks.map((t) => newTask(t.id));
@@ -155,11 +193,11 @@ const planApproveGate: StepHandler = async (ctx) => {
       // The reject and `next` go to disk before the plan is deleted, so a kill in between re-plans (keepLeftover).
       const reject: StepEvent = { type: "reject" };
       const t = transition(run.next, reject, run.returnTo);
-      writeRun(dir, { ...run, next: t.next, status: t.status });
+      writeRun(dir, { ...run, next: t.next, status: t.status, card: null });
       deletePlan(dir, stage);
       return reject;
     }
-    ctx.out("Answer a (approve), r (reject, then a comment) or c (cancel).");
+    invalid(ctx, "Answer a (approve), r (reject, then a comment) or c (cancel).");
   }
 };
 

@@ -3,10 +3,12 @@
  * AC-31, AC-32, AC-46, AC-56. Task-mode gates (T9) reuse `ask`, `recordGate` and `showDecisions`.
  */
 import { runCheck, type CheckRun } from "../checks.js";
-import { diffStat, dirtyPaths, git } from "../git.js";
-import type { GateRecord, RunFile } from "../types.js";
+import { RunError } from "../errors.js";
+import { diffStat, dirtyPaths, git, headSha } from "../git.js";
+import type { CardAnswer, GateRecord, RunFile } from "../types.js";
+import { A, cardText, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
 import { fuseText } from "./call.js";
-import { Interrupted, newTask, type Ctx, type StepHandler } from "./context.js";
+import { Interrupted, newTask, resumeHint, type Ctx, type StepHandler } from "./context.js";
 import { timedOutError } from "./task-core.js";
 import { parseNext, taskNext, type StepEvent } from "./transitions.js";
 
@@ -28,25 +30,27 @@ export async function ask(ctx: Ctx, prompt: string): Promise<string | null> {
 }
 
 export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256" | "asked" | "reason"> = {}): void {
+  // AC-70: a gate records its decision before any file is written, so extra answers refuse it here.
+  const left = ctx.answering ? (ctx.prompter.left?.() ?? []) : [];
+  if (left.length > 0) {
+    throw new RunError(
+      `Extra answers: ${left.map((a) => JSON.stringify(a)).join(", ")}. The gate at ${ctx.run.next} takes fewer, and one --resume answers one gate. Nothing was applied; the run keeps waiting.`,
+      1
+    );
+  }
   ctx.run.gates.push({ gate, at: new Date().toISOString(), decision, comment, ...extra });
   // Shown at this gate; a decision clears them (AC-32).
   ctx.run.humanDecisions = [];
 }
 
-/** The human decisions collected since the last gate (AC-32). */
-export function showDecisions(ctx: Ctx): void {
-  if (ctx.run.humanDecisions.length === 0) return;
-  ctx.out("Human decisions needed:");
-  for (const d of ctx.run.humanDecisions) ctx.out(`  - ${d}`);
-}
 
 export const NO_INPUT: StepEvent = { type: "no-input" };
 
 /** A comment after `r`: the rest of the line, or the next non-empty answer; null for no input. */
-export async function comment(ctx: Ctx, answer: string): Promise<string | null> {
+export async function comment(ctx: Ctx, answer: string, prompt = "What should change? "): Promise<string | null> {
   let c = answer.slice(1).trim();
   while (c === "") {
-    const a = await ask(ctx, "What should change? ");
+    const a = await ask(ctx, prompt);
     if (a === null) return null;
     c = a.trim();
   }
@@ -100,35 +104,62 @@ async function finalCheck(ctx: Ctx): Promise<CheckRun | null> {
   return r;
 }
 
-/** The gate:accept summary (AC-21, AC-46, AC-61). */
-function acceptSummary(ctx: Ctx, final: CheckRun | null): void {
+/**
+ * What gate:accept decides on: the HEAD commit, plus a hash of the uncommitted changes when there are any, so a
+ * hand edit made while the gate waited rebuilds the card (AC-68).
+ */
+function acceptSource(dir: string): string {
+  const head = headSha(dir);
+  const dirty = dirtyPaths(dir);
+  return dirty.length === 0 ? head : `${head}+${sha256(dirty.join("\n") + git(dir, ["diff", "HEAD"]).stdout).slice(0, 12)}`;
+}
+
+/** The gate:accept card (AC-21, AC-46, AC-61, AC-68); `source` is what the final check ran on. */
+function acceptCard(ctx: Ctx, final: CheckRun | null): CardInput {
   const { run } = ctx;
-  ctx.out(`== gate:accept — run ${run.id} on ${run.branch} ==`);
-  if (run.baseCommit) {
-    ctx.out(`Diff from ${short(run.baseCommit)}:`);
-    ctx.out(diffStat(ctx.projectDir, run.baseCommit) || "  (no changes)");
-  }
+  const f = new Facts();
+  if (run.baseCommit) f.whole(`Diff from ${short(run.baseCommit)}:\n${diffStat(ctx.projectDir, run.baseCommit) || "  (no changes)"}`);
   for (const t of run.tasks) {
     const checks = t.checks.map((c) => (c.skipped ? `${c.cmd} skipped` : `${c.cmd} → ${c.exit}`)).join("; ");
-    ctx.out(`${t.id}: ${commitText(t.commit)}; attempts ${t.attempts}; checks: ${checks || "none"}`);
-    for (const n of t.notes) ctx.out(`  note: ${n}`);
-    for (const c of t.allowedChanges) ctx.out(`  test change allowed: ${c}`);
+    f.add(`${t.id}: ${commitText(t.commit)}; attempts ${t.attempts}; checks: ${checks || "none"}`);
+    for (const n of t.notes) f.add(`${t.id} note: ${n}`);
+    for (const c of t.allowedChanges) f.whole(`${t.id} test change allowed: ${c}`);
   }
   if (final !== null) {
     const red = final.exit !== 0;
-    ctx.out(`Final check: ${final.cmd} (every task) → ${final.exit}${red ? " RED" : ""}`);
+    f.add(`Final check: ${final.cmd} (every task) → ${final.exit}${red ? " RED" : ""}; on ${short(headSha(ctx.projectDir))}`);
     // A hand fix made while the gate waited is not committed: say so, or the green is taken for the branch's.
-    if (dirtyPaths(ctx.projectDir).length > 0) ctx.out("The final check ran on uncommitted changes; the commits alone may differ.");
+    if (dirtyPaths(ctx.projectDir).length > 0) f.add("The final check ran on uncommitted changes; the commits alone may differ.");
     if (red) {
-      ctx.out(final.tail);
-      ctx.out("A later task broke an earlier one: r with a comment adds a fix task; a accepts a red result.");
+      f.whole(final.tail);
+      f.add("A later task broke an earlier one: r with a comment adds a fix task; a accepts a red result.");
     }
   }
   const skips = skipped(ctx);
-  if (skips.length > 0) ctx.out(`Skipped: ${skips.join("; ")}`);
-  showDecisions(ctx);
-  ctx.out(`Usage: ${cost(run)}`);
-  ctx.out("a approve, r reject (a comment follows), c cancel");
+  if (skips.length > 0) f.add(`Skipped: ${skips.join("; ")}`);
+  f.whole(...decisionFacts(ctx));
+  f.whole(`Usage: ${cost(run)}`);
+  return {
+    gate: "accept",
+    title: `Accept: run ${run.id} on ${run.branch}`,
+    facts: f.list,
+    keep: f.keep,
+    prompts: [{ text: "accept the result", default: null, answers: [{ ...A.approve, label: "accept" }, { ...A.reject, label: "reject (a comment follows; it becomes a fix task)" }, A.cancel] }],
+    source: acceptSource(ctx.projectDir),
+    hint: resumeHint(run.id),
+  };
+}
+
+/** The kept card when it still holds (same HEAD), so a resume does not run the final check again (AC-68). */
+async function acceptShown(ctx: Ctx): Promise<void> {
+  const kept = ctx.run.card;
+  if (kept !== null && kept.gate === "accept" && kept.source === acceptSource(ctx.projectDir)) {
+    ctx.out(cardText(kept));
+    return;
+  }
+  const changed = kept !== null && kept.gate === "accept";
+  showCard(ctx, acceptCard(ctx, await finalCheck(ctx)));
+  if (changed && ctx.answering) throw new GateChanged(resumeHint(ctx.run.id));
 }
 
 /** The fix task F<k> for a gate:accept reject (AC-22, AC-25). */
@@ -148,11 +179,18 @@ export function fixComment(run: RunFile, id: string): string {
 }
 
 export const acceptGate: StepHandler = async (ctx) => {
-  acceptSummary(ctx, await finalCheck(ctx));
+  await acceptShown(ctx);
   for (;;) {
     const a = await ask(ctx, "accept> ");
     if (a === null) return NO_INPUT;
     const s = a.trim();
+    if (s === "a" || s === "r" || s.startsWith("r ")) {
+      // AC-68: the human decides on what the card showed; a moved HEAD rebuilds it first.
+      if (ctx.run.card?.source !== acceptSource(ctx.projectDir)) {
+        await acceptShown(ctx);
+        continue;
+      }
+    }
     if (s === "a") {
       recordGate(ctx, "gate:accept", "accept");
       return { type: "accept" };
@@ -167,34 +205,48 @@ export const acceptGate: StepHandler = async (ctx) => {
       recordGate(ctx, "gate:accept", "reject", c);
       return { type: "reject", task: newFixTask(ctx, c) };
     }
-    ctx.out("Answer a (approve), r (reject, then a comment) or c (cancel).");
+    invalid(ctx, "Answer a (accept), r (reject, then a comment) or c (cancel).");
   }
 };
 
-function limitSummary(ctx: Ctx): void {
+const LIMIT_ANSWERS: Record<string, { text: string; answers: CardAnswer[] }> = {
+  fuse: { text: "raise the fuse for this run (in its own unit, above what is used), or cancel", answers: [{ key: "f", follows: "number", label: "new limit" }, A.cancel] },
+  decision: { text: "answer the role's questions", answers: [{ key: "r", follows: "text", label: "retry with your answer (the role gets it)" }, A.cancel] },
+  "tests-changed": {
+    text: "allow these test changes, or send the task back",
+    answers: [{ key: "a", follows: null, label: "allow exactly these (the checks run next)" }, { key: "r", follows: "text", label: "retry with a comment (a new attempt, on Opus)" }, A.cancel],
+  },
+  "test-conflict": {
+    text: "fix the test or the spec by hand if needed, then answer the implementer",
+    answers: [{ key: "r", follows: "text", label: "retry with your answer for the implementer (no attempt is counted)" }, A.cancel],
+  },
+  other: { text: "retry or cancel", answers: [{ key: "r", follows: null, label: "retry (a new attempt, on Opus)" }, A.cancel] },
+};
+
+/** The gate:limit card (AC-31, AC-35, AC-38, AC-57, AC-64, AC-66, AC-68). */
+function limitCard(ctx: Ctx): CardInput {
   const { run } = ctx;
   const back = run.returnTo;
   const task = back ? parseNext(back).task : null;
-  ctx.out(`== gate:limit — run ${run.id}, reason: ${run.limitReason ?? "attempts"} ==`);
-  if (back) ctx.out(`Stopped before ${back}.`);
+  const reason = run.limitReason ?? "attempts";
+  const f = new Facts();
+  if (back) f.add(`Stopped before ${back}.`);
   const t = run.tasks.find((x) => x.id === task);
   if (t) {
-    ctx.out(`${t.id}: attempts ${t.attempts} of ${ctx.mode.maxAttempts}`);
-    if (t.lastFeedback) ctx.out(`Last feedback:\n${t.lastFeedback}`);
+    f.add(`${t.id}: attempts ${t.attempts} of ${ctx.mode.maxAttempts}`);
+    if (t.lastFeedback) f.whole(`Last feedback:\n${t.lastFeedback}`);
   }
-  showDecisions(ctx);
-  ctx.out(`Usage: ${cost(run)}`);
-  ctx.out(
-    run.limitReason === "fuse"
-      ? "f <n> sets a new fuse limit for this run (in its own unit, above what is used), c cancel"
-      : run.limitReason === "decision"
-        ? "r retry (your answer follows; the role gets it), c cancel"
-        : run.limitReason === "tests-changed"
-          ? "a allow these changes (the checks run next), r retry (your comment follows; a new attempt, on Opus), c cancel"
-          : run.limitReason === "test-conflict"
-          ? "Fix the test or the spec by hand if needed. r retry (your answer follows; the implementer gets it; no attempt is counted), c cancel"
-          : "r retry (on Opus), c cancel"
-  );
+  f.whole(...decisionFacts(ctx));
+  f.whole(`Usage: ${cost(run)}`);
+  const p = LIMIT_ANSWERS[reason] ?? LIMIT_ANSWERS["other"];
+  return {
+    gate: "limit",
+    title: `Stopped — reason: ${reason} — run ${run.id}`,
+    facts: f.list,
+    keep: f.keep,
+    prompts: p ? [{ text: p.text, default: null, answers: p.answers }] : [],
+    hint: resumeHint(run.id),
+  };
 }
 
 /** A raised fuse from `f <n>`, or an error text (AC-31). */
@@ -214,7 +266,7 @@ function raise(run: RunFile, answer: string): RunFile["fuse"] | string {
 }
 
 export const limitGate: StepHandler = async (ctx) => {
-  limitSummary(ctx);
+  showCard(ctx, limitCard(ctx));
   const { run } = ctx;
   for (;;) {
     const a = await ask(ctx, "limit> ");
@@ -227,7 +279,7 @@ export const limitGate: StepHandler = async (ctx) => {
     if (run.limitReason === "fuse") {
       const f = raise(run, s);
       if (typeof f === "string") {
-        ctx.out(f);
+        invalid(ctx, f);
         continue;
       }
       run.fuse = f;
@@ -244,7 +296,7 @@ export const limitGate: StepHandler = async (ctx) => {
     }
     if (run.limitReason === "test-conflict" && (s === "r" || s.startsWith("r "))) {
       // AC-64: the answer goes to implement with the conflict; no attempt is counted, so the model stays.
-      const c = await comment(ctx, s);
+      const c = await comment(ctx, s, "answer for the implementer> ");
       if (c === null) return NO_INPUT;
       const task = run.returnTo ? parseNext(run.returnTo).task : null;
       const t = run.tasks.find((x) => x.id === task);
@@ -255,7 +307,7 @@ export const limitGate: StepHandler = async (ctx) => {
     if (run.limitReason === "tests-changed") {
       const ev = await testsChangedAnswer(ctx, s);
       if (ev !== null) return ev;
-      ctx.out("Answer a (allow), r (retry, then a comment) or c (cancel).");
+      invalid(ctx, "Answer a (allow), r (retry, then a comment) or c (cancel).");
       continue;
     }
     if (s === "r") {
@@ -266,7 +318,7 @@ export const limitGate: StepHandler = async (ctx) => {
       recordGate(ctx, "gate:limit", "retry");
       return { type: "resume" };
     }
-    ctx.out("Answer r (retry) or c (cancel).");
+    invalid(ctx, run.limitReason === "decision" || run.limitReason === "test-conflict" ? "Answer r and your answer, or c (cancel)." : "Answer r (retry) or c (cancel).");
   }
 };
 

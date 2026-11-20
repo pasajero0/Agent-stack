@@ -68,6 +68,40 @@ export interface AnswerRecord {
   answer: string;
 }
 
+/** One answer a gate prompt takes (AC-68, Contract "Gate card"). */
+export interface CardAnswer {
+  key: string;
+  /** What comes after the key: null for the key alone. */
+  follows: "text" | "number" | null;
+  label: string;
+}
+
+/** One line of input a gate reads. `default` is what Enter gives, or null when Enter is no answer. */
+export interface CardPrompt {
+  text: string;
+  default: string | null;
+  answers: CardAnswer[];
+}
+
+export type CardGate = "answers" | "spec-merge" | "plan-approve" | "limit" | "accept";
+
+/** What a gate shows, built once and kept in the run file (AC-68, AC-69). */
+export interface GateCard {
+  gate: CardGate;
+  run: string;
+  stage: string | null;
+  title: string;
+  /** Never cut here; the terminal print cuts long one-line facts, except those in `keep`. */
+  facts: string[];
+  /** Indexes of facts the terminal never cuts: a verify, an AC-66 change line, an AC-32 line. */
+  keep: number[];
+  prompts: CardPrompt[];
+  /** The inputs the gate decides on: the sha256 of tasks.json (plan-approve), the HEAD commit (accept); else null. */
+  source: string | null;
+  /** The command to continue. */
+  hint: string;
+}
+
 export interface RunFile {
   id: string;
   description: string;
@@ -95,6 +129,8 @@ export interface RunFile {
   costUnknownCalls: number;
   calls: number;
   fuse: Fuse;
+  /** The card of the gate the run waits at; null when it waits at none (AC-68). */
+  card: GateCard | null;
 }
 
 /** gates.json values the driver needs, with the `run` key's defaults filled in. */

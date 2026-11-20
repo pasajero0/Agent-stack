@@ -4,9 +4,9 @@
  */
 import { rmSync } from "node:fs";
 import { DEFAULT_STAGE_PATTERN } from "../../claude/gates.js";
-import { loadRunConfig } from "../config.js";
+import { loadRunConfig, readLanguage } from "../config.js";
 import { RunError } from "../errors.js";
-import { selectPrompter, type Prompter } from "../gate.js";
+import { answersPrompter, selectPrompter, type Prompter } from "../gate.js";
 import { branchExists, createBranch, currentBranch, dirtyPaths, headSha } from "../git.js";
 import {
   acquireLock,
@@ -48,6 +48,8 @@ export interface EngineOptions {
   pid?: number;
   now?: Date;
   prompter?: Prompter;
+  /** `--answer` lines for the gate the run waits at (AC-70); only `--resume` takes them. */
+  answers?: string[];
 }
 
 const outOf = (o: EngineOptions): ((line: string) => void) => o.out ?? ((line) => console.log(line));
@@ -74,13 +76,16 @@ function modeSteps(mode: Mode): ModeSteps {
 /** Builds the context, runs the loop and closes the prompter whatever happens. */
 async function drive(o: EngineOptions, cfg: RunConfig, run: RunFile, mode: ModeSteps, before?: (ctx: Ctx) => void): Promise<ExitCode> {
   const env = o.env ?? {};
-  const prompter = o.prompter ?? selectPrompter({ ...process.env, ...env }, o.isTTY ?? Boolean(process.stdin.isTTY));
+  const answering = o.answers !== undefined && o.answers.length > 0;
+  // AC-70: `--answer` wins over AGENT_STACK_GATE_INPUT and the terminal.
+  const prompter = answering ? answersPrompter(o.answers ?? []) : (o.prompter ?? selectPrompter({ ...process.env, ...env }, o.isTTY ?? Boolean(process.stdin.isTTY)));
   const ctx: Ctx = {
     projectDir: o.projectDir,
     cfg,
     run,
     mode,
     prompter,
+    answering,
     out: outOf(o),
     env,
     signal: o.signal ?? new AbortController().signal,
@@ -153,6 +158,7 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       humanDecisions: [],
       costUsd: 0,
       costUnknownCalls: 0,
+      card: null,
       calls: 0,
       fuse: cfg.fuse,
     };
@@ -207,6 +213,10 @@ export function resumeRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
     if (lock && lock.id !== id) throw lockRefusal(dir);
     if (lock && run.status === "running" && pidAlive(lock.pid)) {
       throw new RunError(`Run ${id} is live (pid ${lock.pid}); it is already running and cannot be resumed twice.`, 1);
+    }
+    // AC-70: answers reach only the gate the run waits at, and only one that reads input.
+    if (o.answers !== undefined && o.answers.length > 0 && (run.status !== "waiting" || !run.next.startsWith("gate:") || run.next === "gate:spec-merge")) {
+      throw new RunError(`--answer needs a run waiting at a gate that takes an answer; run ${id} is ${run.status} at ${run.next}. Nothing was applied.`, 1);
     }
     const cfg = loadRunConfig(dir);
     const mode = modeSteps(run.mode);
@@ -268,12 +278,37 @@ export function cancelRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
   });
 }
 
-/** Prints the run and changes nothing; always exit 0 (AC-23, AC-53). */
-export async function statusRun(o: EngineOptions & { id?: string }): Promise<ExitCode> {
+/** The run for a program: AC-23's fields, the kept card while the run waits, the language (AC-69, AC-76). */
+function statusJson(dir: string, id: string | undefined): string {
+  const { language, warnings } = readLanguage(dir);
+  if (!id) return JSON.stringify({ run: null, card: null, language, warnings: [...warnings, "no run in this repo"] });
+  let run: RunFile;
+  try {
+    run = readRunStrict(dir, id);
+  } catch (e) {
+    return JSON.stringify({ run: null, card: null, language, warnings: [...warnings, e instanceof Error ? e.message : String(e)] });
+  }
+  const attempts = Object.fromEntries(run.tasks.map((t) => [t.id, t.attempts]));
+  const out = {
+    run: { id: run.id, mode: run.mode, status: run.status, next: run.next, branch: run.branch, attempts, calls: run.calls, costUsd: run.costUsd, costUnknownCalls: run.costUnknownCalls, fuse: run.fuse },
+    // A live or interrupted run waits at no gate, even while a terminal prompt is open.
+    card: run.status === "waiting" ? run.card : null,
+    language,
+    warnings,
+  };
+  return JSON.stringify(out);
+}
+
+/** Prints the run and changes nothing; always exit 0 (AC-23, AC-53, AC-69). */
+export async function statusRun(o: EngineOptions & { id?: string; json?: boolean }): Promise<ExitCode> {
   const dir = o.projectDir;
   const out = outOf(o);
   const lock = readLock(dir);
   const id = o.id ?? lock?.id ?? listRuns(dir).at(-1);
+  if (o.json) {
+    out(statusJson(dir, id));
+    return 0;
+  }
   if (!id) {
     out("No run in this repo.");
     return 0;

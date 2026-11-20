@@ -13,7 +13,8 @@ import { runDir } from "../store.js";
 import type { AnswerRecord } from "../types.js";
 import { judgeCall } from "./call.js";
 import { resumeHint, type Ctx, type ModeSteps, type StepHandler } from "./context.js";
-import { ask, fixComment, NO_INPUT, recordGate, showDecisions } from "./gates.js";
+import { A, decisionFacts, Facts, invalid, showCard, type CardInput } from "./card.js";
+import { ask, fixComment, NO_INPUT, recordGate } from "./gates.js";
 import { readPlan, readSpec } from "./plan-file.js";
 import { withFeedback } from "./role-bounds.js";
 import { lintItems, toLimit } from "./task-core.js";
@@ -95,13 +96,26 @@ export function stageIdProblem(ctx: Ctx, id: string): string | null {
   return null;
 }
 
-function answersSummary(ctx: Ctx, p: ClarifyOutput): void {
-  ctx.out(`== gate:answers — run ${ctx.run.id} ==`);
-  ctx.out(`Description: ${ctx.run.description}`);
-  ctx.out(`Proposed: size ${p.size}, stage ${p.stage.id} — ${p.stage.title}`);
-  for (const s of p.split ?? []) ctx.out(`  part ${s.id}: ${s.goal}`);
-  showDecisions(ctx);
-  ctx.out("For each prompt: Enter accepts the recommended answer or keeps the value, text replaces it, c cancels.");
+/** The gate:answers card: each question with its recommended answer, the size and the stage id (AC-6, AC-48, AC-68). */
+function answersCard(ctx: Ctx, p: ClarifyOutput, stageId: string): CardInput {
+  const f = new Facts().add(`Description: ${ctx.run.description}`, `Proposed: size ${p.size}, stage ${p.stage.id} — ${p.stage.title}`);
+  for (const s of p.split ?? []) f.add(`  part ${s.id}: ${s.goal}`);
+  p.questions.forEach((q, i) => f.add(`Q${i + 1}: ${q.text} [recommended: ${q.recommended}]`));
+  f.whole(...decisionFacts(ctx));
+  const cancel = [A.cancel];
+  return {
+    gate: "answers",
+    title: `Questions before the spec — run ${ctx.run.id}`,
+    facts: f.list,
+    keep: f.keep,
+    prompts: [
+      ...p.questions.map((q) => ({ text: q.text, default: q.recommended, answers: cancel })),
+      { text: "size", default: p.size, answers: [...SIZES.map((x) => ({ key: x, follows: null, label: x })), A.cancel] },
+      // AC-9: with epic this prompt is not read, so its answer would be an extra one (AC-70).
+      { text: "stage id (read only for task or story)", default: stageId, answers: cancel },
+    ],
+    hint: resumeHint(ctx.run.id),
+  };
 }
 
 /** One shell word: single quotes, a `'` as `'\''`; newlines become spaces so the command stays one line. */
@@ -142,7 +156,16 @@ const sizeOf = (s: string): Size | undefined => SIZES.find((x) => x === s);
 const answersGate: StepHandler = async (ctx) => {
   const { run } = ctx;
   const p = proposalOf(run);
-  answersSummary(ctx, p);
+  // AC-48: the default is always a valid id, so Enter never loops on a failed one. A resume starts from the
+  // id the card showed (AC-68).
+  const kept = run.card?.gate === "answers" ? (run.card.prompts.at(-1)?.default ?? null) : null;
+  let id = kept ?? run.stagePrefill ?? p.stage.id;
+  const first = stageIdProblem(ctx, id);
+  if (first !== null) {
+    ctx.out(`Stage id ${id} cannot be used: ${first}.`);
+    id = id !== p.stage.id && stageIdProblem(ctx, p.stage.id) === null ? p.stage.id : freeStageId(ctx, usedStageIds(ctx));
+  }
+  showCard(ctx, answersCard(ctx, p, id));
   const cancel = (): StepEvent => {
     recordGate(ctx, "gate:answers", "cancel");
     return { type: "cancel" };
@@ -169,21 +192,15 @@ const answersGate: StepHandler = async (ctx) => {
       size = picked;
       break;
     }
-    ctx.out("Answer task, story or epic.");
+    invalid(ctx, "Answer task, story or epic.");
   }
   if (size === "epic") {
     run.answers = answers;
     run.size = size;
-    writeSplit(ctx, p);
+    // Recorded first: under --answer an extra answer refuses the gate before split.md is written (AC-70).
     recordGate(ctx, "gate:answers", "epic");
+    writeSplit(ctx, p);
     return { type: "epic" };
-  }
-  // AC-48: the default is always a valid id, so Enter never loops on a failed one.
-  let id = run.stagePrefill ?? p.stage.id;
-  const first = stageIdProblem(ctx, id);
-  if (first !== null) {
-    ctx.out(`Stage id ${id} cannot be used: ${first}.`);
-    id = id !== p.stage.id && stageIdProblem(ctx, p.stage.id) === null ? p.stage.id : freeStageId(ctx, usedStageIds(ctx));
   }
   for (;;) {
     ctx.out(`Stage id [${id}]: Enter keeps it, or type a new one`);
@@ -197,7 +214,7 @@ const answersGate: StepHandler = async (ctx) => {
       id = s;
       break;
     }
-    ctx.out(`Stage id ${s} cannot be used: ${why}. Type another one.`);
+    invalid(ctx, `Stage id ${s} cannot be used: ${why}. Type another one, or Enter for ${id}.`);
   }
   run.answers = answers;
   run.size = size;
