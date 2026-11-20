@@ -152,13 +152,20 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
  * so the human approves only the verify commands the card showed (AC-68).
  */
 function planShown(ctx: Ctx, stage: string): PlanTask[] {
-  const text = readFileSync(tasksPath(ctx.projectDir, stage), "utf8");
+  // readPlan first: a plan removed while the gate waited is its clean refusal, not a crash.
   const tasks = readPlan(ctx.projectDir, ctx.cfg, stage);
+  const text = readFileSync(tasksPath(ctx.projectDir, stage), "utf8");
   const kept = ctx.run.card;
   const changed = kept !== null && kept.gate === "plan-approve" && kept.source !== sha256(text);
   showCard(ctx, planCard(ctx, stage, tasks, text));
   if (changed && ctx.answering) throw new GateChanged(resumeHint(ctx.run.id));
   return tasks;
+}
+
+/** The plan's sha256 now, after readPlan has checked the file is there (AC-68). */
+function planSource(ctx: Ctx, stage: string): string {
+  readPlan(ctx.projectDir, ctx.cfg, stage);
+  return sha256(readFileSync(tasksPath(ctx.projectDir, stage), "utf8"));
 }
 
 /** Approve, reject or cancel the plan (AC-12, AC-13, AC-14). */
@@ -171,7 +178,7 @@ const planApproveGate: StepHandler = async (ctx) => {
     const a = await ask(ctx, "plan> ");
     if (a === null) return NO_INPUT;
     const s = a.trim();
-    if ((s === "a" || s === "r" || s.startsWith("r ")) && run.card?.source !== sha256(readFileSync(tasksPath(dir, stage), "utf8"))) {
+    if ((s === "a" || s === "r" || s.startsWith("r ")) && run.card?.source !== planSource(ctx, stage)) {
       // The plan changed while the gate waited: show the new one before any decision (AC-68).
       tasks = planShown(ctx, stage);
       continue;

@@ -22,8 +22,8 @@ export interface CommitResult {
 }
 
 /** Runs `git <args>` in `dir`. Never throws on a non-zero exit. */
-export function git(dir: string, args: string[]): GitResult {
-  const r = spawnSync("git", args, { cwd: dir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+export function git(dir: string, args: string[], input?: string): GitResult {
+  const r = spawnSync("git", args, { cwd: dir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...(input !== undefined ? { input } : {}) });
   const code = r.status ?? 1;
   return { ok: code === 0, code, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }

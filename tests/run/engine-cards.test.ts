@@ -1,11 +1,12 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanupProjects, patchGates } from "../hooks/fixture.js";
+import { cleanupProjects, git, patchGates, write } from "../hooks/fixture.js";
 import { resumeRun, startRun, statusRun } from "../../src/run/engine/index.js";
 import { sha256 } from "../../src/run/engine/card.js";
 import { makeFakeExecutable, repo, text, type Repo } from "./engine-fixture.js";
-import { clarify, mergeSpec, plan, TASK_DESC, TASKS_PATH, toPlanApprove, toSpecMerge, twoTasksDone } from "./engine-task-fixture.js";
+import { runDir } from "../../src/run/store.js";
+import { clarify, mergeSpec, patchRun, plan, TASK_DESC, TASKS_PATH, toPlanApprove, toSpecMerge, twoTasksDone } from "./engine-task-fixture.js";
 
 beforeAll(makeFakeExecutable);
 afterEach(() => cleanupProjects());
@@ -144,6 +145,81 @@ describe("--answer (AC-70)", () => {
     expect(run.answers).toEqual([]);
     expect(run.card?.gate).toBe("answers");
     expect(run.card?.prompts.at(-2)?.answers.map((a) => a.key)).toEqual(["task", "story", "epic", "c"]);
+  });
+});
+
+describe("--answer on the paths that write files (AC-68, AC-70)", () => {
+  it("v04 AC-70: a reject with an extra answer is refused before run.json or tasks.json change", async () => {
+    const r = repo();
+    await toPlanApprove(r, [plan()]);
+    const before = readFileSync(join(runDir(r.dir, r.run().id), "run.json"), "utf8");
+    expect(await resumeRun({ ...r.opts(), answers: ["r split T2", "a"] })).toBe(1);
+    expect(existsSync(join(r.dir, TASKS_PATH))).toBe(true);
+    const after = JSON.parse(readFileSync(join(runDir(r.dir, r.run().id), "run.json"), "utf8")) as { gates: unknown[]; next: string };
+    expect(after.gates).toEqual((JSON.parse(before) as { gates: unknown[] }).gates);
+    expect(after.next).toBe("gate:plan-approve");
+  });
+
+  it("v04 AC-70: with size epic a stage-id answer is extra, and split.md is not written", async () => {
+    const r = repo();
+    r.script([clarify({ size: "epic", split: [{ id: "C1", goal: "part one" }] })]);
+    expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
+    const questions = (r.run().card?.prompts.length ?? 0) - 2;
+    const answers = [...Array.from({ length: questions }, () => ""), "epic", ""];
+    expect(await resumeRun({ ...r.opts(), answers })).toBe(1);
+    expect(text(r)).toContain('Extra answers: ""');
+    expect(existsSync(join(runDir(r.dir, r.run().id), "split.md"))).toBe(false);
+    expect(r.run().next).toBe("gate:answers");
+  });
+
+  it("v04 AC-68: a gate:answers resume takes the stage id the card showed", async () => {
+    const r = repo();
+    r.script([clarify()]);
+    expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
+    const card = r.run().card;
+    if (!card) throw new Error("no card");
+    const prompts = card.prompts.map((p, i) => (i === card.prompts.length - 1 ? { ...p, default: "C7" } : p));
+    patchRun(r, { card: { ...card, prompts } });
+    r.script([clarify(), { expectRole: "spec", output: { needsHumanDecision: [] } }]);
+    await resumeRun({ ...r.opts(), answers: prompts.map(() => "") });
+    expect(r.run().stage).toBe("C7");
+  });
+
+  it("v04 AC-68: a resume at gate:accept shows the kept card without a new final check; a moved HEAD refuses --answer", async () => {
+    const r = repo();
+    await toPlanApprove(r, [plan(), ...twoTasksDone()]);
+    expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(3);
+    const log = (): number => (readFileSync(join(r.dir, ".claude/tmp/B1/verify.log"), "utf8").match(/^=== verify/gm) ?? []).length;
+    const runs = log();
+    expect(await resumeRun({ ...r.opts() })).toBe(3);
+    expect(log()).toBe(runs);
+    const old = r.run().card?.source;
+    write(r.dir, "late.txt", "x\n");
+    git(r.dir, "add", "late.txt");
+    git(r.dir, "commit", "-q", "-m", "chore: late");
+    expect(await resumeRun({ ...r.opts(), answers: ["a"] })).toBe(1);
+    expect(text(r)).toContain("The gate changed since its card was shown");
+    const run = r.run();
+    expect(run.status).toBe("waiting");
+    expect(run.next).toBe("gate:accept");
+    expect(run.card?.source).not.toBe(old);
+    expect(log()).toBe(runs + 1);
+  });
+
+  it("v04 AC-68: a run waiting with no kept card (an older driver) shows the card first and refuses the answer", async () => {
+    const r = repo();
+    await toPlanApprove(r, [plan()]);
+    patchRun(r, { card: null });
+    expect(await resumeRun({ ...r.opts(), answers: ["a"] })).toBe(1);
+    expect(r.run().card?.gate).toBe("plan-approve");
+    expect(r.run().gates.at(-1)?.decision).not.toBe("approve");
+  });
+
+  it("v04 AC-69: a run that waits at no gate gives card null", async () => {
+    const r = repo();
+    await toPlanApprove(r, [plan()]);
+    patchRun(r, { status: "running" });
+    expect((await status(r))["card"]).toBeNull();
   });
 });
 

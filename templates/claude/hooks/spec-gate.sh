@@ -30,7 +30,8 @@ case "$code_by" in
   "" | anyone) ;;
   *)
     if repo_is_empty; then
-      echo "spec-gate: codeBy \"$code_by\" starts after the first commit; this edit is not held by it." >&2
+      # stdout JSON: a note on stderr with exit 0 is not shown to anyone.
+      jq -n --arg m "spec-gate: codeBy \"$code_by\" starts after the first commit; this edit is not held by it." '{systemMessage: $m}'
     elif ! driver_run_on_branch; then
       unknown=""
       [ "$code_by" = driver ] || unknown=" (the value \"$code_by\" is unknown, so it is read as \"driver\")"

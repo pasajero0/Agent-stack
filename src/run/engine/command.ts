@@ -3,8 +3,8 @@
  * "Harness floor"; AC-72, AC-73.
  */
 import { execFileSync } from "node:child_process";
-import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
-import { basename, delimiter, join } from "node:path";
+import { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs";
+import { basename, delimiter, isAbsolute, join } from "node:path";
 import { toolVersion } from "../../claude/harness.js";
 import { RunError } from "../errors.js";
 
@@ -19,13 +19,17 @@ const real = (p: string): string | null => {
   }
 };
 
-/** The first `agent-stack` on PATH that is executable, or null. */
+/**
+ * The first executable `agent-stack` file on PATH, or null. Relative entries (`.`, `node_modules/.bin`) are
+ * skipped: they resolve in the target repo, which may ship its own `agent-stack`.
+ */
 function onPath(env: NodeJS.ProcessEnv): string | null {
   for (const dir of (env["PATH"] ?? "").split(delimiter)) {
-    if (dir === "") continue;
+    if (dir === "" || !isAbsolute(dir)) continue;
     const p = join(dir, "agent-stack");
     try {
       accessSync(p, constants.X_OK);
+      if (!statSync(p).isFile()) continue;
       return p;
     } catch {
       // not here
@@ -53,7 +57,7 @@ export function commandName(argv: readonly string[] = process.argv, env: NodeJS.
     let same = found !== null && real(found) === script;
     if (!same && found !== null) {
       try {
-        same = execFileSync(found, ["--version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }).trim() === toolVersion();
+        same = execFileSync(found, ["--version"], { encoding: "utf8", timeout: 5000, killSignal: "SIGKILL", stdio: ["ignore", "pipe", "ignore"] }).trim() === toolVersion();
       } catch {
         same = false;
       }

@@ -355,6 +355,6 @@ describe("spec-gate: codeBy driver (AC-71)", () => {
     patchGates(dir, { codeBy: "driver" });
     const r = runHook(dir, "spec-gate.sh", codeEdit(dir), NO_ENV);
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("starts after the first commit");
+    expect(JSON.parse(r.stdout).systemMessage).toContain("starts after the first commit");
   });
 });

@@ -111,7 +111,12 @@ async function finalCheck(ctx: Ctx): Promise<CheckRun | null> {
 function acceptSource(dir: string): string {
   const head = headSha(dir);
   const dirty = dirtyPaths(dir);
-  return dirty.length === 0 ? head : `${head}+${sha256(dirty.join("\n") + git(dir, ["diff", "HEAD"]).stdout).slice(0, 12)}`;
+  if (dirty.length === 0) return head;
+  // Binary and untracked content counts too; the user's diff drivers do not.
+  const diff = git(dir, ["diff", "HEAD", "--binary", "--no-ext-diff", "--no-textconv", "--", ".", ":(exclude).claude/tmp"]).stdout;
+  const untracked = git(dir, ["ls-files", "--others", "--exclude-standard", "-z", "--", ".", ":(exclude).claude/tmp"]).stdout.split("\0").filter((p) => p !== "");
+  const blobs = untracked.length === 0 ? "" : git(dir, ["hash-object", "--stdin-paths"], untracked.join("\n")).stdout;
+  return `${head}+${sha256(dirty.join("\n") + diff + untracked.join("\n") + blobs).slice(0, 12)}`;
 }
 
 /** The gate:accept card (AC-21, AC-46, AC-61, AC-68); `source` is what the final check ran on. */

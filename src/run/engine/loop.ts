@@ -51,8 +51,15 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
         throw e;
       }
       if (event.type === "no-input") {
-        if (snap !== null) restore(run, snap);
         run.status = "waiting";
+        if (snap !== null) {
+          // AC-70: the answers ran out before the gate decided; nothing of it is applied.
+          restore(run, snap);
+          run.status = "waiting";
+          writeRun(ctx.projectDir, run);
+          ctx.out(`Waiting at ${run.next}: the answers ran out before the gate decided, so nothing was applied. Give every answer it takes: ${resumeHint(run.id)} --answer …`);
+          return 3;
+        }
         writeRun(ctx.projectDir, run);
         ctx.out(`Waiting at ${run.next}; no answer was given. Answer it with: ${resumeHint(run.id)}`);
         return 3;

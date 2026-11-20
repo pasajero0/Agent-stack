@@ -2,7 +2,6 @@
  * Gate cards: built once per gate, kept in the run file, printed for a person and given to a program as JSON.
  * Spec: docs/specs/v04/SPEC.md, Term "Gate card", Contract "Gate card", AC-68, AC-70.
  */
-import { createHash } from "node:crypto";
 import { RunError } from "../errors.js";
 import type { CardAnswer, CardGate, CardPrompt, GateCard } from "../types.js";
 import type { Ctx } from "./context.js";
@@ -10,7 +9,8 @@ import type { Ctx } from "./context.js";
 /** The longest one-line fact the terminal prints, `…` included (AC-68). */
 export const CUT = 100;
 
-export const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
+/** One sha256 for every source: the plan hash of AC-14 and the card source of AC-68 are the same. */
+export { planSha256 as sha256 } from "./plan-file.js";
 
 /** A fact for the terminal: one-line facts longer than CUT are cut, unless kept or multi-line (AC-68). */
 function shownFact(fact: string, keep: boolean): string {
@@ -46,8 +46,12 @@ export interface CardInput {
   hint: string;
 }
 
-/** Builds the card of the gate the run is at, keeps it in the run, and prints it (AC-68). */
+/**
+ * Builds the card of the gate the run is at, keeps it in the run, and prints it (AC-68). Under `--answer` a gate
+ * with no kept card (a run from an older driver) was never shown: the answer is refused until it is read.
+ */
 export function showCard(ctx: Ctx, input: CardInput): GateCard {
+  const unseen = ctx.run.card === null || ctx.run.card.gate !== input.gate;
   const card: GateCard = {
     gate: input.gate,
     run: ctx.run.id,
@@ -61,6 +65,7 @@ export function showCard(ctx: Ctx, input: CardInput): GateCard {
   };
   ctx.run.card = card;
   ctx.out(cardText(card));
+  if (unseen && ctx.answering) throw new GateChanged(input.hint);
   return card;
 }
 

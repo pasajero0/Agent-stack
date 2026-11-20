@@ -175,7 +175,7 @@ describe("kills and resume after a side effect", () => {
     expect(text(r)).toContain("Interrupted at base-check");
   });
 
-  it("v04 AC-51: SIGINT through abortOnSignals reaches the current Claude call", async () => {
+  it("v04 AC-51, v04 AC-74: SIGINT through abortOnSignals reaches the current Claude call; the text says the lock stays", async () => {
     const r = repo();
     r.script([{ ...impl({ writes: { "late.txt": "x\n" } }), sleepMs: 5000 }]);
     const listeners = process.listenerCount("SIGINT");
