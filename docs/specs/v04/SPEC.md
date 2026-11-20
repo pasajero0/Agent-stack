@@ -102,6 +102,10 @@ word for this spec only is marked `(local)`.
 - **Check config** (local): a file that decides how checks run: `.github/workflows/*`, `.gitlab-ci.yml`,
   `vitest.config.*`, `vitest.workspace.*`, `jest.config.*`, `playwright.config.*`, `eslint.config.*`, `.eslintrc*`,
   `biome.json`, `biome.jsonc`, `pytest.ini`, `tox.ini`, `ruff.toml`, `.ruff.toml`, `.golangci.*`, `clippy.toml`.
+- **Package manifest** (local): a `package.json` at any depth. The driver compares two parts of it with the
+  task's base: `scripts`, since a check command like `pnpm test` runs the script of that name; and the dependency
+  entries — `dependencies`, `devDependencies`, `optionalDependencies`, `peerDependencies`, `overrides`,
+  `resolutions` and `pnpm.overrides`. A manifest the task adds compares with an empty one.
 - **Diff lines** (local): added plus deleted lines of the task diff (`git diff --numstat`), plus all lines of each
   untracked file.
 - **Clean tree** (local): `git status --porcelain`, excluding `.claude/tmp/`, is empty.
@@ -175,7 +179,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | review | blocking count not lower than last time | gate:limit (review loop) | AC-39 |
 | implement | BLOCKED | gate:limit (blocked) | AC-38 |
 | implement | TEST_CONFLICT | gate:limit (test conflict) | AC-64 |
-| checks | frozen tests weakened or a check config changed | gate:limit (tests changed) | AC-66 |
+| checks | frozen tests weakened, a check config or a package manifest changed | gate:limit (tests changed) | AC-66 |
 | gate:limit (tests changed) | allow / retry with a comment | checks / implement (attempt + 1) | AC-66 |
 | any | fuse reached | gate:limit (fuse) | AC-35 |
 | any | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
@@ -661,6 +665,12 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     exists at the base has changed, THEN THE SYSTEM SHALL go to gate:limit, reason "tests changed", and list each
     change: `deleted test file a.test.ts`, `a.test.ts: assertions 12 → 10`, `changed check config vitest.config.ts
     (now 1a2b3c4)`, `deleted check config jest.config.js`. The run file keeps the list.
+  - The same holds for a package manifest: a script of the base changed or removed, a dependency entry added or
+    changed, or a manifest that is no longer valid JSON. The lines: `changed script test in package.json (now: node
+    --test || true)`, `deleted script lint in package.json`, `new dependency left-pad in package.json
+    (dependencies: ^1.3.0)`, `changed dependency vitest in package.json (devDependencies: ^2.0.0 → ^3.0.0)`,
+    `package.json is not valid JSON (now 1a2b3c4)`. A shown value longer than 80 characters is cut and ends with its
+    content hash, so a later edit is still a new line. A new script and a removed dependency do not stop the run.
   - `a` allows exactly the changes listed, as the run file keeps them; the run goes on to the checks. A change that
     is not on the list stops again: one made while the gate waited, or a later edit of an allowed check config
     (its content hash differs). Gate:accept shows the allowed changes (AC-21).
@@ -668,7 +678,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     cancels.
   - With `testGlobs` empty, only the check configs are compared. A test renamed or merged is a change too; the
     human allows it. A test the human weakened by hand at another gate is a change too.
-  - It does not see a weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`).
+  - It does not see a weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`), nor manifests other
+    than `package.json` (`pyproject.toml`, `Cargo.toml`, `go.mod`).
 - **AC-46:** IF a task's checks pass with an empty task diff, THEN THE SYSTEM SHALL record `commit: "empty"`,
   make no commit, and show it at gate:accept (partner of AC-20).
 - **AC-47:** IF `--resume` finds the spec missing on the base ref, THEN THE SYSTEM SHALL stay at
@@ -768,6 +779,10 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-20 — AC-66, Package manifest (new term): the frozen check also compares `package.json`. The driver's
+  checks run `pnpm test`, and `scripts.test` decides what that does, so `"test": "node --test || true"` made every
+  check green without touching a test. A new dependency stops too: under the driver the human saw it only in the
+  diff at gate:accept.
 - 2026-11-19 — AC-67, Role prompts (review), from review: an empty or out-of-date agent file exits 1 instead of
   running silently; the review gets the task's verify; the task review judges only the given criteria; the
   missing-file hint says `update`, since `generate` refuses an existing harness.
