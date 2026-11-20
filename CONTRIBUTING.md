@@ -16,6 +16,10 @@ One branch per release: `release/<version>`, from `main`. Example: `release/0.4.
 
 Do not name a branch like a tag (`v0.4.2`): git then cannot tell them apart.
 
+A **hotfix** — an urgent fix of a released version — gets its own branch from that version's tag:
+`hotfix/<next version>`, e.g. `git switch -c hotfix/0.4.4 v0.4.3`. It holds only the fix (spec change, test,
+code, release commit), one PR, squash, tag. Other work waits for the next release.
+
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org): `type(scope): what changed`. The scope is required.
