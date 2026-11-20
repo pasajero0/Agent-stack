@@ -129,7 +129,7 @@ function acceptCard(ctx: Ctx, final: CheckRun | null): CardInput {
   const red = run.tasks.reduce((n, t) => n + t.checks.filter((c) => !c.skipped && c.exit !== 0).length, 0);
   const finalText = final === null ? "" : ` · final check ${final.exit === 0 ? "green" : "RED"}`;
   f.add(`${run.tasks.length} task(s) · ${commits} commit(s) · checks ${red === 0 ? "green" : `${red} red`}${finalText}`);
-  f.add(...timeFacts(run));
+  f.whole(...timeFacts(run));
   f.whole(`Usage: ${cost(run)}`);
   f.add(`branch: ${run.branch}`);
   if (run.baseCommit) f.whole(`Diff from ${short(run.baseCommit)}:\n${diffStat(ctx.projectDir, run.baseCommit) || "  (no changes)"}`);

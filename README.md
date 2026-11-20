@@ -213,8 +213,10 @@ To see a run while it works, open `agent-stack run --watch` in any terminal (als
 step with its time, the step in progress with its last tool lines, and the gate it waits at. Each tool a role
 starts also prints a line under its step (`· Read src/a.ts`,
 `· Bash pnpm test`), the run folder keeps `now.json` and `progress.log`, and `.claude/bin/run-status` gives one
-line for Claude Code's status line (`run <id> · implement:T1 · 1:35 · $0.46 · Edit src/a.ts`). It is off by
-default, since a project status line would replace yours; turn it on in `.claude/settings.local.json`:
+line for Claude Code's status line (`run <id> · implement:T1 · 1:35 · $0.46 · Edit src/a.ts`). The status line
+shows in Claude Code in a terminal; the VS Code extension does not show a custom status line, so there use
+`run --watch`. It is off by default, since a project status line would replace yours; turn it on in
+`.claude/settings.local.json`:
 `{ "statusLine": { "type": "command", "command": ".claude/bin/run-status" } }`.
 Hints print the command as you started it (`agent-stack run …`, or `node <path>/cli.mjs run …`). A run starts
 only on a harness from 0.4.1 on; with an older one it says to run `update` first.
