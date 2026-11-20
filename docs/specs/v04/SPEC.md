@@ -850,7 +850,15 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - The terminal cuts a one-line fact longer than 100 characters to 100, the last of them `…`. It never cuts a
     verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), the cost line, or a multi-line output (the tails of
     AC-33 and AC-61, a BLOCKED report): those print as they are. The card data is never cut.
-  - The waiting line of AC-29 and the steps of AC-10 follow the card; they are its `hint`.
+  - The waiting line of AC-29 and the steps of AC-10 follow the card; they are its `hint`. The waiting line
+    reads `Waiting at <gate> for your answer: <hint> --answer <keys>`, the keys from the card's first prompt
+    (`a | r <text> | c`), so it does not read as an error.
+  - A title names the gate and its subject, not the run id or the branch (both are facts or in the hint):
+    `Plan <stage>: <n> task(s)`, `Accept: <stage or quick> · <n> task(s)`, `Stopped: <reason>`,
+    `Spec <stage> is ready to review`, `Questions before the spec`.
+  - gate:accept starts with one summary fact — `<n> task(s) · <k> commit(s) · checks green` (or `<r> red`), and
+    `· final check green|RED` when there is one — then the time (AC-81) and the cost, then the branch, the diff
+    stat and each task. A skipped command is named once, in `Skipped:`, not again in its task's checks.
   - The final check of gate:accept runs once, when the run reaches the gate; a resume at gate:accept shows the
     kept card and does not run it again. The card names the HEAD it ran on.
   - IF, when the gate decides, its inputs differ from the card's `source` (`tasks.json` was replaced, HEAD
@@ -1034,6 +1042,10 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — AC-68 (layout): short titles without the run id, gate:accept starts with a summary, then time and
+  cost; a skipped command named once; a waiting line that does not read as an error. From the first live look at
+  a card (Leonid asked for a pass over the cards).
 
 - 2026-11-20 — AC-82 (new), CLI `--watch`: a live view of the run in any terminal. In Claude Code inside VSCode
   the status line is not shown, and the role calls are not the chat's subagents, so the run looked detached.
