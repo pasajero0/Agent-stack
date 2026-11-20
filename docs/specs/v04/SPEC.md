@@ -222,6 +222,7 @@ agent-stack run quick "<description>"                  start a quick run
 agent-stack run --resume [<run id>] [--answer <text>]… continue a waiting or interrupted run (default: the locked one)
 agent-stack run --status [<run id>] [--json]           print the run; change nothing
 agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
+agent-stack run --watch [<run id>]                     show the run live until it ends; change nothing
 ```
 
 `--answer` may repeat; each one is one line of gate input for the gate the run waits at, and only that gate
@@ -959,6 +960,18 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     and, when there is an estimate, `estimate <m:ss> → actual <m:ss>`. `--status --json` SHALL give `workSec`,
     `waitSec` and `estimateSec` in `run`.
   - A run file from before this field reads with `steps: []` and `estimateSec: null`.
+- **AC-82:** WHEN `run --watch [<id>]` runs, THE SYSTEM SHALL show the run (the locked one by default), read
+  only from its run folder, and change nothing:
+  ```text
+  run <id> · <mode> · <status> · <work m:ss> work · $<cost>
+    ✓ <step>   <m:ss>              each ended step, in order (AC-81)
+    ▶ <step>   <m:ss>              the step in progress (now.json), with its last 5 lines of progress.log
+    ⏸ waiting at <gate> — answer: <hint>    when the run waits
+  ```
+  - At a terminal it SHALL redraw at most once a second until the run is finished or cancelled, then print the
+    last view and exit 0; Ctrl-C exits 0.
+  - Without a terminal it SHALL print the view once and exit 0.
+  - IF no run holds the lock and no id is given, or the run does not exist, THEN it SHALL say so and exit 0.
 - **AC-76:** THE SYSTEM SHALL read `gates.json → language` and give it in `--status --json` (AC-69), so the
   operator chat speaks `language.chat` and keeps terms in `language.terms`. With the key missing, both are `en`.
   - IF a value does not match the pattern in the Contract, or `language` is not an object, THEN THE SYSTEM SHALL
@@ -1021,6 +1034,9 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — AC-82 (new), CLI `--watch`: a live view of the run in any terminal. In Claude Code inside VSCode
+  the status line is not shown, and the role calls are not the chat's subagents, so the run looked detached.
 
 - 2026-11-20 — AC-81 (new), run file `steps`, `estimateSec`: the time of each step, the work and waiting time, an
   estimate from earlier runs and its check at gate:accept. Leonid: "estimated time и фактическое время … в
