@@ -92,5 +92,9 @@ if (stdout === undefined) {
     structured_output: response.output,
   };
 }
+// stream-json (AC-78): an assistant event per scripted tool, then the result as the last line.
+for (const t of response.tools ?? []) {
+  process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: t.name, input: t.input ?? {} }] } }) + "\n");
+}
 process.stdout.write(typeof stdout === "string" ? stdout : JSON.stringify(stdout));
 process.exit(response.exit ?? 0);

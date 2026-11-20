@@ -236,6 +236,14 @@ describe("headers", () => {
     expect(s.endsWith("-")).toBe(false);
   });
 
+  it("v04 AC-24: slugify cuts at the last whole word that fits in 40 characters", () => {
+    expect(slugify("A5 reverse text function and reverse npm script")).toBe("a5-reverse-text-function-and-reverse-npm");
+    // a word that ends exactly at 40 characters stays whole
+    expect(slugify(`${"a".repeat(39)}b next`)).toBe(`${"a".repeat(39)}b`);
+    // a single word longer than 40 is still cut hard
+    expect(slugify("x".repeat(60))).toBe("x".repeat(40));
+  });
+
   it("v04 AC-20: slugify falls back to run for text without ASCII letters", () => {
     expect(slugify("Добавить поле")).toBe("run");
     expect(slugify("")).toBe("run");

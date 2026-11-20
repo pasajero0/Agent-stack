@@ -222,6 +222,7 @@ agent-stack run quick "<description>"                  start a quick run
 agent-stack run --resume [<run id>] [--answer <text>]… continue a waiting or interrupted run (default: the locked one)
 agent-stack run --status [<run id>] [--json]           print the run; change nothing
 agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
+agent-stack run --watch [<run id>]                     show the run live until it ends; change nothing
 ```
 
 `--answer` may repeat; each one is one line of gate input for the gate the run waits at, and only that gate
@@ -346,6 +347,8 @@ terminal text stays English.
 | `next` | one of the values listed above |
 | `returnTo` | the `next` value that gate:limit returns to, or null |
 | `card` | the gate card of the gate the run waits at, or null (written when the run reaches the gate) |
+| `steps` | `[{ "step": <next>, "start": <ISO>, "end": <ISO or null> }]`, one entry per step as it ran (AC-81) |
+| `estimateSec` | the work time estimated at gate:plan-approve (task) or at start (quick), or null (AC-81) |
 | `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| `test-conflict` \| `tests-changed` \| null |
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
@@ -365,7 +368,8 @@ terminal text stays English.
 **How Claude Code is invoked**
 
 The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwise `claude`. Every call:
-- gets `-p --output-format json --max-turns <maxTurns> --model <model> --json-schema <role schema>`, plus
+- gets `-p --output-format stream-json --verbose --max-turns <maxTurns> --model <model> --json-schema <role
+  schema>`, plus
   `--max-budget-usd <dollars left>` only with a dollar fuse;
 - gets the role prompt on stdin;
 - gets `AGENT_STACK_RUN` in its environment;
@@ -474,7 +478,7 @@ rules, so an improved agent reaches the driver too.
 **Commits** (always the driver's):
 - spec: `docs(<stage>): spec — <title>`;
 - task: `<type>(<stage>): <subject>`;
-- quick: `<type>: <subject>`.
+- quick: `<type>(quick): <subject>`.
 
 The driver stages exactly the paths of the task diff, or the spec's allowed paths. It never stages
 `.claude/tmp/`.
@@ -630,7 +634,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   `quick/<slug>` from HEAD, run base-check, then implement the description as task Q1.
   - The slug is lowercase `[a-z0-9-]`, at most 40 characters, taken from the description.
 - **AC-25:** WHEN Q1's checks pass, THE SYSTEM SHALL review only if the diff lines exceed
-  `quickReviewLines`. It SHALL then commit as `<type>: <subject>` and stop at gate:accept.
+  `quickReviewLines`. It SHALL then commit as `<type>(quick): <subject>` and stop at gate:accept.
   - Q1's checks, and those of a quick fix task, are the `test` command plus lint.
   - A quick fix task follows the same review rule, and has 2 attempts.
 - **AC-26:** WHILE `AGENT_STACK_RUN` names a live quick run whose `branch` is the current branch, spec-gate
@@ -844,9 +848,18 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     (`AC-1,3,5`). The last fact is `full task text: <path of tasks.json>`. A verify command is never cut, since
     the human approves it as written.
   - The terminal cuts a one-line fact longer than 100 characters to 100, the last of them `…`. It never cuts a
-    verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), the cost line, or a multi-line output (the tails of
+    verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), the cost and time lines, the AC-77 note,
+    or a multi-line output (the tails of
     AC-33 and AC-61, a BLOCKED report): those print as they are. The card data is never cut.
-  - The waiting line of AC-29 and the steps of AC-10 follow the card; they are its `hint`.
+  - The waiting line of AC-29 and the steps of AC-10 follow the card; they are its `hint`. The waiting line
+    reads `Waiting at <gate> for your answer (<keys>): <hint> --answer <answer>`, the keys from the card's first
+    prompt (`a | r <text> | c`), so it does not read as an error.
+  - A title names the gate and its subject, not the run id or the branch (both are facts or in the hint):
+    `Plan <stage>: <n> task(s)`, `Accept: <stage or quick> · <n> task(s)`, `Stopped: <reason>`,
+    `Spec <stage> is ready to review`, `Questions before the spec`.
+  - gate:accept starts with one summary fact — `<n> task(s) · <k> commit(s) · checks green` (or `<r> red`), and
+    `· final check green|RED` when there is one — then the time (AC-81) and the cost, then the branch, the diff
+    stat and each task. A skipped command is named once, in `Skipped:`, not again in its task's checks.
   - The final check of gate:accept runs once, when the run reaches the gate; a resume at gate:accept shows the
     kept card and does not run it again. The card names the HEAD it ran on.
   - IF, when the gate decides, its inputs differ from the card's `source` (`tasks.json` was replaced, HEAD
@@ -913,6 +926,13 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     or plan edits; a later fix is a new run;
   - never merge, push or open a pull request itself, also when the human agrees: at gate:spec-merge it gives the
     merge command and resumes when the human says it is done;
+  - at gate:spec-merge, show the spec short in the chat — its purpose, each criterion in one line, the
+    constraints and what is out of scope — and a link to the spec file, so the human decides without reading the
+    file in a terminal;
+  - run the driver as its own background job and follow its output file; never run the driver inside the watch
+    command, since stopping the watch would stop the run;
+  - while a driver command runs, follow its output (Claude Code's Monitor) and tell the human in one line when a
+    step starts and when it ends (`implement:T1 started`, `ok in 90s`), not each tool;
   - at the end, report what was done, the commits (sha and subject as they are), the cost, and what the human
     should check.
   - IF a driver command exits 1 (a dirty tree, a red base, an old harness, a lock), THEN the skill SHALL tell
@@ -921,6 +941,51 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-77:** WHEN a plan task's verify holds command substitution (`$(` or a backtick), THE SYSTEM SHALL add a
   fact under that task at gate:plan-approve: `note: implement cannot run this verify itself (Claude Code does not
   allow command substitution by a rule); the driver's checks still run it`. The plan stays valid.
+### Seeing a run
+
+- **AC-78:** WHILE a Claude call runs, THE SYSTEM SHALL print one line for each tool the role starts, under the
+  step's `->` line: `   · <tool> <target>`, where the target is the file path, the command or the pattern,
+  cut to 80 characters with `…`; a tool with none of them prints its name only. It SHALL take the call's
+  result from the last event of type `result` in the stream; the `calls/` file keeps that result as before
+  (AC-3), not the whole stream.
+  - IF a stream line is not JSON, or no `result` event comes, THEN THE SYSTEM SHALL skip the line, and treat the
+    call as AC-36 treats a call with no result JSON.
+- **AC-79:** WHEN a step starts, a tool starts (AC-78) or a step ends, THE SYSTEM SHALL write
+  `<run folder>/now.json`: `{ "step": <next>, "since": <ISO time the step started>, "last": <the last line
+  printed> }`, by temp file and rename, and append the line with its time to `<run folder>/progress.log`.
+- **AC-80:** THE SYSTEM SHALL ship `.claude/bin/run-status` (bash 3.2 and jq) that prints one line for Claude
+  Code's status line: `run <id> · <step> · <m:ss in the step> · $<cost> · <last>` while a run holds the lock and
+  is live; `run <id> · waiting at <gate>` while it waits; nothing when no run holds the lock. It reads the lock,
+  `run.json` and `now.json`, and changes nothing. It is not turned on by `generate` or `update`: a project
+  `statusLine` would replace the user's own. README says how to turn it on in `settings.local.json`.
+  - IF any of those files is missing or not valid JSON, THEN it SHALL print nothing and exit 0.
+- **AC-81:** THE SYSTEM SHALL keep the time of every step in the run file (`steps`): a step's entry starts when
+  the step starts and ends when it ends; a gate's entry ends when the gate decides, in whichever process. A step
+  interrupted (AC-51) ends at the interrupt; its resume adds a new entry.
+  - **Work time** is the sum of the entries of steps that are not gates; **waiting time** is the sum of the gate
+    entries (the human's time).
+  - WHEN the run reaches gate:plan-approve (task) or starts (quick), THE SYSTEM SHALL estimate the work time
+    from the finished runs in this repo: the mean time of each step kind (base-check, implement, checks, review,
+    commit) over their entries, times the steps this run will take (base-check once, then each plan task's four).
+    It SHALL keep it as `estimateSec` and show `estimate: ≈ <m> min of work (from <n> earlier runs)` on the plan
+    card. IF no finished run has entries for those kinds, THEN `estimateSec` is null and the card says
+    `estimate: none yet (no earlier runs)`.
+  - gate:accept SHALL show `time: <m:ss> work + <m:ss> waiting for you`, the time per step kind and per task,
+    and, when there is an estimate, `estimate <m:ss> → actual <m:ss>`. `--status --json` SHALL give `workSec`,
+    `waitSec` and `estimateSec` in `run`.
+  - A run file from before this field reads with `steps: []` and `estimateSec: null`.
+- **AC-82:** WHEN `run --watch [<id>]` runs, THE SYSTEM SHALL show the run (the locked one by default), read
+  only from its run folder, and change nothing:
+  ```text
+  run <id> · <mode> · <status> · <work m:ss> work · $<cost>
+    ✓ <step>   <m:ss>              each ended step, in order (AC-81)
+    ▶ <step>   <m:ss>              the step in progress (now.json), with its last 5 lines of progress.log
+    ⏸ waiting at <gate> — answer: <hint>    when the run waits
+  ```
+  - At a terminal it SHALL redraw at most once a second until the run is finished or cancelled, then print the
+    last view and exit 0; Ctrl-C exits 0.
+  - Without a terminal it SHALL print the view once and exit 0.
+  - IF no run holds the lock and no id is given, or the run does not exist, THEN it SHALL say so and exit 0.
 - **AC-76:** THE SYSTEM SHALL read `gates.json → language` and give it in `--status --json` (AC-69), so the
   operator chat speaks `language.chat` and keeps terms in `language.terms`. With the key missing, both are `en`.
   - IF a value does not match the pattern in the Contract, or `language` is not an object, THEN THE SYSTEM SHALL
@@ -983,6 +1048,28 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — AC-75, AC-68 (from the live task run): the chat shows the spec short at gate:spec-merge (Leonid:
+  reading every spec in `less` is no way to work), and runs the driver apart from its watch (a stopped watch
+  killed a run); the time lines and the AC-77 note are never cut.
+
+- 2026-11-20 — AC-68 (layout): short titles without the run id, gate:accept starts with a summary, then time and
+  cost; a skipped command named once; a waiting line that does not read as an error. From the first live look at
+  a card (Leonid asked for a pass over the cards).
+
+- 2026-11-20 — AC-82 (new), CLI `--watch`: a live view of the run in any terminal. In Claude Code inside VSCode
+  the status line is not shown, and the role calls are not the chat's subagents, so the run looked detached.
+
+- 2026-11-20 — AC-81 (new), run file `steps`, `estimateSec`: the time of each step, the work and waiting time, an
+  estimate from earlier runs and its check at gate:accept. Leonid: "estimated time и фактическое время … в
+  метрике, это нам очень поможет для анализа". Only `at` of gate records and `duration_ms` of calls existed.
+
+- 2026-11-20 — AC-78–AC-80 (new), "How Claude Code is invoked" (`stream-json --verbose`), AC-75 (the chat follows
+  the run): a run was a blind spot. Leonid: "Ты ждёшь, а я ничего не вижу". The driver printed only the step and
+  "ok in 90s"; the chat said nothing until the next gate.
+
+- 2026-11-20 — AC-25, Commits: a quick commit is `<type>(quick): <subject>`, not `<type>: <subject>`. A repo
+  whose commitlint requires a scope (this one, since 0.4.2) refused every quick commit.
 
 - 2026-11-20 — AC-68–AC-76 (new), Decisions (the driver from a chat), Terms (Gate card, Operator chat, Command
   name, Hint, Harness floor), Contract (CLI `--answer` and `--json`, exit codes, gate input, `codeBy`,

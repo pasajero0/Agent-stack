@@ -159,7 +159,7 @@ describe("v04 end to end", () => {
     expect(Date.now() - started).toBeLessThan(10_000);
     expect(r.run().status).toBe("finished");
     const headers = sh(r.dir, "log", "--format=%s", `${main}..HEAD`).split("\n");
-    expect(headers).toEqual(["fix: fix the README line"]);
+    expect(headers).toEqual(["fix(quick): fix the README line"]);
     commitlintAccepts(headers);
     expect(sh(origin, "for-each-ref")).toBe("");
     checkCalls(r, QUICK_DESC, 1);

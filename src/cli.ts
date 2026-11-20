@@ -76,6 +76,7 @@ program
   .option("--resume [id]", "continue a waiting or interrupted run (default: the locked one)")
   .option("--status [id]", "print the run; change nothing")
   .option("--cancel [id]", "cancel a waiting or interrupted run")
+  .option("--watch [id]", "show the run live until it ends (default: the locked one); change nothing")
   .option("--answer <text>", 'with --resume: one line of input for the gate the run waits at; repeat it; "" is Enter', (v: string, all: string[]) => [...all, v], [] as string[])
   .option("--json", "with --status: print the run and its gate card as JSON")
   .action(runAction);

@@ -11,6 +11,9 @@ const SLOW = [
   "tests/run/e2e.test.ts",
   "tests/run/frozen.test.ts",
   "tests/run/git.test.ts",
+  "tests/run/progress.test.ts",
+  "tests/run/timing.test.ts",
+  "tests/run/watch.test.ts",
 ];
 
 export default defineConfig({
@@ -24,7 +27,8 @@ export default defineConfig({
       {
         extends: true,
         // Fewer processes on CI come from the CLI (`--maxWorkers`): vitest takes it per run, not per project.
-        test: { name: "slow", include: SLOW, pool: "forks" },
+        // 20 s a test: a whole driver path spawns git and the fake many times, and passed 5.04 s under load.
+        test: { name: "slow", include: SLOW, pool: "forks", testTimeout: 20_000 },
       },
     ],
   },

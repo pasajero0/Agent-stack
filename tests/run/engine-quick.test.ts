@@ -6,6 +6,7 @@ import { resumeRun, startRun } from "../../src/run/engine/index.js";
 import { transition } from "../../src/run/engine/transitions.js";
 import { listRuns, readLock } from "../../src/run/store.js";
 import { runCommand } from "../../src/commands/run.js";
+import { Progress } from "../../src/run/engine/progress.js";
 import { loadRunConfig } from "../../src/run/config.js";
 import type { Ctx, ModeSteps } from "../../src/run/engine/context.js";
 import { runLoop } from "../../src/run/engine/loop.js";
@@ -34,7 +35,7 @@ describe("quick mode: the path", () => {
     expect(run.baseCommit).toBe(head);
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
     expect(sh(r.dir, "rev-list", "--count", `main..${BRANCH}`)).toBe("1");
-    expect(sh(r.dir, "log", "-1", "--format=%s")).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "-1", "--format=%s")).toBe("fix(quick): fix the README line");
     expect(sh(origin, "for-each-ref")).toBe("");
     expect(run.tasks[0]?.commit).toBe(sh(r.dir, "rev-parse", "HEAD"));
     expect(readLock(r.dir)).toBeNull();
@@ -98,7 +99,7 @@ describe("quick mode: the path", () => {
     const env = r.opts({ gate: ["a"] }).env ?? {};
     const prompter = selectPrompter(env, false);
     const signal = new AbortController().signal;
-    const ctx: Ctx = { projectDir: r.dir, cfg: loadRunConfig(r.dir), run: r.run(), mode, prompter, answering: false, out: (l) => r.out.push(l), env, signal };
+    const ctx: Ctx = { projectDir: r.dir, cfg: loadRunConfig(r.dir), run: r.run(), mode, prompter, answering: false, progress: new Progress(r.dir, r.run().id, r.run().next), out: (l) => r.out.push(l), env, signal };
     const code = await runLoop(ctx).finally(() => prompter.close());
     expect(code, text(r)).toBe(0);
     expect(seen).toEqual([0]);
@@ -213,7 +214,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(run.next).toBe("gate:limit");
     expect(run.tasks[0]?.attempts).toBe(1);
     const out = text(r);
-    expect(out).toContain("reason: test-conflict");
+    expect(out).toContain("━━ Stopped: test-conflict ━━");
     expect(out).toContain("tests/readme.test.ts:has the line");
     expect(out).toContain("the test wants broken");
     expect(out).toMatch(/r <text> — retry with your answer for the implementer/);
@@ -347,7 +348,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     const task = r.run().tasks[0];
     expect(task?.attempts).toBe(2);
     expect(task?.lastFeedback).toContain("commit");
-    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix(quick): fix the README line");
     expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nfixed\n");
   });
 
@@ -361,7 +362,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(code, text(r)).toBe(0);
     expect(r.run().tasks[0]?.lastFeedback).toContain("branch");
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
-    expect(sh(r.dir, "log", "-1", "--format=%s", BRANCH)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "-1", "--format=%s", BRANCH)).toBe("fix(quick): fix the README line");
   });
   it("v04 AC-43: implement committing on the run's branch, then switching to main, is soft-reset on the run's branch", async () => {
     const r = repo();
@@ -376,7 +377,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(task?.attempts).toBe(2);
     expect(task?.lastFeedback).toContain("commit");
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
-    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix(quick): fix the README line");
     expect(sh(r.dir, "rev-parse", "main")).toBe(main);
     expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nfixed\n");
   });
@@ -394,7 +395,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(task?.lastFeedback).toContain("commit");
     expect(task?.lastFeedback).toContain("stray");
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
-    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix(quick): fix the README line");
     expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nfixed\n");
   });
 

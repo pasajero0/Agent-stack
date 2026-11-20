@@ -102,6 +102,13 @@ export interface GateCard {
   hint: string;
 }
 
+/** One step as it ran (AC-81); `end` is null while it runs or a gate waits. */
+export interface StepTime {
+  step: Next;
+  start: string;
+  end: string | null;
+}
+
 export interface RunFile {
   id: string;
   description: string;
@@ -131,6 +138,10 @@ export interface RunFile {
   fuse: Fuse;
   /** The card of the gate the run waits at; null when it waits at none (AC-68). */
   card: GateCard | null;
+  /** The time of every step (AC-81). */
+  steps: StepTime[];
+  /** The estimated work time in seconds, or null (AC-81). */
+  estimateSec: number | null;
 }
 
 /** gates.json values the driver needs, with the `run` key's defaults filled in. */

@@ -17,7 +17,7 @@ every code edit for the stage. So the spec must be good enough to build from wit
 - **Light spec** — setup or mechanical work with nothing to see: scaffold, tooling, CI, a dependency bump,
   a move. Write `<specsDir>/<stage>/SPEC.md` from `${CLAUDE_SKILL_DIR}/light-template.md`: Purpose, a
   checklist of `AC-n` each with the command that proves it, Out of scope. No unhappy-path partners, no
-  spec-reviewer. Then go to step 7. If the work turns out to have behaviour, switch to a full spec. A
+  spec-reviewer. Then go to step 8. If the work turns out to have behaviour, switch to a full spec. A
   "## Changes" entry that turns a full spec light says why — trace stops checking its tests.
 
 ## Steps (full spec)
@@ -47,12 +47,16 @@ every code edit for the stage. So the spec must be good enough to build from wit
    - a new named concept (a state, role, reason, mode, gate) is an entry in `## Terms`. If the project has a
      glossary, add a shared word there in the same change, or mark it `(local)`. Check it with
      `.claude/bin/trace --terms <stage>` (terms only, so it works before there are tests).
-4. **NFRs only with numbers** ("p99 < 300 ms at 50 rps"), never "fast" or "scalable".
-5. **How to verify** — the exact commands (tests filtered by AC id, load profile, manual check).
-6. **Review.** Run `.claude/bin/trace --terms <stage>` and fix what it names. Then run the `spec-reviewer` subagent on the file. Fix every blocker; argue or fix the rest.
+4. **Constraints** — fill `## Constraints`: what the builder must not add without asking (tables, services,
+   languages, dependencies), what it must keep (contract versions, how outside input is checked), and which
+   goal wins when two conflict. Each line names how it is checked; an agent with no stated limit is free to
+   add a table or a package.
+5. **NFRs only with numbers** ("p99 < 300 ms at 50 rps"), never "fast" or "scalable".
+6. **How to verify** — the exact commands (tests filtered by AC id, load profile, manual check).
+7. **Review.** Run `.claude/bin/trace --terms <stage>` and fix what it names. Then run the `spec-reviewer` subagent on the file. Fix every blocker; argue or fix the rest.
    Repeat until it returns PASS (max 3 rounds — then list what is left under NEEDS HUMAN DECISION).
    Skipping the review is allowed only when the human says so; then say in the report that it was skipped.
-7. **Hand over.** Commit the spec (and its ADRs) on a branch `spec/<stage>` and tell the human it is ready:
+8. **Hand over.** Commit the spec (and its ADRs) on a branch `spec/<stage>` and tell the human it is ready:
    - **with a remote:** they push, open the MR, review and merge. Never push yourself.
    - **local only** (no `origin/<base>`): the human reviews the branch and merges it into the local base
      branch (`git merge spec/<stage>`) — that merge is the approval. Once `origin/<base>` exists, spec-gate

@@ -5,6 +5,7 @@ import {
   resumeRun,
   startRun,
   statusRun,
+  watchRun,
   type ExitCode,
 } from "../run/engine/index.js";
 import { commandName } from "../run/engine/command.js";
@@ -14,6 +15,8 @@ export interface RunOptions {
   resume?: string | boolean;
   status?: string | boolean;
   cancel?: string | boolean;
+  /** `--watch`: the run live (AC-82). */
+  watch?: string | boolean;
   stage?: string;
   /** `--answer`, repeatable: the input of the gate the run waits at (AC-70). */
   answer?: string[];
@@ -47,13 +50,13 @@ export async function runCommand(
   const projectDir = io.projectDir ?? process.cwd();
   const out = io.out ?? ((line: string) => console.log(line));
   const base = { projectDir, out };
-  const actions = [options.resume, options.status, options.cancel].filter(given).length;
+  const actions = [options.resume, options.status, options.cancel, options.watch].filter(given).length;
   if (actions > 1) {
-    out("Use one of --resume, --status or --cancel.");
+    out("Use one of --resume, --status, --cancel or --watch.");
     return 1;
   }
   if (actions === 1 && mode !== undefined) {
-    out(`--resume, --status and --cancel take a run id, not a mode ("${mode}").`);
+    out(`--resume, --status, --cancel and --watch take a run id, not a mode ("${mode}").`);
     return 1;
   }
   const answers = options.answer ?? [];
@@ -67,6 +70,7 @@ export async function runCommand(
   }
   if (given(options.status)) return statusRun({ ...base, id: idOf(options.status), json: options.json === true });
   if (given(options.cancel)) return cancelRun({ ...base, id: idOf(options.cancel) });
+  if (given(options.watch)) return withSignals((signal) => watchRun({ ...base, signal, id: idOf(options.watch) }));
   if (given(options.resume)) return withSignals((signal) => resumeRun({ ...base, signal, id: idOf(options.resume), ...(answers.length > 0 ? { answers } : {}) }));
   if (mode === undefined) {
     out(`Say what to run: ${commandName()} run quick "<description>" or run task "<description>"; or --resume, --status, --cancel.`);

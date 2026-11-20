@@ -206,7 +206,7 @@ describe("kills and resume after a side effect", () => {
     expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
     // Rebuild the moment of the kill: the commit is made by hand with the expected header, next still commit:Q1.
     git(r.dir, "reset", "-q", "--soft", "main");
-    git(r.dir, "commit", "-q", "-m", "fix: fix the README line");
+    git(r.dir, "commit", "-q", "-m", "fix(quick): fix the README line");
     const run = r.run();
     const task = run.tasks[0];
     if (!task) throw new Error("no task Q1");

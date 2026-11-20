@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# One line for Claude Code's status line: the driver run in this repo, if any (spec AC-80).
+#   live:    run <id> · <step> · <m:ss in the step> · $<cost> · <last line>
+#   waiting: run <id> · waiting at <gate>
+#   nothing when no run holds the lock, or a file is missing or not valid JSON. Reads only; changes nothing.
+# Turn it on in .claude/settings.local.json: { "statusLine": { "type": "command", "command": ".claude/bin/run-status" } }
+set -u
+PROJECT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
+runs="$PROJECT_DIR/.claude/tmp/runs"
+
+# Claude Code sends the session as JSON on stdin; this line does not need it.
+[ -t 0 ] || cat >/dev/null 2>&1 || true
+command -v jq >/dev/null 2>&1 || exit 0
+[ -f "$runs/lock" ] || exit 0
+
+id=$(jq -r '.id // empty' "$runs/lock" 2>/dev/null) || exit 0
+id_re='^r-[0-9]{8}-[0-9]{6}$'
+[[ "$id" =~ $id_re ]] || exit 0
+run="$runs/$id/run.json"
+[ -f "$run" ] || exit 0
+status=$(jq -r '.status // empty' "$run" 2>/dev/null) || exit 0
+next=$(jq -r '.next // empty' "$run" 2>/dev/null) || exit 0
+
+if [ "$status" = "waiting" ]; then
+  printf 'run %s · waiting at %s\n' "$id" "$next"
+  exit 0
+fi
+[ "$status" = "running" ] || exit 0
+pid=$(jq -r '.pid // empty' "$runs/lock" 2>/dev/null) || exit 0
+pid_re='^[1-9][0-9]*$'
+[[ "$pid" =~ $pid_re ]] && kill -0 "$pid" 2>/dev/null || exit 0
+
+now="$runs/$id/now.json"
+[ -f "$now" ] || exit 0
+step=$(jq -r '.step // empty' "$now" 2>/dev/null) || exit 0
+# ISO time with milliseconds → seconds; jq does the parsing, so BSD and GNU date do not differ.
+since=$(jq -r '.since | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601' "$now" 2>/dev/null) || exit 0
+last=$(jq -r '.last // ""' "$now" 2>/dev/null) || exit 0
+cost=$(jq -r '.costUsd // 0' "$run" 2>/dev/null) || exit 0
+[ -n "$step" ] && [ -n "$since" ] || exit 0
+
+elapsed=$(($(date +%s) - ${since%.*}))
+[ "$elapsed" -lt 0 ] && elapsed=0
+last=$(printf '%s' "$last" | sed 's/^[[:space:]·]*//')
+printf 'run %s · %s · %d:%02d · $%.2f · %s\n' "$id" "$step" $((elapsed / 60)) $((elapsed % 60)) "$cost" "$last"

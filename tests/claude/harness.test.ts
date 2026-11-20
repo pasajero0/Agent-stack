@@ -89,10 +89,28 @@ describe("buildHarnessFiles", () => {
     expect(t).toContain("Do no step's work yourself");
     expect(t).toContain("Do not run `agent-stack update`");
     expect(t).toContain("Never merge, push or open a pull request yourself");
+    expect(t).toContain("Never run the driver inside a Monitor command");
+    expect(t).toContain("Show the spec short");
     expect(t).toContain("A later fix is a new run");
     expect(t).toContain("not translated");
     expect(t).toContain("language.chat");
     expect(t).toMatch(/report in the chat language: what was done, the commits .* the cost from the run/);
+  });
+
+  it("0.4.3: the spec template asks for constraints, and grill and spec-reviewer ask about attacks and limits", () => {
+    const template = byPath(".claude/skills/spec/template.md")!.content;
+    expect(template).toContain("## Constraints");
+    expect(template.indexOf("## Constraints")).toBeLessThan(template.indexOf("## Acceptance criteria"));
+    for (const line of ["**Must not:**", "**Must keep:**", "**When goals conflict:**"]) expect(template).toContain(line);
+    expect(byPath(".claude/skills/spec/light-template.md")!.content).toContain("**Must not:**");
+    expect(byPath(".claude/skills/spec/SKILL.md")!.content).toMatch(/\*\*Constraints\*\* — fill `## Constraints`/);
+    const grill = byPath(".claude/skills/grill/SKILL.md")!.content.replace(/\s+/g, " ");
+    expect(grill).toContain("injection (SQL, shell), path traversal");
+    expect(grill).toContain("fill the spec's `## Constraints`");
+    const rubric = byPath(".claude/agents/spec-reviewer.md")!.content.replace(/\s+/g, " ");
+    expect(rubric).toContain("Contract, Constraints, Acceptance criteria");
+    expect(rubric).toContain("Constraints are checkable");
+    expect(rubric).toContain("secrets in logs and error messages");
   });
 
   it("ships the spec-driven skills with their templates", () => {

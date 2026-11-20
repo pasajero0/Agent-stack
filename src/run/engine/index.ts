@@ -16,6 +16,7 @@ import {
   newRunId,
   pidAlive,
   readLock,
+  readRun,
   readRunStrict,
   releaseLock,
   runDir,
@@ -26,6 +27,9 @@ import type { Mode, RunConfig, RunFile } from "../types.js";
 import { findTask, type Ctx, type ModeSteps } from "./context.js";
 import { cancelledText, costText } from "./gates.js";
 import { runLoop, type ExitCode } from "./loop.js";
+import { Progress } from "./progress.js";
+import { estimate, times } from "./timing.js";
+import { watchView } from "./watch.js";
 import { quickMode } from "./steps-quick.js";
 import { taskMode } from "./steps-task.js";
 import { parseNext } from "./transitions.js";
@@ -90,6 +94,7 @@ async function drive(o: EngineOptions, cfg: RunConfig, run: RunFile, mode: ModeS
     out: outOf(o),
     env,
     signal: o.signal ?? new AbortController().signal,
+    progress: new Progress(o.projectDir, run.id, run.next),
   };
   try {
     before?.(ctx);
@@ -162,9 +167,13 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       costUsd: 0,
       costUnknownCalls: 0,
       card: null,
+      steps: [],
+      estimateSec: null,
       calls: 0,
       fuse: cfg.fuse,
     };
+    // AC-81: a quick run is one task; a task run is estimated at gate:plan-approve, when its tasks are known.
+    if (o.mode === "quick") run.estimateSec = estimate(dir, run, 1)?.sec ?? null;
     // AC-1: folder and run file first, then the lock; a lost lock removes the folder again (AC-50).
     createRunDir(dir, id);
     writeRun(dir, run);
@@ -294,7 +303,7 @@ function statusJson(dir: string, id: string | undefined): string {
   }
   const attempts = Object.fromEntries(run.tasks.map((t) => [t.id, t.attempts]));
   const out = {
-    run: { id: run.id, mode: run.mode, status: run.status, next: run.next, branch: run.branch, attempts, calls: run.calls, costUsd: run.costUsd, costUnknownCalls: run.costUnknownCalls, fuse: run.fuse },
+    run: { id: run.id, mode: run.mode, status: run.status, next: run.next, branch: run.branch, attempts, calls: run.calls, costUsd: run.costUsd, costUnknownCalls: run.costUnknownCalls, fuse: run.fuse, ...times(run), estimateSec: run.estimateSec },
     // A live or interrupted run waits at no gate, even while a terminal prompt is open.
     card: run.status === "waiting" ? run.card : null,
     language,
@@ -353,4 +362,44 @@ export function abortOnSignals(): { signal: AbortSignal; dispose: () => void } {
       process.off("SIGTERM", on);
     },
   };
+}
+
+/**
+ * `run --watch` (AC-82): the run live, read only. At a terminal it redraws once a second until the run is
+ * finished or cancelled, or the signal aborts (Ctrl-C); without one it prints the view once. Always exit 0.
+ */
+export async function watchRun(o: EngineOptions & { id?: string; write?: (text: string) => void }): Promise<ExitCode> {
+  const dir = o.projectDir;
+  const out = outOf(o);
+  const id = o.id ?? readLock(dir)?.id;
+  if (!id) {
+    out(`No run holds the lock. Name one: ${commandName()} run --watch <run id>.`);
+    return 0;
+  }
+  const first = watchView(dir, id);
+  if (first === null) {
+    out(`Run ${id} does not exist.`);
+    return 0;
+  }
+  if (!(o.isTTY ?? Boolean(process.stdout.isTTY))) {
+    out(first);
+    return 0;
+  }
+  const write = o.write ?? ((text: string) => process.stdout.write(text));
+  const signal = o.signal ?? new AbortController().signal;
+  for (;;) {
+    const view = watchView(dir, id) ?? first;
+    // Clear the screen and draw from the top, so the view stays in one place.
+    write(`\u001b[2J\u001b[H${view}\n`);
+    const run = readRun(dir, id);
+    if (!run || run.status === "finished" || run.status === "cancelled" || signal.aborted) return 0;
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, 1000);
+      signal.addEventListener("abort", () => {
+        clearTimeout(t);
+        resolve();
+      }, { once: true });
+    });
+    if (signal.aborted) return 0;
+  }
 }

@@ -71,7 +71,9 @@ export async function roleCall<T>(
     run.calls += 1;
     writeRun(ctx.projectDir, run);
     const limit = run.fuse !== "off" && "calls" in run.fuse ? `/${run.fuse.calls}` : "";
-    ctx.out(`-> ${run.next} · ${role} · ${model} · call ${run.calls}${limit} ...`);
+    const head = `-> ${run.next} · ${role} · ${model} · call ${run.calls}${limit} ...`;
+    ctx.out(head);
+    ctx.progress.line(head);
     const started = Date.now();
     const o = await callClaude(spec(ctx, target, model), {
       cwd: ctx.projectDir,
@@ -83,11 +85,17 @@ export async function roleCall<T>(
       env: ctx.env,
       validate: (v) => validateOutput(role, v),
       signal: ctx.signal,
+      onTool: (line) => {
+        ctx.out(line);
+        ctx.progress.line(line);
+      },
     });
     // AC-62: an unknown cost is counted apart, never as $0.
     if (o.costUsd === null) run.costUnknownCalls += 1;
     else run.costUsd += o.costUsd;
-    ctx.out(`   ${o.kind} in ${Math.round((Date.now() - started) / 1000)}s`);
+    const end = `   ${o.kind} in ${Math.round((Date.now() - started) / 1000)}s`;
+    ctx.out(end);
+    ctx.progress.line(end);
     switch (o.kind) {
       case "aborted":
         throw new Interrupted();

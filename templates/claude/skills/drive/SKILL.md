@@ -35,12 +35,22 @@ Use `agent-stack` when `command -v agent-stack` finds it. Otherwise take the com
 1. **Start.** Pick the mode: `run quick` for a small fix, `run task` for anything with behaviour to specify. If
    unsure, ask the human. Run `<cmd> run task "<the request in one sentence>"` **in the background** and wait for
    the completion notice; a step takes minutes, and a killed command interrupts the run. Do not poll.
+   Write the driver's output to a file (`> <file> 2>&1`) in that background job. **Never run the driver inside a
+   Monitor command:** stopping the watch would stop the run.
+   **Keep the human informed while it runs.** Follow that file with the Monitor tool (`tail -f`), filtered to the
+   lines that start with `->` (a step's call starts) or `   ok in` / `   <kind> in` (it ends). Tell the human one
+   short line for each: "implement:T1 started (sonnet)", "done in 90s". Not each tool line: those are for the
+   status line and the log. Without a Monitor tool, say once that the run is going and how long a step usually
+   takes. The status line (`.claude/bin/run-status`, see README) shows the step, its time and the cost. When a
+   run starts, give the human the live view once: `<cmd> run --watch` in a terminal next to this chat.
 2. **At each stop** (exit 3), run `<cmd> run --status --json`. Show the `card` in the chat language:
    - one line: what happened (the title);
    - the facts that matter for the decision, in plain words (for a plan: each task, its model and its verify);
    - what is needed from the human, the answers it takes, and your recommendation with one reason.
-   At gate:spec-merge the card has no answers: show the human the merge command from the card and let them run
-   it; when they say it is done, resume without `--answer`.
+   At gate:spec-merge the card has no answers. Show the spec short, so the human can decide without reading the
+   file in a terminal: its purpose in one or two lines, each criterion in one line, the constraints, what is out
+   of scope, and a link to the spec file (it is in the working tree on the spec branch). Then show the merge
+   command from the card and let the human run it; when they say it is done, resume without `--answer`.
 3. **Pass the answer** with `<cmd> run --resume <id> --answer "<line>"`, again in the background:
    - a key the human typed (`a`, `r fix X`, `f 60`, `c`) as it is;
    - a clear worded reply as the key it means, and say which key you sent ("sent `a` — approve");

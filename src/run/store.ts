@@ -17,6 +17,7 @@ import type {
   RunFile,
   RunStatus,
   RunTask,
+  StepTime,
 } from "./types.js";
 
 /**
@@ -205,6 +206,11 @@ function card(v: unknown, f: string): GateCard | null {
   };
 }
 
+function stepTime(v: unknown, f: string): StepTime {
+  const o = obj(v, f);
+  return { step: next(o.step, `${f}.step`), start: str(o.start, `${f}.start`), end: strOrNull(o.end, `${f}.end`) };
+}
+
 /** Field-by-field check of a parsed run file; throws `Malformed(<field>)`. */
 function toRunFile(v: unknown, id: string): RunFile {
   const o = obj(v, "run.json");
@@ -235,6 +241,9 @@ function toRunFile(v: unknown, id: string): RunFile {
     calls: count(o.calls, "calls"),
     fuse: parseFuse(o.fuse) ?? bad("fuse"),
     card: card(o.card, "card"),
+    // AC-81: a run file from before these fields has no times.
+    steps: o.steps === undefined ? [] : arr(o.steps, "steps", stepTime),
+    estimateSec: o.estimateSec === undefined || o.estimateSec === null ? null : count(o.estimateSec, "estimateSec"),
   };
 }
 

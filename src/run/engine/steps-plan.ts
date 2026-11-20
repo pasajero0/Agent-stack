@@ -12,6 +12,7 @@ import { writeRun } from "../store.js";
 import type { GateRecord, RunFile } from "../types.js";
 import { judgeCall } from "./call.js";
 import { newTask, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
+import { estimate, estimateText } from "./timing.js";
 import { A, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
 import { ask, comment, humanFeedback, NO_INPUT, recordGate } from "./gates.js";
 import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, tasksPath, type PlanTask } from "./plan-file.js";
@@ -135,14 +136,18 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
     f.whole(`      verify: ${t.verify}`);
     // AC-77: Claude Code allows no command substitution by a rule, so --allowedTools never lets implement run it.
     if (/\$\(|`/.test(t.verify)) {
-      f.add("      note: implement cannot run this verify itself (Claude Code does not allow command substitution by a rule); the driver's checks still run it");
+      f.whole("      note: implement cannot run this verify itself (Claude Code does not allow command substitution by a rule); the driver's checks still run it");
     }
   }
-  f.add(`full task text: ${relative(ctx.projectDir, tasksPath(ctx.projectDir, stage))}`);
+  f.add(`full task text: ${relative(ctx.projectDir, tasksPath(ctx.projectDir, stage))}`, `branch: ${ctx.run.branch}`);
+  // AC-81: the work time this plan should take, from the earlier runs in this repo.
+  const e = estimate(ctx.projectDir, ctx.run, tasks.length);
+  ctx.run.estimateSec = e?.sec ?? null;
+  f.add(estimateText(e));
   f.whole(...decisionFacts(ctx));
   return {
     gate: "plan-approve",
-    title: `Plan ${stage}: ${tasks.length} task(s), run ${ctx.run.id} on ${ctx.run.branch}`,
+    title: `Plan ${stage}: ${tasks.length} task(s)`,
     facts: f.list,
     keep: f.keep,
     prompts: [{ text: "approve the plan; each verify runs as written", default: null, answers: [A.approve, { ...A.reject, label: "reject (a comment follows; the plan is redone)" }, A.cancel] }],
