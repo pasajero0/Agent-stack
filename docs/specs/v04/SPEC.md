@@ -101,11 +101,13 @@ word for this spec only is marked `(local)`.
   Tests the task adds after its base are not frozen.
 - **Check config** (local): a file that decides how checks run: `.github/workflows/*`, `.gitlab-ci.yml`,
   `vitest.config.*`, `vitest.workspace.*`, `jest.config.*`, `playwright.config.*`, `eslint.config.*`, `.eslintrc*`,
-  `biome.json`, `biome.jsonc`, `pytest.ini`, `tox.ini`, `ruff.toml`, `.ruff.toml`, `.golangci.*`, `clippy.toml`.
-- **Package manifest** (local): a `package.json` at any depth. The driver compares two parts of it with the
-  task's base: `scripts`, since a check command like `pnpm test` runs the script of that name; and the dependency
+  `biome.json`, `biome.jsonc`, `pytest.ini`, `tox.ini`, `ruff.toml`, `.ruff.toml`, `.golangci.*`, `clippy.toml`,
+  `pnpm-workspace.yaml`.
+- **Package manifest** (local): a `package.json` at any depth. The driver compares three parts of it with the
+  task's base: `scripts`, since a check command like `pnpm test` runs the script of that name; the dependency
   entries — `dependencies`, `devDependencies`, `optionalDependencies`, `peerDependencies`, `overrides`,
-  `resolutions` and `pnpm.overrides`. A manifest the task adds compares with an empty one.
+  `resolutions` and `pnpm.overrides`; and the check settings it holds — `jest`, `eslintConfig`, `mocha`, `ava`.
+  A manifest the task adds compares with an empty one.
 - **Diff lines** (local): added plus deleted lines of the task diff (`git diff --numstat`), plus all lines of each
   untracked file.
 - **Clean tree** (local): `git status --porcelain`, excluding `.claude/tmp/`, is empty.
@@ -666,11 +668,14 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     change: `deleted test file a.test.ts`, `a.test.ts: assertions 12 → 10`, `changed check config vitest.config.ts
     (now 1a2b3c4)`, `deleted check config jest.config.js`. The run file keeps the list.
   - The same holds for a package manifest: a script of the base changed or removed, a dependency entry added or
-    changed, or a manifest that is no longer valid JSON. The lines: `changed script test in package.json (now: node
-    --test || true)`, `deleted script lint in package.json`, `new dependency left-pad in package.json
-    (dependencies: ^1.3.0)`, `changed dependency vitest in package.json (devDependencies: ^2.0.0 → ^3.0.0)`,
-    `package.json is not valid JSON (now 1a2b3c4)`. A shown value longer than 80 characters is cut and ends with its
-    content hash, so a later edit is still a new line. A new script and a removed dependency do not stop the run.
+    changed, a check setting added, changed or removed, or a manifest that is no longer valid JSON. The lines:
+    `changed script test in package.json (now: node --test || true)`, `deleted script lint in package.json`, `new
+    dependency left-pad in package.json (dependencies: ^1.3.0)`, `changed dependency vitest in package.json
+    (devDependencies: ^2.0.0 → ^3.0.0)`, `changed setting jest in package.json (now 1a2b3c4)`, `package.json is not
+    valid JSON (now 1a2b3c4)`. A shown value longer than 80 characters is cut and ends with its content hash, so a
+    later edit is still a new line. A control character in a value, a name or a path is shown as a space, and the
+    text ends with its hash, so a name cannot hide or fake a line. A new script and a removed dependency do not
+    stop the run.
   - `a` allows exactly the changes listed, as the run file keeps them; the run goes on to the checks. A change that
     is not on the list stops again: one made while the gate waited, or a later edit of an allowed check config
     (its content hash differs). Gate:accept shows the allowed changes (AC-21).
@@ -782,7 +787,9 @@ Manual check, once, with the real `claude` on a scratch repo:
 - 2026-11-20 — AC-66, Package manifest (new term): the frozen check also compares `package.json`. The driver's
   checks run `pnpm test`, and `scripts.test` decides what that does, so `"test": "node --test || true"` made every
   check green without touching a test. A new dependency stops too: under the driver the human saw it only in the
-  diff at gate:accept.
+  diff at gate:accept. From review: the check settings `package.json` holds (`jest`, `eslintConfig`, `mocha`,
+  `ava`) and `pnpm-workspace.yaml` (overrides, catalog versions) are compared too; a control character in a name
+  or a path is cleaned, as in a value, since it could hide a line the human then allows.
 - 2026-11-19 — AC-67, Role prompts (review), from review: an empty or out-of-date agent file exits 1 instead of
   running silently; the review gets the task's verify; the task review judges only the given criteria; the
   missing-file hint says `update`, since `generate` refuses an existing harness.
