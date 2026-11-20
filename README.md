@@ -50,7 +50,7 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 ├── bin/health             # code-health SLIs on the branch's changes vs SLOs; time series in tmp/health.jsonl
 ├── agents/                # spec-reviewer, implementer, test-writer, code-reviewer, task-analyzer,
 │                          # researcher, pattern-scout — each with a model and effort level
-├── skills/                # grill, adr, spec (full + light template), plan, migration, mr-description
+├── skills/                # grill, adr, spec (full + light template), plan, drive, migration, mr-description
 │                          # + reference docs to fill in (update keeps your edits)
 ├── commands/              # /reflect, /review
 └── rules/                 # EMPTY by design — generate per repo with pattern-scout
@@ -121,6 +121,8 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `slo` | code-health limits on changed files: `maxFileLines` (400), `newDependencies` (null = report only) |
 | `health` | project metrics: `[{"name": "complexity", "command": "… {files} …", "max": 0}]` — detected for ESLint and ruff |
 | `docsLayout` | where Markdown files belong; `health` lists a changed `.md` outside these globs (a hint, never a block). Root-level `*.md` always fits. Set for a monorepo (see below), empty otherwise |
+| `codeBy` | `"driver"`: only a live `agent-stack run` call may edit code; a chat runs the work with `/drive`. Default `"anyone"`. Optional, not in the seed |
+| `language` | the operator chat's language: `{ "chat": "ru", "terms": "en" }`; both default to `en`. Optional, not in the seed |
 | `layers` | architecture boundaries, empty until an ADR sets them: `[{"name": "domain stays pure", "files": ["src/domain/*"], "forbid": ["infra/"], "adr": "docs/adr/0003-layers.md"}]` |
 
 **Default doc layout for a monorepo** (workspaces — pnpm, npm/yarn, `go.work`, Cargo — or an `apps/` or
@@ -152,8 +154,8 @@ inside the step it is given. Design: [ADR 0001](docs/adr/0001-pipeline-driver.md
 ```text
 agent-stack run quick "<description>"                  a small fix
 agent-stack run task [--stage <id>] "<description>"    a spec, a plan and one or two tasks
-agent-stack run --resume [<run id>]                    continue a waiting or interrupted run
-agent-stack run --status [<run id>]                    print the run; change nothing
+agent-stack run --resume [<run id>] [--answer <text>]… continue a waiting or interrupted run
+agent-stack run --status [<run id>] [--json]           print the run; change nothing
 agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
 ```
 
@@ -179,8 +181,10 @@ implement call. The driver runs the checks (the test command, plus lint on chang
    reaches the driver too.
 5. **You decide** at gate `accept`: accept (the run finishes) or reject with a comment, which adds a fix task.
 
-**Gates.** At a terminal, answers are read from the prompt; `c` cancels at any gate. With no terminal the run
-is recorded as waiting and exits. A gate `limit` appears when attempts run out, a task is BLOCKED, the review
+**Gates.** Each gate prints one short card: a title, the facts, what is needed from you and the answers it
+takes. The run file keeps the card, and `--status --json` gives the same card to a program. At a terminal,
+answers are read from the prompt; `c` cancels at any gate. With no terminal the run is recorded as waiting and
+exits. A gate `limit` appears when attempts run out, a task is BLOCKED, the review
 loop does not improve, or the fuse is reached: `r` retries, `f <n>` raises the fuse, `c` cancels. When the spec
 or plan role asks you something instead of doing its job, gate `limit` (reason `decision`) shows the question:
 `r` and your answer re-run the role with it.
@@ -196,7 +200,16 @@ Before gate `accept`, a task run with more than one task runs every
 task's verify once more and marks a red result.
 
 **Exit codes.** `0`: finished, cancelled or `--status`. `3`: waiting at the spec-merge gate, or at any gate
-without a terminal. `1`: a refusal or an error; the message says what to do.
+without a terminal or after `--answer`. `1`: a refusal or an error; the message says what to do.
+
+**From a chat.** In Claude Code, `/drive <what to build>` makes the chat an operator: it starts the run, shows
+you each gate card in your language, passes your answer with `--resume <id> --answer "<line>"` (`""` is Enter;
+one `--resume` answers one gate, and extra or wrong answers apply nothing), and reports at the end. It does no
+step's work itself. To hold that with a hook, set `"codeBy": "driver"` in `.claude/gates.json`: then only a live
+driver call edits code (docs and `.claude/` stay open). The chat speaks English unless
+`"language": { "chat": "ru", "terms": "en" }` says otherwise; terms, keys and commands are never translated.
+Hints print the command as you started it (`agent-stack run …`, or `node <path>/cli.mjs run …`). A run starts
+only on a harness from 0.4.1 on; with an older one it says to run `update` first.
 
 **Config.** The optional `run` key of `.claude/gates.json` (defaults live in code, so `update` need not touch it):
 
