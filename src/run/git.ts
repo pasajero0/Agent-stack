@@ -203,13 +203,20 @@ export function normaliseHeader(type: string, scope: string | null, subject: str
   return `${prefix}${text}`;
 }
 
-/** `[a-z0-9-]`, at most 40 characters, no leading or trailing dash; `run` when nothing is left. */
+/**
+ * `[a-z0-9-]`, at most 40 characters, no leading or trailing dash; `run` when nothing is left.
+ * A longer text is cut at the last whole word that fits (a single word over 40 is cut hard).
+ */
 export function slugify(text: string): string {
-  const slug = text
+  const full = text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+/, "")
-    .slice(0, 40)
     .replace(/-+$/, "");
+  let slug = full;
+  if (full.length > 40) {
+    const lastDash = full.lastIndexOf("-", 40);
+    slug = lastDash > 0 ? full.slice(0, lastDash) : full.slice(0, 40);
+  }
   return slug === "" ? "run" : slug;
 }
