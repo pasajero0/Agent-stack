@@ -11,6 +11,7 @@ import type { Ctx, ModeSteps } from "../../src/run/engine/context.js";
 import { runLoop } from "../../src/run/engine/loop.js";
 import { quickMode } from "../../src/run/engine/steps-quick.js";
 import { selectPrompter } from "../../src/run/gate.js";
+import { humanFeedback } from "../../src/run/engine/gates.js";
 import { BRANCH, DESC, impl, lines, makeFakeExecutable, repo, review, sh, text } from "./engine-fixture.js";
 
 beforeAll(makeFakeExecutable);
@@ -54,6 +55,22 @@ describe("quick mode: the path", () => {
     expect(task?.notes.join("\n")).toContain("name the file better");
     expect(r.logged().length).toBe(2);
     expect(sh(r.dir, "show", "--stat", "--format=%s", "HEAD")).toContain("notes.txt");
+  });
+
+  it("v04 AC-67: the review call gets the project's code-reviewer rules; without the agent the run exits 1 at review", async () => {
+    const r = repo({ run: { quickReviewLines: 3 } });
+    r.script([impl({ writes: { "notes.txt": lines(5) } }), review()]);
+    expect(await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC })).toBe(0);
+    expect(r.logged()[1]?.prompt).toContain("You are a code reviewer. For each file:");
+    expect(r.logged()[0]?.prompt).toContain("You implement one task.");
+
+    const r2 = repo({ run: { quickReviewLines: 3 } });
+    rmSync(join(r2.dir, ".claude/agents/code-reviewer.md"));
+    git(r2.dir, "commit", "-q", "-am", "chore: no reviewer");
+    r2.script([impl({ writes: { "notes.txt": lines(5) } })]);
+    expect(await startRun({ ...r2.opts(), mode: "quick", description: DESC })).toBe(1);
+    expect(r2.run().next).toBe("review:Q1");
+    expect(text(r2)).toMatch(/agent not found: .*code-reviewer\.md \(run agent-stack update\)/);
   });
 
   it("v04 AC-25: a diff within quickReviewLines skips the review", async () => {
@@ -181,6 +198,112 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(run.status).toBe("finished");
     expect(run.tasks[0]?.attempts).toBe(2);
     expect(run.humanDecisions).toEqual([]);
+  });
+
+  it("v04 AC-64: TEST_CONFLICT goes to gate:limit (test-conflict); r with an answer retries on the same model, no attempt counted", async () => {
+    const r = repo();
+    const conflict = { test: "tests/readme.test.ts:has the line", criterion: "the README says fixed", reason: "the test wants broken" };
+    r.script([
+      impl({ status: "TEST_CONFLICT", conflict, writes: { "README.md": "# demo\nhalf\n" } }),
+      impl({ writes: { "README.md": "# demo\nfixed\n" } }),
+    ]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    let run = r.run();
+    expect(run.limitReason).toBe("test-conflict");
+    expect(run.next).toBe("gate:limit");
+    expect(run.tasks[0]?.attempts).toBe(1);
+    const out = text(r);
+    expect(out).toContain("reason: test-conflict");
+    expect(out).toContain("tests/readme.test.ts:has the line");
+    expect(out).toContain("the test wants broken");
+    expect(out).toMatch(/r retry \(your answer follows/);
+    // The attempt's edits are kept for the retry.
+    expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nhalf\n");
+
+    const code = await resumeRun({ ...r.opts({ gate: ["r the test is right, follow it", "a"] }) });
+    expect(code, text(r)).toBe(0);
+    run = r.run();
+    expect(run.status).toBe("finished");
+    expect(run.tasks[0]?.attempts).toBe(1);
+    const g = run.gates.find((x) => x.gate === "gate:limit");
+    expect(g).toMatchObject({ decision: "retry", comment: "the test is right, follow it", reason: "test-conflict" });
+    // The answer is the implementer's: a spec or plan role never reads it as FROM THE HUMAN (AC-57).
+    expect(g && humanFeedback({ ...run, gates: [g] })).toBeNull();
+    const prompt = r.logged()[1]?.prompt ?? "";
+    expect(prompt).toContain("FROM THE HUMAN: the test is right, follow it");
+    expect(prompt).toContain("the test wants broken");
+  });
+
+  it("v04 AC-64: TEST_CONFLICT without its conflict is a schema mismatch, not a gate", async () => {
+    const r = repo();
+    r.script([impl({ status: "TEST_CONFLICT" }), impl({ status: "TEST_CONFLICT" })]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(1);
+    expect(r.run().limitReason).toBeNull();
+    expect(r.run().next).toBe("implement:Q1");
+  });
+
+  it("v04 AC-66: a deleted frozen test stops at gate:limit (tests-changed); a allows it, and gate:accept lists it", async () => {
+    const r = repo();
+    write(r.dir, "tests/readme.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n});\n');
+    git(r.dir, "add", "-A");
+    git(r.dir, "commit", "-q", "-m", "test: readme");
+    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" }, deletes: ["tests/readme.test.ts"] })]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    let run = r.run();
+    expect(run.limitReason).toBe("tests-changed");
+    expect(run.returnTo).toBe("checks:Q1");
+    expect(text(r)).toContain("deleted test file tests/readme.test.ts");
+    expect(text(r)).toMatch(/a allow/);
+
+    const code = await resumeRun({ ...r.opts({ gate: ["a", "a"] }) });
+    expect(code, text(r)).toBe(0);
+    run = r.run();
+    expect(run.status).toBe("finished");
+    expect(run.tasks[0]?.attempts).toBe(1);
+    expect(run.tasks[0]?.allowedChanges).toEqual(["deleted test file tests/readme.test.ts"]);
+    expect(run.gates.map((g) => `${g.gate} ${g.decision}`)).toEqual(["gate:limit allow", "gate:accept accept"]);
+    expect(text(r)).toContain("test change allowed: deleted test file tests/readme.test.ts");
+  });
+
+  it("v04 AC-66: a allows only the changes listed; one made while the gate waited stops again", async () => {
+    const r = repo();
+    write(r.dir, "tests/a.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n});\n');
+    write(r.dir, "tests/b.test.ts", 'it("b", () => {\n  expect(1).toBe(1);\n});\n');
+    git(r.dir, "add", "-A");
+    git(r.dir, "commit", "-q", "-m", "test: two");
+    r.script([impl({ writes: { "README.md": "# demo\nfixed\n" }, deletes: ["tests/a.test.ts"] })]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    expect(r.run().tasks[0]?.pendingChanges).toEqual(["deleted test file tests/a.test.ts"]);
+    rmSync(join(r.dir, "tests/b.test.ts"));
+    expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(3);
+    const run = r.run();
+    expect(run.tasks[0]?.allowedChanges).toEqual(["deleted test file tests/a.test.ts"]);
+    expect(run.limitReason).toBe("tests-changed");
+    expect(run.tasks[0]?.pendingChanges).toEqual(["deleted test file tests/b.test.ts"]);
+  });
+
+  it("v04 AC-66: r at gate:limit (tests-changed) is a new attempt on Opus with the list and the comment", async () => {
+    const r = repo();
+    write(r.dir, "tests/readme.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n  expect(2).toBe(2);\n});\n');
+    git(r.dir, "add", "-A");
+    git(r.dir, "commit", "-q", "-m", "test: readme");
+    r.script([
+      impl({ writes: { "README.md": "# demo\nfixed\n", "tests/readme.test.ts": 'it("a", () => {\n  expect(1).toBe(1);\n});\n' } }),
+      impl({ model: "opus", writes: { "tests/readme.test.ts": 'it("a", () => {\n  expect(1).toBe(1);\n  expect(2).toBe(2);\n});\n' } }),
+    ]);
+    expect(await startRun({ ...r.opts(), mode: "quick", description: DESC })).toBe(3);
+    expect(text(r)).toContain("tests/readme.test.ts: assertions 2 → 1");
+    const code = await resumeRun({ ...r.opts({ gate: ["r keep both assertions", "a"] }) });
+    expect(code, text(r)).toBe(0);
+    const run = r.run();
+    expect(run.tasks[0]?.attempts).toBe(2);
+    expect(run.tasks[0]?.allowedChanges).toEqual([]);
+    const g = run.gates.find((x) => x.gate === "gate:limit");
+    expect(g).toMatchObject({ decision: "retry", comment: "keep both assertions", reason: "tests-changed" });
+    expect(g && humanFeedback({ ...run, gates: [g] })).toBeNull();
+    const prompt = r.logged()[1]?.prompt ?? "";
+    expect(prompt).toContain("tests/readme.test.ts: assertions 2 → 1");
+    expect(prompt).toContain("FROM THE HUMAN: keep both assertions");
   });
 
   it("v04 AC-38: an implement call stopped at max turns is a failed attempt; its edits stay for the next one", async () => {

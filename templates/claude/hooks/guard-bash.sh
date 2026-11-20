@@ -93,10 +93,79 @@ while IFS= read -r seg; do
   done
 done < <(printf '%s\n' "$cmd" | tr ';&|' '\n\n\n')
 
+# JS package managers, read word by word (V17): a bare install (`install`, `i -w`, a bare `yarn`) adds whatever
+# package.json names, also a package the agent just wrote there, and so does `update`/`up`. From the lockfile
+# only nothing new comes in: --frozen-lockfile, --immutable (yarn only), `ci` (FROZEN_OK). Global flags
+# (`-C dir`, `--filter x`), redirects (`2>&1`, `> log`) and `corepack` are skipped, so they hide nothing. The
+# same in every repo and fixed here, not in installPatterns, so `update` brings it to existing repos.
+JS_PMS='|pnpm|npm|yarn|bun|'
+FROZEN_OK='|pnpm:lock|bun:lock|yarn:lock|yarn:immutable|'
+BARE_MSG="A bare install may add packages that are not in the lockfile, such as one just written to package.json. Install from the lockfile: add --frozen-lockfile (yarn: --immutable; npm: use ci); a new package needs the human's yes."
+ADD_MSG="This command installs or updates packages from outside the repo. Confirm first."
+js_word() { # strip quotes, brackets and command-substitution marks around a word
+  local w=$1
+  w=${w#"${w%%[!\$\(\{\`\!]*}"}
+  w=${w//\"/}; w=${w//\'/}; w=${w//\`/}; w=${w//\(/}; w=${w//\)/}
+  printf '%s' "$w"
+}
+while IFS= read -r seg; do
+  read -r -a words <<<"$seg" || true
+  n=${#words[@]}
+  i=0
+  pm=""
+  while [ "$i" -lt "$n" ]; do
+    w=$(js_word "${words[$i]}")
+    i=$((i + 1))
+    case "$w" in
+      ''|env|command|exec|nohup|time|sudo|then|do|else|corepack|*=*) continue ;;
+      bash|sh|zsh) [ "$i" -lt "$n" ] && [ "${words[$i]}" = "-c" ] && i=$((i + 1)); continue ;;
+    esac
+    case "$JS_PMS" in *"|$w|"*) pm=$w ;; esac
+    break
+  done
+  [ -n "$pm" ] || continue
+  sub="" pkgs=0 frozen="" info=""
+  while [ "$i" -lt "$n" ]; do
+    w=$(js_word "${words[$i]}")
+    i=$((i + 1))
+    case "$w" in
+      '') ;;
+      '>'|'>>'|'<'|'2>'|'2>>'|'&>'|'&>>') i=$((i + 1)) ;;
+      [0-9]'>'*|'>'*|'<'*|'&>'*) ;;
+      --frozen-lockfile|--frozen-lockfile=true) frozen=lock ;;
+      --immutable) frozen=immutable ;;
+      -v|--version|-h|--help) info=1 ;;
+      -C|--dir|--filter|-F|--prefix|--cwd|--workspace|-w)
+        # The value of a global flag, unless it is the subcommand itself (`-w install`).
+        if [ "$i" -lt "$n" ]; then
+          case "$(js_word "${words[$i]}")" in install|i|add|up|update|upgrade|ci) ;; *) i=$((i + 1)) ;; esac
+        fi ;;
+      -*) ;;
+      *) if [ -z "$sub" ]; then sub=$w; else pkgs=$((pkgs + 1)); fi ;;
+    esac
+  done
+  case "$sub" in
+    add) if [ "$pkgs" -gt 0 ]; then decide_ask "$ADD_MSG"; fi ;;
+    up|update|upgrade) decide_ask "$ADD_MSG" ;;
+    install|i|'')
+      # A bare word is only an install for yarn, and not `yarn -v` / `yarn --help`.
+      if [ -z "$sub" ] && { [ "$pm" != yarn ] || [ -n "$info" ]; }; then continue; fi
+      if [ "$pkgs" -gt 0 ]; then decide_ask "$ADD_MSG"; fi
+      case "$FROZEN_OK" in
+        *"|$pm:$frozen|"*) ;;
+        *) decide_ask "$BARE_MSG" ;;
+      esac ;;
+  esac
+# `(` and backticks split too, so `echo $(… install)` is its own command.
+done < <(printf '%s\n' "$cmd" | tr ';&|(`' '\n\n\n\n\n')
+
+# Redirects are not package names: `install --frozen-lockfile 2>&1 | tail` must not read `2` as one.
+cmd_plain=$(printf '%s' "$cmd" | sed -E 's/[0-9]*(>>?|<|&>>?)(&[0-9-]+|[[:space:]]*[^[:space:];&|<>()]+)?//g')
+
 # Installing anything from outside: ask in interactive mode, never in autonomous mode.
 while IFS= read -r pat; do
   [ -z "$pat" ] && continue
-  if printf '%s' "$cmd" | grep -Eq "${CMD_START}(${pat})"; then
+  if printf '%s' "$cmd_plain" | grep -Eq "${CMD_START}(${pat})"; then
     if [ "$(gate_get '.mode')" = "autonomous" ]; then
       echo "Blocked: autonomous mode never installs anything. Record it under NEEDS HUMAN DECISION and move on." >&2
       exit 2

@@ -29,6 +29,9 @@ it here first.
 - **Every block has a test, and a legitimate input beside it.**
 - **Build only from a recorded miss.** A new mechanism needs a failure it would have prevented, or a need of
   the stage. Parts nobody uses are measured (`agent-stack usage`) and removed.
+- **One source of rules.** A rule lives in one place: a skill or an agent. The driver's steps load them and add
+  only data and bounds, so a fix to an agent reaches the driver too. Recorded miss: the driver's own review
+  text missed the agent's later fixes.
 - **The harness is stack-agnostic.** Stack-specific settings live in `.claude/gates.json`; fixed checks that
   are the same for every project live in the hooks, so `update` can deliver them.
 
@@ -81,8 +84,13 @@ it here first.
   blows: one more attempt (on Opus), raise the fuse (only when the fuse blew), or cancel.
   - **Decision** reason: the spec or plan role asked the human instead of doing its job. The human answers,
     and the role runs again with its questions and the answer. A blind re-run would only ask again.
+  - **Test conflict** reason: the implementer found an existing test or verify that contradicts a criterion,
+    and left it alone. The human fixes the test or the spec, or answers; no attempt is counted.
+  - **Tests changed** reason: the task deleted or weakened a test that was there before it, or changed a check
+    config (CI, test or lint settings). The human allows the change or sends the task back.
 - **Role** — what one Claude call is asked to be: clarify, spec, plan, implement or review. Each role has
-  its own tools, model and output schema. The role returns data, and the driver writes the files it owns,
+  its own tools, model and output schema. Its rules come from the project's skill or agent, never from a copy
+  in the driver. The role returns data, and the driver writes the files it owns,
   such as `tasks.json` and the commits.
 - **Project-only call** — every call the driver makes loads only the project: its `.mcp.json`, project
   settings and CLAUDE.md. It loads nothing of the user's: no global CLAUDE.md, memory, plugins or account

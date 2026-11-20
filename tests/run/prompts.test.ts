@@ -6,13 +6,31 @@ import { RunError } from "../../src/run/errors.js";
 import {
   clarifyPrompt,
   criterionText,
+  conflictText,
   implementPrompt,
   isRisky,
+  loadAgent,
   loadSkill,
   planPrompt,
   reviewPrompt,
   specPrompt,
 } from "../../src/run/prompts.js";
+
+/** Whitespace as one space: agent files wrap their lines. */
+const flat = (t: string): string => t.replace(/\s+/g, " ");
+
+const AGENT = "---\nname: code-reviewer\nmodel: opus\n---\n\nYou are a code reviewer. RULE-X: every issue needs evidence.\n8. **Task review**: judge it.\n";
+
+/** A project with `.claude/agents/<name>.md`. */
+function agentProject(name = "code-reviewer", body = AGENT): string {
+  const dir = mkdtempSync(join(tmpdir(), "prompts-"));
+  mkdirSync(join(dir, ".claude", "agents"), { recursive: true });
+  writeFileSync(join(dir, ".claude", "agents", `${name}.md`), body);
+  return dir;
+}
+
+/** A project with the shipped implementer agent, as `generate` deploys it. */
+const IMPL = agentProject("implementer", readFileSync(new URL("../../templates/claude/agents/implementer.md", import.meta.url), "utf8"));
 
 function project(skill: string, body: string): string {
   const dir = mkdtempSync(join(tmpdir(), "prompts-"));
@@ -68,7 +86,7 @@ describe("role prompts", () => {
   });
 
   it("v04 AC-4: implement needs no test for a change to documentation only", () => {
-    const p = implementPrompt({ taskId: "Q1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } });
+    const p = flat(implementPrompt(IMPL, { taskId: "Q1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } }));
     expect(p).toMatch(/documentation only \(Markdown, comments, no behaviour\) needs no test; say so in the report/);
   });
 
@@ -85,8 +103,13 @@ describe("role prompts", () => {
     expect(first(clarifyPrompt({ description: "d", used: [] }))).toBe("# Role: clarify");
     expect(first(specPrompt(spec, { stage: "A1", title: "t", description: "d", answers: [] }))).toBe("# Role: spec");
     expect(first(planPrompt(plan, { stage: "A1", title: "t" }))).toBe("# Role: plan");
-    expect(first(implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } }))).toBe("# Role: implement");
-    expect(first(reviewPrompt({ taskId: "T1", taskDesc: "d", criteria: [], diff: "", report: "" }))).toBe("# Role: review");
+    expect(first(implementPrompt(IMPL, { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } }))).toBe("# Role: implement");
+    // v04 AC-64: a legal way out instead of changing a wrong test.
+    const p64 = flat(implementPrompt(IMPL, { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } }));
+    expect(p64).toMatch(/existing test, or the task's verify, contradicts a criterion/);
+    expect(p64).toContain("TEST_CONFLICT");
+    expect(p64).toMatch(/not written in this attempt/);
+    expect(first(reviewPrompt(agentProject(), { taskId: "T1", taskDesc: "d", criteria: [], diff: "", report: "", verify: "" }))).toBe("# Role: review");
   });
 
   it("v04 AC-4: spec embeds the skill, marks the answers as the grill, forbids commit", () => {
@@ -138,8 +161,28 @@ describe("role prompts", () => {
     expect(flat).toMatch(/under the driver \(`agent-stack run`\), a retry runs on Opus/i);
   });
 
+  it("v04 AC-65: the /plan skill says a verify must be able to fail, with the same patterns", () => {
+    const skill = readFileSync(new URL("../../templates/claude/skills/plan/SKILL.md", import.meta.url), "utf8");
+    const flat = skill.replace(/\s+/g, " ");
+    expect(flat).toMatch(/`verify` must be able to fail/);
+    for (const p of ["|| true", "|| :", "|| echo", "|| exit 0", "; true", "; exit 0", "set +e", "set +o errexit", "| tee", "| cat"]) {
+      expect(flat).toContain(`\`${p}\``);
+    }
+  });
+
+  it("v04 AC-64: the conflict text quotes the criterion it names, found by its id at the line start", () => {
+    const criteria = ["- **AC-1:** see AC-2: below", "- **AC-2:** greet with Hello", "- **AC-21:** other"];
+    const t = conflictText({ test: "a.test.ts:greets", criterion: "AC-2", reason: "wants Hi" }, criteria);
+    expect(t).toContain("Test: a.test.ts:greets");
+    expect(t).toContain("- **AC-2:** greet with Hello");
+    expect(t).not.toContain("see AC-2: below");
+    expect(t).not.toContain("AC-21");
+    expect(t).toContain("Reason: wants Hi");
+    expect(conflictText({ test: "t", criterion: "the README says fixed", reason: "r" }, [])).toContain("Criterion: the README says fixed");
+  });
+
   it("v04 AC-4: implement labels feedback FROM THE PROGRAM", () => {
-    const p = implementPrompt({
+    const p = implementPrompt(IMPL, {
       taskId: "T1",
       taskDesc: "do it",
       criteria: ["- **AC-1:** x"],
@@ -149,29 +192,107 @@ describe("role prompts", () => {
     expect(p).toContain("FROM THE PROGRAM");
     expect(p).toContain("lint failed");
     expect(p).toContain("- **AC-1:** x");
-    expect(p).toMatch(/failing test first/);
-    expect(p).toMatch(/do not commit/);
-    expect(implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } })).not.toContain(
+    expect(flat(p)).toMatch(/failing test first/);
+    expect(flat(p)).toMatch(/do not commit/);
+    expect(implementPrompt(IMPL, { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } })).not.toContain(
       "FROM THE PROGRAM"
     );
   });
 
   it("v04 AC-4: implement lists the shell commands it may run, from the same list as --allowedTools", () => {
     const commands = { test: "npm test", lint: "", verify: ".claude/bin/trace && npm test -- --test-name-pattern A2" };
-    const p = implementPrompt({ taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands });
+    const p = implementPrompt(IMPL, { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands });
     expect(p).toContain("- `npm test` (any arguments)");
     expect(p).toContain("- `git status`, `git diff`, `git log`, `git show` (any arguments)");
     expect(p).toContain("- `.claude/bin/trace && npm test -- --test-name-pattern A2` (exactly)");
     expect(p).toMatch(/anything else is denied, so do not try it/i);
-    expect(p).not.toContain("lint");
+    expect(p.slice(p.indexOf("Shell commands you may run"))).not.toContain("lint");
   });
 
   it("v04 AC-4: review labels the report UNVERIFIED CLAIMS FROM THE IMPLEMENTER", () => {
-    const p = reviewPrompt({ taskId: "T1", taskDesc: "d", criteria: ["c"], diff: "+line", report: "all good" });
+    const p = reviewPrompt(agentProject(), { taskId: "T1", taskDesc: "d", criteria: ["c"], diff: "+line", report: "all good", verify: "" });
     expect(p).toContain("UNVERIFIED CLAIMS FROM THE IMPLEMENTER");
     expect(p).toContain("all good");
     expect(p).toContain("+line");
     expect(p).toMatch(/verify proves/);
+  });
+
+  it("v04 AC-67: review takes its rules from the code-reviewer agent, without the frontmatter", () => {
+    const p = reviewPrompt(agentProject(), { taskId: "T1", taskDesc: "d", criteria: ["c"], diff: "+line", report: "r", verify: "" });
+    expect(p).toContain("RULE-X: every issue needs evidence.");
+    expect(p).toContain("Review rules (.claude/agents/code-reviewer.md):");
+    expect(p).not.toContain("name: code-reviewer");
+    expect(p).not.toContain("model: opus");
+    // The rules come before the data, so the role reads them first.
+    expect(p.indexOf("RULE-X")).toBeLessThan(p.indexOf("+line"));
+  });
+
+  it("v04 AC-67: implement takes its rules from the implementer agent and points at its driver mode", () => {
+    const p = implementPrompt(IMPL, { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } });
+    expect(p).toContain("Rules (.claude/agents/implementer.md); follow 'Under the driver':");
+    expect(p).toContain("You implement one task.");
+    expect(p).not.toContain("name: implementer");
+    expect(() => implementPrompt(agentProject(), { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } })).toThrow(
+      /agent not found: .*implementer\.md \(run agent-stack update\)/
+    );
+  });
+
+  it("v04 AC-67: the implementer agent has a chat mode and a driver mode; both have the test conflict exit", () => {
+    const agent = readFileSync(new URL("../../templates/claude/agents/implementer.md", import.meta.url), "utf8");
+    const flat = agent.replace(/\s+/g, " ");
+    expect(agent).toMatch(/^## In a chat$/m);
+    expect(agent).toMatch(/^## Under the driver$/m);
+    const chat = flat.slice(flat.indexOf("## In a chat"), flat.indexOf("## Under the driver"));
+    const driver = flat.slice(flat.indexOf("## Under the driver"));
+    expect(chat).toContain("Run `.claude/bin/verify <id>`");
+    expect(chat).toContain("STATUS: DONE | IN PROGRESS | BLOCKED | TEST_CONFLICT");
+    expect(driver).toMatch(/never run `\.claude\/bin\/verify`/);
+    expect(driver).toMatch(/answer in the caller's schema/i);
+    expect(flat).toMatch(/existing test, or the task's verify, contradicts a criterion/);
+  });
+
+  it("v04 AC-67: the review gets the task's verify, or (none)", () => {
+    const base = { taskId: "T1", taskDesc: "d", criteria: ["c"], diff: "+line", report: "r" };
+    expect(reviewPrompt(agentProject(), { ...base, verify: "pnpm vitest run a.test.ts" })).toContain("Verify: `pnpm vitest run a.test.ts`");
+    expect(reviewPrompt(agentProject(), { ...base, verify: "" })).toContain("Verify: (none)");
+  });
+
+  it("v04 AC-67: the frontmatter is removed with CRLF, a BOM or none at all; an empty body is out of date", () => {
+    const body = (text: string): string => loadAgent(agentProject("x", text), "x");
+    expect(body("---\r\nname: x\r\n---\r\nRules here.\r\n")).toBe("Rules here.");
+    expect(body("\uFEFF---\nname: x\n---  \nRules here.\n")).toBe("Rules here.");
+    expect(body("Rules here.\n---\nmore\n")).toBe("Rules here.\n---\nmore");
+    expect(() => body("---\nname: x\n---\n\n")).toThrow(/agent .*x\.md is out of date: no rules \(run agent-stack update --force, or add it\)/);
+  });
+
+  it("v04 AC-67: an old implementer without 'Under the driver', or a code-reviewer without 'Task review', exits 1", () => {
+    const old = agentProject("implementer", "---\nname: implementer\n---\nRun `.claude/bin/verify <id>`.\n");
+    const args = { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } };
+    expect(() => implementPrompt(old, args)).toThrow(/implementer\.md is out of date: no "## Under the driver" section/);
+    const rv = agentProject("code-reviewer", "---\nname: code-reviewer\n---\nYou are a code reviewer.\n");
+    expect(() => reviewPrompt(rv, { taskId: "T1", taskDesc: "d", criteria: [], diff: "", report: "", verify: "" })).toThrow(
+      /code-reviewer\.md is out of date: no "Task review" item/
+    );
+  });
+
+  it("v04 AC-67: a missing code-reviewer agent is a RunError with exit code 1 that says to run generate", () => {
+    const dir = agentProject("other");
+    try {
+      loadAgent(dir, "code-reviewer");
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(RunError);
+      expect((e as RunError).exitCode).toBe(1);
+      expect((e as RunError).message).toBe(`agent not found: ${join(dir, ".claude", "agents", "code-reviewer.md")} (run agent-stack update)`);
+    }
+  });
+
+  it("v04 AC-67: the code-reviewer agent answers in the caller's schema and says what the task verdicts mean", () => {
+    const agent = readFileSync(new URL("../../templates/claude/agents/code-reviewer.md", import.meta.url), "utf8");
+    const flat = agent.replace(/\s+/g, " ");
+    expect(flat).toMatch(/If the caller gives a JSON schema, answer in that schema/);
+    for (const field of ["`spec`", "`quality`", "`verifyProves`"]) expect(flat).toContain(field);
+    expect(flat).toMatch(/imagine the line that does it removed/i);
   });
 });
 

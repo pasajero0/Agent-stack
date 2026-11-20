@@ -7,8 +7,8 @@ import { diffStat, dirtyPaths, git } from "../git.js";
 import type { GateRecord, RunFile } from "../types.js";
 import { fuseText } from "./call.js";
 import { Interrupted, newTask, type Ctx, type StepHandler } from "./context.js";
-import { timedOutError } from "./steps-common.js";
-import { parseNext, type StepEvent } from "./transitions.js";
+import { timedOutError } from "./task-core.js";
+import { parseNext, taskNext, type StepEvent } from "./transitions.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
 
@@ -27,7 +27,7 @@ export async function ask(ctx: Ctx, prompt: string): Promise<string | null> {
   }
 }
 
-export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256" | "asked"> = {}): void {
+export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256" | "asked" | "reason"> = {}): void {
   ctx.run.gates.push({ gate, at: new Date().toISOString(), decision, comment, ...extra });
   // Shown at this gate; a decision clears them (AC-32).
   ctx.run.humanDecisions = [];
@@ -62,7 +62,8 @@ export function humanFeedback(run: RunFile): string | null {
     const g = run.gates[i];
     if (g === undefined || g.gate !== "gate:limit") return null;
     if (g.decision === "raise") continue;
-    if (g.decision !== "retry" || !g.comment) return null;
+    // A test conflict's or tests-changed answer is implement's (AC-64, AC-66); an older record has no reason.
+    if (g.decision !== "retry" || !g.comment || (g.reason !== undefined && g.reason !== "decision")) return null;
     return g.asked && g.asked.length > 0 ? `FROM THE HUMAN: you asked: ${g.asked.join("; ")}; the answer: ${g.comment}` : `FROM THE HUMAN: ${g.comment}`;
   }
   return null;
@@ -111,6 +112,7 @@ function acceptSummary(ctx: Ctx, final: CheckRun | null): void {
     const checks = t.checks.map((c) => (c.skipped ? `${c.cmd} skipped` : `${c.cmd} → ${c.exit}`)).join("; ");
     ctx.out(`${t.id}: ${commitText(t.commit)}; attempts ${t.attempts}; checks: ${checks || "none"}`);
     for (const n of t.notes) ctx.out(`  note: ${n}`);
+    for (const c of t.allowedChanges) ctx.out(`  test change allowed: ${c}`);
   }
   if (final !== null) {
     const red = final.exit !== 0;
@@ -187,7 +189,11 @@ function limitSummary(ctx: Ctx): void {
       ? "f <n> sets a new fuse limit for this run (in its own unit, above what is used), c cancel"
       : run.limitReason === "decision"
         ? "r retry (your answer follows; the role gets it), c cancel"
-        : "r retry (on Opus), c cancel"
+        : run.limitReason === "tests-changed"
+          ? "a allow these changes (the checks run next), r retry (your comment follows; a new attempt, on Opus), c cancel"
+          : run.limitReason === "test-conflict"
+          ? "Fix the test or the spec by hand if needed. r retry (your answer follows; the implementer gets it; no attempt is counted), c cancel"
+          : "r retry (on Opus), c cancel"
   );
 }
 
@@ -233,8 +239,24 @@ export const limitGate: StepHandler = async (ctx) => {
       const c = await comment(ctx, s);
       if (c === null) return NO_INPUT;
       // recordGate clears humanDecisions, so the questions are kept in the record for the retried role.
-      recordGate(ctx, "gate:limit", "retry", c, { asked: [...run.humanDecisions] });
+      recordGate(ctx, "gate:limit", "retry", c, { asked: [...run.humanDecisions], reason: "decision" });
       return { type: "resume" };
+    }
+    if (run.limitReason === "test-conflict" && (s === "r" || s.startsWith("r "))) {
+      // AC-64: the answer goes to implement with the conflict; no attempt is counted, so the model stays.
+      const c = await comment(ctx, s);
+      if (c === null) return NO_INPUT;
+      const task = run.returnTo ? parseNext(run.returnTo).task : null;
+      const t = run.tasks.find((x) => x.id === task);
+      if (t) t.lastFeedback = [t.lastFeedback, `FROM THE HUMAN: ${c}`].filter((x) => x !== null).join("\n");
+      recordGate(ctx, "gate:limit", "retry", c, { reason: "test-conflict" });
+      return { type: "resume" };
+    }
+    if (run.limitReason === "tests-changed") {
+      const ev = await testsChangedAnswer(ctx, s);
+      if (ev !== null) return ev;
+      ctx.out("Answer a (allow), r (retry, then a comment) or c (cancel).");
+      continue;
     }
     if (s === "r") {
       // A retry is a new attempt, so it runs on Opus (AC-16, AC-31).
@@ -247,6 +269,33 @@ export const limitGate: StepHandler = async (ctx) => {
     ctx.out("Answer r (retry) or c (cancel).");
   }
 };
+
+/**
+ * gate:limit (tests changed), AC-66: `a` allows exactly the changes listed, and the checks run; `r` and a
+ * comment send the task back to implement as a new attempt. Null for any other answer.
+ */
+async function testsChangedAnswer(ctx: Ctx, s: string): Promise<StepEvent | null> {
+  const { run } = ctx;
+  const id = run.returnTo ? parseNext(run.returnTo).task : null;
+  const t = run.tasks.find((x) => x.id === id);
+  if (!t) throw new Error(`gate:limit (tests-changed) has no task`);
+  if (s === "a") {
+    // Exactly what was listed: a change made while the gate waited stops again at the checks.
+    for (const c of t.pendingChanges) if (!t.allowedChanges.includes(c)) t.allowedChanges.push(c);
+    t.pendingChanges = [];
+    recordGate(ctx, "gate:limit", "allow", null, { reason: "tests-changed" });
+    return { type: "resume" };
+  }
+  if (s !== "r" && !s.startsWith("r ")) return null;
+  const c = await comment(ctx, s);
+  if (c === null) return NO_INPUT;
+  t.attempts += 1;
+  t.pendingChanges = [];
+  t.lastFeedback = [t.lastFeedback, `FROM THE HUMAN: ${c}`].filter((x) => x !== null).join("\n");
+  run.returnTo = taskNext("implement", t.id);
+  recordGate(ctx, "gate:limit", "retry", c, { reason: "tests-changed" });
+  return { type: "resume" };
+}
 
 /** The branches and commits a cancelled run keeps (AC-28). */
 export function cancelledText(projectDir: string, run: RunFile): string {

@@ -28,7 +28,7 @@ export type EventType =
   | "green" // base-check: test exits 0; `task` is the first task
   | "done" // implement: DONE
   | "retry" // a failed attempt with attempts left
-  | "limit" // attempts used, BLOCKED or review loop; the handler set limitReason and returnTo
+  | "limit" // attempts used, BLOCKED, TEST_CONFLICT, review loop or a decision; the handler set limitReason and returnTo
   | "fuse" // the fuse is reached before a call; the handler set returnTo
   | "review" // checks green, review needed
   | "commit" // checks green, no review needed

@@ -13,11 +13,12 @@ describe("buildHarnessFiles", () => {
     expect(gates.protectedGlobs).toContain("*pnpm-lock.yaml");
     expect(gates.baseBranch).toBe("main");
     expect(gates.mode).toBe("interactive");
-    // The one exception: RUNNERS, the fixed list of download-and-run commands of every ecosystem — the
-    // same in any repo, and kept in the hook because `update` never rewrites gates.json.
+    // The exceptions: RUNNERS (download-and-run commands of every ecosystem), JS_PMS and FROZEN_OK (the JS
+    // install check) — the same in any repo, and kept in the hook because `update` never rewrites gates.json.
     const guardBash = byPath(".claude/hooks/guard-bash.sh")!.content;
     expect(guardBash).toMatch(/^RUNNERS=.*pnpm/m);
-    expect(guardBash.replace(/^RUNNERS=.*$/m, "")).not.toContain("pnpm");
+    expect(guardBash).toMatch(/^JS_PMS=.*pnpm/m);
+    expect(guardBash.replace(/^(RUNNERS|JS_PMS|FROZEN_OK)=.*$/gm, "")).not.toContain("pnpm");
   });
 
   it("emits a JS-free gate config for a non-JS stack", () => {

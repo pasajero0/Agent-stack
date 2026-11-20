@@ -4,7 +4,7 @@ export type Mode = "task" | "quick";
 
 export type RunStatus = "running" | "waiting" | "finished" | "cancelled";
 
-export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse" | "decision";
+export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse" | "decision" | "test-conflict" | "tests-changed";
 
 /** Roles the driver calls Claude in. */
 export type Role = "clarify" | "spec" | "plan" | "implement" | "review";
@@ -42,6 +42,10 @@ export interface RunTask {
   lastFeedback: string | null;
   checks: CheckResult[];
   notes: string[];
+  /** Changes to frozen tests or check configs the human allowed at gate:limit (AC-66). */
+  allowedChanges: string[];
+  /** The changes gate:limit (tests changed) listed; `a` allows exactly these (AC-66). */
+  pendingChanges: string[];
   /** sha, `"empty"` for an empty diff, or null before the commit. */
   commit: string | null;
 }
@@ -55,6 +59,8 @@ export interface GateRecord {
   planSha256?: string;
   /** A gate:limit (decision) retry: the items the role asked, given back with the answer (AC-57). */
   asked?: string[];
+  /** A gate:limit retry with a comment: the reason it answered, so a test conflict's answer stays implement's (AC-64). */
+  reason?: LimitReason;
 }
 
 export interface AnswerRecord {
@@ -100,6 +106,8 @@ export interface RunConfig {
   quickReviewLines: number;
   commands: { test: string; lint: string };
   lintMatch: string[];
+  /** Test files (`gates.json → testGlobs`): their tests are frozen at a task's base (AC-66). */
+  testGlobs: string[];
   specsDir: string;
   adrDir: string;
   baseBranch: string;

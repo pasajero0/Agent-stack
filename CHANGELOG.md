@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.4.1 — driver checks
+
+- **run: a test conflict is a way out, not a cheat.** If an existing test or the task's verify contradicts a
+  criterion, implement returns `TEST_CONFLICT` and leaves the test alone. The run stops at gate `limit`
+  (reason `test-conflict`) and shows the test, the criterion and the reason. `r` and your answer retry
+  implement; no attempt is counted. Tested with a fake `claude` and in one manual run with the real `claude`.
+- **run: a verify that cannot fail makes a new plan not valid** (`|| true`, `|| echo`, `; exit 0`, `| tee`,
+  `set +e` and the like). The plan role is re-run with the task and the pattern. An approved plan is not
+  re-checked. The `/plan` skill says the same; `.claude/bin/verify` does not check it.
+- **run: a task that weakens a test it found stops for you.** Before the checks, the driver compares the tests that
+  were there at the task's start (`testGlobs`) and the check configs (CI, vitest, jest, eslint and the like): a
+  deleted test file, fewer tests or assertions, more skip marks, a changed config. Gate `limit` (reason
+  `tests-changed`) lists them: `a` allows exactly those, `r` sends the task back, `c` cancels. It does not see a
+  weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`). Tested with a fake `claude` and in two
+  manual runs with the real `claude`.
+- **run: `package.json` is frozen too.** The checks run `pnpm test`, and `scripts.test` decides what that does, so
+  `"test": "node --test || true"` made every check green. Now a changed or removed script, and a new or changed
+  dependency (also `overrides`, `resolutions`, `pnpm.overrides`, and in a nested `package.json`), a changed `jest`,
+  `eslintConfig`, `mocha` or `ava` setting, and a changed `pnpm-workspace.yaml` stop at the same gate. A new script
+  and a removed dependency do not. Tested with a fake `claude` only.
+
+### Security
+
+- **A bare install asks first (deny in `autonomous`).** The agent could write a package into `package.json` and
+  run `pnpm install`, which installed it without a question; `autonomous` promised it never installs. Now
+  `pnpm install`, `pnpm i`, `pnpm -C x install`, `pnpm up`, a bare `yarn` and the like ask, also behind a redirect
+  or `corepack`, and the message names the safe form:
+  `pnpm install --frozen-lockfile` (yarn: `--immutable`, npm: `npm ci`) passes, since it installs only what the
+  lockfile already has. A task `verify` with a bare install is refused by `.claude/bin/verify` too.
+- In a new repo, `pnpm i --frozen-lockfile; pnpm test` no longer asks. The `installPatterns` entry read the flag and
+  the `;` as one word and took `pnpm` for a package name. An existing repo keeps its `gates.json`: see Upgrading.
+- **run: review and implement take their rules from your agents.** The driver no longer keeps its own copy: the
+  review prompt carries `.claude/agents/code-reviewer.md`, the implement prompt `.claude/agents/implementer.md`
+  (frontmatter removed). A fix to an agent now reaches the driver too. The implementer agent has a section for a
+  chat and one for the driver; both have the test conflict exit.
+
+### Upgrading from 0.4.0
+
+A caret range (`^0.4.0`) installs 0.4.1 by itself, so do this step even if you did not upgrade on purpose.
+
+- **Run `agent-stack update`.** The driver needs the new `implementer.md` (a `## Under the driver` section) and
+  `code-reviewer.md` (a "Task review" item). If you changed one of them, `update` keeps your copy, and the run
+  stops with `agent … is out of date`: add the section, or run `agent-stack update --force`.
+- **Optional:** `update` keeps your `gates.json`, so its first `installPatterns` entry keeps asking for
+  `pnpm i --frozen-lockfile; pnpm test`. To stop that, replace `-[^[:space:]]+` in it with `-[^[:space:];&|<>()]+`.
+
 ## 0.4.0 — the driver
 
 A program, `agent-stack run`, now holds the pipeline order. Before, the order lived in hooks and skills that the

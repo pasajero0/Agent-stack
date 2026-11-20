@@ -81,7 +81,7 @@ type Obj = Record<string, unknown>;
 
 const STATUSES: readonly RunStatus[] = ["running", "waiting", "finished", "cancelled"];
 const MODES: readonly Mode[] = ["task", "quick"];
-const LIMITS: readonly LimitReason[] = ["attempts", "blocked", "review-loop", "fuse", "decision"];
+const LIMITS: readonly LimitReason[] = ["attempts", "blocked", "review-loop", "fuse", "decision", "test-conflict", "tests-changed"];
 const SIZES = ["task", "story", "epic"] as const;
 const FIXED_NEXT = [
   "clarify",
@@ -148,6 +148,9 @@ function task(v: unknown, f: string): RunTask {
     lastFeedback: strOrNull(o.lastFeedback, `${f}.lastFeedback`),
     checks: arr(o.checks, `${f}.checks`, (x) => check(x, `${f}.checks`)),
     notes: strings(o.notes, `${f}.notes`),
+    // A run file from before AC-66 has none.
+    allowedChanges: o.allowedChanges === undefined ? [] : strings(o.allowedChanges, `${f}.allowedChanges`),
+    pendingChanges: o.pendingChanges === undefined ? [] : strings(o.pendingChanges, `${f}.pendingChanges`),
     commit: strOrNull(o.commit, `${f}.commit`),
   };
 }
@@ -159,6 +162,7 @@ function gate(v: unknown, f: string): GateRecord {
     g.planSha256 = typeof o.planSha256 === "string" && /^[0-9a-f]{64}$/.test(o.planSha256) ? o.planSha256 : bad(`${f}.planSha256`);
   }
   if (o.asked !== undefined) g.asked = strings(o.asked, `${f}.asked`);
+  if (o.reason !== undefined) g.reason = oneOf(LIMITS, o.reason, `${f}.reason`);
   return g;
 }
 

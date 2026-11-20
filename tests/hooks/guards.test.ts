@@ -64,14 +64,81 @@ describe("guard-bash", () => {
     expect(runHook(dir, "guard-bash.sh", bash("pnpm install --frozen-lockfile")).stdout).toBe("");
   });
 
-  it.each(["pnpm install && pnpm test", "pnpm i; pnpm test", "pnpm install | tee log", "(pnpm install)"])(
-    "does not read a shell operator as a package name: %s",
+  it.each([
+    "pnpm install --frozen-lockfile && pnpm test",
+    "pnpm i --frozen-lockfile; pnpm test",
+    "pnpm install --frozen-lockfile=true | tee log",
+    "(pnpm install --frozen-lockfile)",
+    "pnpm info lodash",
+    "pnpm test",
+    "pnpm install-completion",
+    "pnpm install --frozen-lockfile 2>&1 | tail -5",
+    "pnpm -C apps/web install --frozen-lockfile > /dev/null",
+    'git commit -m "docs: pnpm install now asks"',
+    "echo pnpm install",
+  ])("passes an install from the lockfile and does not read a shell operator as a package name: %s", (cmd) => {
+    const r = runHook(dir, "guard-bash.sh", bash(cmd));
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("");
+  });
+
+  // An edited package.json plus a bare install adds a package nobody approved (V17).
+  it.each([
+    "pnpm install",
+    "pnpm i",
+    "pnpm install && pnpm test",
+    "cd web && pnpm install",
+    "(pnpm install)",
+    "pnpm install --prefer-frozen-lockfile",
+    "pnpm install --frozen-lockfile=false",
+    "pnpm i -w",
+    // From review: global flags, redirects, corepack, a second install after a frozen one.
+    "pnpm -C apps/web install",
+    "pnpm --dir x install",
+    "pnpm --filter web install",
+    "pnpm -r install",
+    "pnpm -w install",
+    "corepack pnpm install",
+    "pnpm install > /dev/null 2>&1",
+    "pnpm install >log",
+    "pnpm install </dev/null",
+    "pnpm i --frozen-lockfile; pnpm install",
+    "bash -c 'pnpm install'",
+    "echo $(pnpm install)",
+    "pnpm install --immutable",
+  ])("asks before a bare install, which may add packages that are not in the lockfile: %s", (cmd) => {
+    const r = runHook(dir, "guard-bash.sh", bash(cmd));
+    expect(r.code).toBe(0);
+    const out = JSON.parse(r.stdout).hookSpecificOutput;
+    expect(out.permissionDecision).toBe("ask");
+    expect(out.permissionDecisionReason).toContain("--frozen-lockfile");
+  });
+
+  it.each(["pnpm update", "pnpm up", "pnpm -C x add evil-pkg", "pnpm install lodash"])(
+    "asks before a command that resolves or adds packages: %s",
     (cmd) => {
       const r = runHook(dir, "guard-bash.sh", bash(cmd));
       expect(r.code).toBe(0);
-      expect(r.stdout).toBe("");
+      expect(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision).toBe("ask");
     }
   );
+
+  it("denies a frozen install with a redirect in autonomous mode never, the bare one always", () => {
+    const auto = deployHarness();
+    setMode(auto, "autonomous");
+    expect(runHook(auto, "guard-bash.sh", bash("pnpm install --frozen-lockfile 2>&1 | tail -5")).code).toBe(0);
+    expect(runHook(auto, "guard-bash.sh", bash("pnpm install 2>&1 | tail -5")).code).toBe(2);
+  });
+
+  it("denies a bare install in autonomous mode and names the frozen form", () => {
+    const auto = deployHarness();
+    setMode(auto, "autonomous");
+    const r = runHook(auto, "guard-bash.sh", bash("pnpm install"));
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("--frozen-lockfile");
+    expect(r.stderr).toContain("NEEDS HUMAN DECISION");
+    expect(runHook(auto, "guard-bash.sh", bash("pnpm install --frozen-lockfile")).code).toBe(0);
+  });
 
   it("still asks when a real package precedes the operator", () => {
     const r = runHook(dir, "guard-bash.sh", bash("pnpm add lodash && pnpm test"));

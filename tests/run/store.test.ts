@@ -36,6 +36,8 @@ const task = (over: Partial<RunTask> = {}): RunTask => ({
   lastFeedback: null,
   checks: [{ cmd: "pnpm test", exit: 0, skipped: false }],
   notes: ["n"],
+  allowedChanges: [],
+  pendingChanges: [],
   commit: null,
   ...over,
 });
@@ -183,6 +185,20 @@ describe("run id and run file", () => {
       writeRun(dir, { ...full, next });
       expect(readRun(dir, full.id)?.next).toBe(next);
     }
+  });
+
+  it("v04 AC-66: a task from a run file written before allowedChanges reads with none; a non-string one is refused", () => {
+    const run = mk("r-20261118-000017", { tasks: [task({ allowedChanges: ["deleted test file a.test.ts"] })] });
+    createRunDir(dir, run.id);
+    writeRun(dir, run);
+    expect(readRun(dir, run.id)?.tasks[0]?.allowedChanges).toEqual(["deleted test file a.test.ts"]);
+    const file = join(runDir(dir, run.id), "run.json");
+    const { allowedChanges: _, pendingChanges: __, ...old } = task();
+    writeFileSync(file, JSON.stringify({ ...run, tasks: [old] }));
+    expect(readRun(dir, run.id)?.tasks[0]?.allowedChanges).toEqual([]);
+    expect(readRun(dir, run.id)?.tasks[0]?.pendingChanges).toEqual([]);
+    writeFileSync(file, JSON.stringify({ ...run, tasks: [{ ...old, allowedChanges: [1] }] }));
+    expect(readRun(dir, run.id)).toBeNull();
   });
 
   it("readRun is null and readRunStrict names the field for a malformed run file", () => {

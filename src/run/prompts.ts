@@ -3,18 +3,38 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { allowedCommandLines, type CallCommands } from "./claude.js";
 import { RunError } from "./errors.js";
+import type { TestConflict } from "./schemas.js";
 import type { AnswerRecord } from "./types.js";
 
 /** Reads `.claude/skills/<name>/SKILL.md` and fills `$ARGUMENTS` and `${CLAUDE_SKILL_DIR}`. */
 export function loadSkill(projectDir: string, name: string, args: string): string {
   const skillDir = join(projectDir, ".claude", "skills", name);
   const file = join(skillDir, "SKILL.md");
-  if (!existsSync(file)) throw new RunError(`skill not found: ${file} (run agent-stack generate)`, 1);
+  if (!existsSync(file)) throw new RunError(`skill not found: ${file} (run agent-stack update)`, 1);
   return readFileSync(file, "utf8")
     .split("${CLAUDE_SKILL_DIR}")
     .join(skillDir)
     .split("$ARGUMENTS")
     .join(args);
+}
+
+/** The frontmatter at the start of a file: an optional BOM, `---` lines with trailing spaces, CRLF, or empty. */
+const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
+
+/**
+ * The body of `.claude/agents/<name>.md` without its frontmatter: the rules a role takes from the project's
+ * agent, so the driver keeps no copy of them (AC-67). `need` is a part the driver relies on; `update` keeps a
+ * file the user changed, so an old copy without it must stop the run, not run silently.
+ */
+export function loadAgent(projectDir: string, name: string, need?: { re: RegExp; what: string }): string {
+  const file = join(projectDir, ".claude", "agents", `${name}.md`);
+  if (!existsSync(file)) throw new RunError(`agent not found: ${file} (run agent-stack update)`, 1);
+  const text = readFileSync(file, "utf8");
+  const m = FRONTMATTER.exec(text);
+  const body = (m ? text.slice(m[0].length) : text.replace(/^\uFEFF/, "")).trim();
+  const missing = body === "" ? "rules" : need && !need.re.test(body) ? need.what : null;
+  if (missing !== null) throw new RunError(`agent ${file} is out of date: no ${missing} (run agent-stack update --force, or add it)`, 1);
+  return body;
 }
 
 export function clarifyPrompt(p: { description: string; used: string[] }): string {
@@ -81,18 +101,25 @@ export function planPrompt(projectDir: string, p: { stage: string; title: string
   return lines.join("\n");
 }
 
-export function implementPrompt(p: {
-  taskId: string;
-  taskDesc: string;
-  criteria: string[];
-  feedback: string | null;
-  /** The commands its `--allowedTools` is built from; the prompt lists the same (AC-4). */
-  commands: CallCommands;
-}): string {
+export function implementPrompt(
+  projectDir: string,
+  p: {
+    taskId: string;
+    taskDesc: string;
+    criteria: string[];
+    feedback: string | null;
+    /** The commands its `--allowedTools` is built from; the prompt lists the same (AC-4). */
+    commands: CallCommands;
+  }
+): string {
   const lines = [
     "# Role: implement",
     "",
     "The driver has created the branch and recorded this task's base. The driver, not you, runs the checks, the review and the commit. You must not commit, branch or edit tasks.json.",
+    "",
+    "Rules (.claude/agents/implementer.md); follow 'Under the driver':",
+    "",
+    loadAgent(projectDir, "implementer", { re: /^## Under the driver[ \t]*$/m, what: '"## Under the driver" section' }),
     "",
     `Task ${p.taskId}: ${p.taskDesc}`,
     "",
@@ -102,8 +129,8 @@ export function implementPrompt(p: {
   if (p.feedback) lines.push("", "FROM THE PROGRAM (checks or review of the previous attempt):", p.feedback);
   lines.push(
     "",
-    "Write the failing test first, see it fail, then the code; touch only this task; do not commit, branch or edit `tasks.json`.",
-    "A change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report.",
+    p.commands.verify.trim() === "" ? "This task has no verify command." : `The task's verify: \`${p.commands.verify}\` (the driver runs it after you).`,
+    p.commands.test.trim() === "" ? "No test command is listed: do not try to run tests; say so in the report." : `The test command: \`${p.commands.test}\`.`,
     "",
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),
@@ -113,22 +140,39 @@ export function implementPrompt(p: {
   return lines.join("\n");
 }
 
-export function reviewPrompt(p: {
-  taskId: string;
-  taskDesc: string;
-  criteria: string[];
-  diff: string;
-  report: string;
-}): string {
+/** The test conflict as gate:limit shows it and the retried implement reads it (AC-64). */
+export function conflictText(c: TestConflict, criteria: string[]): string {
+  // By id at the line start, as criterionText cuts it: a body that mentions the id does not match.
+  const id = c.criterion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const text = criteria.find((t) => new RegExp(`^\\s*[-*]\\s*\\*\\*${id}:\\*\\*`).test(t));
+  return [
+    "The implementer reported TEST_CONFLICT and left the test alone.",
+    `Test: ${c.test}`,
+    `Criterion: ${c.criterion}`,
+    ...(text ? [text] : []),
+    `Reason: ${c.reason}`,
+  ].join("\n");
+}
+
+export function reviewPrompt(
+  projectDir: string,
+  p: { taskId: string; taskDesc: string; criteria: string[]; diff: string; report: string; verify: string }
+): string {
   return [
     "# Role: review",
     "",
-    "The driver has run the checks and cut this diff. You review only; you must not edit files, run commands, commit or branch.",
+    "The driver has run the checks and cut this diff. You review only: read and search with Read, Glob and Grep; you must not edit files, run shell commands, commit or branch.",
+    "",
+    "Review rules (.claude/agents/code-reviewer.md):",
+    "",
+    loadAgent(projectDir, "code-reviewer", { re: /Task review/, what: '"Task review" item' }),
     "",
     `Task ${p.taskId}: ${p.taskDesc}`,
     "",
     "Criteria:",
     ...(p.criteria.length ? p.criteria : ["(none listed)"]),
+    "",
+    `Verify: ${p.verify.trim() === "" ? "(none)" : `\`${p.verify}\``}`,
     "",
     "Diff:",
     p.diff,

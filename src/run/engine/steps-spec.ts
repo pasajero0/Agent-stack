@@ -16,7 +16,7 @@ import { resumeHint, type Ctx, type StepHandler } from "./context.js";
 import { humanFeedback, NO_INPUT, recordGate, showDecisions } from "./gates.js";
 import { specPath } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, under, withFeedback, type RoleMark } from "./role-bounds.js";
-import { toLimit } from "./steps-common.js";
+import { toLimit } from "./task-core.js";
 
 /** The stored clarify output; a run file without a valid one cannot go on. */
 export function proposalOf(run: RunFile): ClarifyOutput {

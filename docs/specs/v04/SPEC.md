@@ -61,7 +61,7 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
 ## Terms
 
 Shared words are defined in [docs/GLOSSARY.md](../../GLOSSARY.md): stage, spec, plan, task, tier, verify,
-driver, mode, size, gate, attempt, fuse, live run, driver call. Below is only what this spec makes precise; a
+driver, mode, size, gate, attempt, fuse, live run, driver call, test conflict. Below is only what this spec makes precise; a
 word for this spec only is marked `(local)`.
 
 - **Step**: one unit of the pipeline that the driver executes. Steps are clarify, spec, plan, base-check,
@@ -80,12 +80,34 @@ word for this spec only is marked `(local)`.
   - a unique `id` that is not `Q1` and does not start with `F`;
   - a non-empty `ac` array;
   - a `tier` of S, M or L;
-  - a non-empty `verify`;
+  - a non-empty `verify` that can fail (AC-65);
   - `passes: false`.
 
   Every criterion id of the merged spec appears in some task.
 - **Task diff** (local): changes since the task's base commit (HEAD when its first attempt started). It counts
   tracked changes plus untracked files, and always excludes `.claude/tmp/`.
+- **Frozen tests** (local): the files matching `gates.json → testGlobs` that exist at the task's base commit. In
+  each one the driver counts, over the whole text:
+  - tests: `it(`, `test(` (also with a modifier: `it.skip(`, `test.each(`), `def test_`, `func Test`, `#[test]`;
+  - assertions: `expect(`, `assert` (also `assert.x(`, `assert_eq!(`, `assert!(`, `debug_assert!(`,
+    `assertEqual(`, `assertThat(`), `t.Error(`, `t.Fatal(` and their `f` forms;
+  - skip marks: `.skip`, `.only`, `.todo` (and `.skipIf`) after `it`, `test`, `describe`, `suite`, `context` or
+    `bench`; `xit(`, `xdescribe(`, `xtest(`, `this.skip(`, `pytest.skip(`, `@pytest.mark.skip`,
+    `@pytest.mark.xfail`, `@unittest.skip`, `t.Skip`, `#[ignore]`. So `iter().skip(1)` is not one.
+
+  A file that is no longer a regular file (a folder, a submodule) is "replaced"; a file with a NUL byte is not
+  counted.
+
+  Tests the task adds after its base are not frozen.
+- **Check config** (local): a file that decides how checks run: `.github/workflows/*`, `.gitlab-ci.yml`,
+  `vitest.config.*`, `vitest.workspace.*`, `jest.config.*`, `playwright.config.*`, `eslint.config.*`, `.eslintrc*`,
+  `biome.json`, `biome.jsonc`, `pytest.ini`, `tox.ini`, `ruff.toml`, `.ruff.toml`, `.golangci.*`, `clippy.toml`,
+  `pnpm-workspace.yaml`.
+- **Package manifest** (local): a `package.json` at any depth. The driver compares three parts of it with the
+  task's base: `scripts`, since a check command like `pnpm test` runs the script of that name; the dependency
+  entries — `dependencies`, `devDependencies`, `optionalDependencies`, `peerDependencies`, `overrides`,
+  `resolutions` and `pnpm.overrides`; and the check settings it holds — `jest`, `eslintConfig`, `mocha`, `ava`.
+  A manifest the task adds compares with an empty one.
 - **Diff lines** (local): added plus deleted lines of the task diff (`git diff --numstat`), plus all lines of each
   untracked file.
 - **Clean tree** (local): `git status --porcelain`, excluding `.claude/tmp/`, is empty.
@@ -158,6 +180,9 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | checks / review | red or blocking, attempts used | gate:limit (attempts) | AC-33, AC-34 |
 | review | blocking count not lower than last time | gate:limit (review loop) | AC-39 |
 | implement | BLOCKED | gate:limit (blocked) | AC-38 |
+| implement | TEST_CONFLICT | gate:limit (test conflict) | AC-64 |
+| checks | frozen tests weakened, a check config or a package manifest changed | gate:limit (tests changed) | AC-66 |
+| gate:limit (tests changed) | allow / retry with a comment | checks / implement (attempt + 1) | AC-66 |
 | any | fuse reached | gate:limit (fuse) | AC-35 |
 | any | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
 | spec / plan | output missing, out of bounds or (spec) terms failing twice | unchanged, exit 1 | AC-40, AC-44, AC-45, AC-59 |
@@ -165,6 +190,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | base-check | `test` exits non-zero | unchanged, exit 1 | AC-41 |
 | commit | commit refused | implement (attempt + 1) | AC-42 |
 | gate:limit | retry / raise fuse / cancel | `returnTo` (on Opus) / `returnTo` / cancelled | AC-31 |
+| gate:limit (decision, test conflict) | retry with a comment | `returnTo`, no attempt, same model | AC-57, AC-64 |
 
 ## Contract
 
@@ -202,6 +228,8 @@ When the file runs out, the gate behaves as AC-29: it is recorded, and the drive
 - **limit**:
   - reasons attempts, blocked or review loop: `r` retry, `c` cancel;
   - reason decision: `r` retry (a comment follows), `c` cancel (AC-57);
+  - reason test conflict: `r` retry (a comment follows), `c` cancel (AC-64);
+  - reason tests changed: `a` allow, `r` retry (a comment follows), `c` cancel (AC-66);
   - reason fuse: `f <n>` sets a new limit for this run, in the fuse's own unit (calls or dollars); it must be
     above what is used so far. `c` cancels.
 
@@ -230,7 +258,7 @@ Any other value is refused when a run starts, with code 1.
 | `status` | `running` \| `waiting` \| `finished` \| `cancelled` |
 | `next` | one of the values listed above |
 | `returnTo` | the `next` value that gate:limit returns to, or null |
-| `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| null |
+| `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| `test-conflict` \| `tests-changed` \| null |
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
 | `stagePrefill` | the `--stage` id that gate:answers proposes, or null |
@@ -273,6 +301,11 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 
 **Role prompts** (AC-4) start with what the driver has already done, and what the role must not do.
 
+**One source of rules** (AC-67). A role's rules come from the project's skill or agent: spec from `/spec`, plan
+from `/plan`, implement from the `implementer` agent, review from the `code-reviewer` agent. The driver's prompt adds only the step's data, its bounds
+(what is done, what the role must not do) and the output it wants. It keeps no copy of a skill's or an agent's
+rules, so an improved agent reaches the driver too.
+
 - **clarify**:
   - ask at most 5 questions, each with a recommended answer;
   - size the work;
@@ -296,16 +329,20 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
   - "**every task ends green**: its test is written first inside the task and its verify passes when the
     task is done; no test-only tasks".
 - **implement**:
+  - the body of `.claude/agents/implementer.md` (frontmatter removed), labelled as the rules, with "follow
+    'Under the driver'" (AC-67). The agent says, among its rules:
+    - "write the failing test first, see it fail, then the code; touch only this task; do not commit,
+      branch or edit `tasks.json`";
+    - "a change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report";
+    - the test conflict rule (AC-64);
   - the task;
   - the text of its criteria;
   - the last feedback, labelled "FROM THE PROGRAM";
-  - "write the failing test first, see it fail, then the code; touch only this task; do not commit,
-    branch or edit `tasks.json`";
-  - "a change to documentation only (Markdown, comments, no behaviour) needs no test; say so in the report";
   - the shell commands it may run, built from the same list as its `--allowedTools`: "anything else is
     denied, so do not try it".
 - **review**:
-  - the task and its criteria;
+  - the body of `.claude/agents/code-reviewer.md` (frontmatter removed), labelled as the review rules (AC-67);
+  - the task, its criteria and its verify command (`(none)` when empty);
   - the task diff;
   - the implementer's report, labelled "UNVERIFIED CLAIMS FROM THE IMPLEMENTER";
   - "return two verdicts and whether the task's verify proves its criteria".
@@ -321,7 +358,8 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 - **plan**: `{ summary, tasks, needsHumanDecision: string[] }`. `tasks` holds the fields of a "Valid plan"
   task: `{id, ac, tier, desc, verify, passes: false}[]`. The driver, not the role, writes it to `tasks.json`.
 - **implement**:
-  - `status`: `DONE` \| `BLOCKED`;
+  - `status`: `DONE` \| `BLOCKED` \| `TEST_CONFLICT`;
+  - `conflict`: `{test, criterion, reason}`, required with `TEST_CONFLICT` and only then (AC-64);
   - `report`;
   - `commit`: `{type: feat|fix|refactor|test|docs|chore|perf, subject}`;
   - `needsHumanDecision`: `string[]`.
@@ -452,11 +490,32 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   "Commits", record the sha, and go on to the next task.
   - A run with stage `A0` SHALL produce a header that commitlint accepts.
   - The review's notes SHALL be stored in the task's `notes`.
+- **AC-67:** WHEN the review or the implement role runs, THE SYSTEM SHALL put the body of the project's agent
+  (`.claude/agents/code-reviewer.md`, `.claude/agents/implementer.md`; frontmatter removed) into its prompt as
+  the rules, and add no rules of its own (One source of rules).
+  - The `implementer` agent SHALL have two sections, "In a chat" and "Under the driver". In a chat it reads
+    the task from `tasks.json`, runs `.claude/bin/verify <id>` and reports in the contract, `TEST_CONFLICT`
+    included. Under the driver it runs only the commands the prompt lists, never `.claude/bin/verify`, and
+    answers in the caller's schema.
+  - The `code-reviewer` agent's task review SHALL judge only the criteria the caller gives; another task's
+    criteria are not a `fail`. With no criteria or no verify given, `verifyProves` is `true`.
+  - IF the agent's body is empty, or `implementer.md` has no `## Under the driver` section, or
+    `code-reviewer.md` has no "Task review" item, THEN THE SYSTEM SHALL keep `next` and exit with code 1:
+    `agent <path> is out of date: no <what> (run agent-stack update --force, or add it)`. A file the user
+    changed is kept by `update`, so an old copy must not run silently.
+  - The `code-reviewer` agent SHALL say: when the caller gives a JSON schema, answer in it, with the same
+    severities and the same need for evidence. For a task review it SHALL say what `spec`, `quality` and
+    `verifyProves` mean, and give the check for `verifyProves`: imagine the line that does a criterion removed;
+    if the task's verify would still pass, it proves nothing for that criterion.
+  - IF the agent file is missing, THEN THE SYSTEM SHALL keep `next` and exit with code 1:
+    `agent not found: <path> (run agent-stack update)`, as for a missing skill (`update` restores a missing
+    harness file; `generate` refuses an existing harness).
 - **AC-21:** WHEN the last task is committed, THE SYSTEM SHALL stop at gate:accept and show:
   - the diff stat from `baseCommit`;
   - each task's checks;
   - the review notes;
   - the skipped commands;
+  - the test changes the human allowed (AC-66);
   - the human decisions;
   - the cost;
   - in task mode with more than one plan task, the **final check**: `.claude/bin/verify` with no task id, run
@@ -582,6 +641,50 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - The gate record keeps the items as `asked`. The retried role gets them with the answer: "FROM THE HUMAN:
     you asked: <items>; the answer: <comment>".
   - The attempts and the fuse are unchanged.
+- **AC-64:** IF implement returns `TEST_CONFLICT`, THEN THE SYSTEM SHALL go to gate:limit, reason "test
+  conflict", and show the conflict: the test, the criterion and the reason (partner of AC-16).
+  - The `implementer` agent, which the implement prompt carries (AC-67), SHALL say: if an existing test, or
+    the task's verify, contradicts a criterion, do not change it; return `TEST_CONFLICT`. Existing means not written in this attempt: another task's test,
+    a test the repo had, or the verify command.
+  - `r` retries implement with the comment that follows: the role gets the conflict and the answer, labelled
+    "FROM THE HUMAN". The human may fix the test or the spec by hand before `r`. `c` cancels.
+  - No attempt is counted, and the model stays as it was. The attempt's edits are kept.
+  - The gate record keeps the reason, so the answer reaches only implement, never a spec or plan role (AC-57).
+  - A commit or branch switch in the same call is AC-43 first: a failed attempt, and the conflict is not shown.
+  - IF `TEST_CONFLICT` comes without `conflict`, or `conflict` comes with another status, THEN that is a
+    schema mismatch (AC-37).
+- **AC-65:** IF a task of the plan role has a verify that cannot fail, THEN THE SYSTEM SHALL treat the plan as
+  not valid (AC-45), with the error `task <id>: verify cannot fail (<pattern>); remove it` (partner of AC-12).
+  - A verify cannot fail when it holds `|| true`, `|| :`, `|| echo`, `|| exit 0`, `; true`, `; exit 0`,
+    `set +e` or `set +o errexit`, pipes into `| tee` or `| cat`, or ends, after other lines, with a line that is
+    only `true` or `exit 0`. A verify that is only `true` stays valid (a docs-only task). The match is on whole words, so `-t "true value"` is not one. It does not look inside quotes, so
+    `grep "a; true" f` is refused too; rewrite such a command.
+  - Only a new plan is checked. A plan approved earlier is read as it is, so a run in progress is not stopped.
+  - The `/plan` skill SHALL say the same. `.claude/bin/verify` does not check it.
+- **AC-66:** WHEN implement returns DONE, THE SYSTEM SHALL compare the task's frozen tests and the check configs
+  with the task's base, before it runs the checks.
+  - IF a frozen test file is gone, has fewer tests or fewer assertions, or more skip marks, or a check config that
+    exists at the base has changed, THEN THE SYSTEM SHALL go to gate:limit, reason "tests changed", and list each
+    change: `deleted test file a.test.ts`, `a.test.ts: assertions 12 → 10`, `changed check config vitest.config.ts
+    (now 1a2b3c4)`, `deleted check config jest.config.js`. The run file keeps the list.
+  - The same holds for a package manifest: a script of the base changed or removed, a dependency entry added or
+    changed, a check setting added, changed or removed, or a manifest that is no longer valid JSON. The lines:
+    `changed script test in package.json (now: node --test || true)`, `deleted script lint in package.json`, `new
+    dependency left-pad in package.json (dependencies: ^1.3.0)`, `changed dependency vitest in package.json
+    (devDependencies: ^2.0.0 → ^3.0.0)`, `changed setting jest in package.json (now 1a2b3c4)`, `package.json is not
+    valid JSON (now 1a2b3c4)`. A shown value longer than 80 characters is cut and ends with its content hash, so a
+    later edit is still a new line. A control character in a value, a name or a path is shown as a space, and the
+    text ends with its hash, so a name cannot hide or fake a line. A new script and a removed dependency do not
+    stop the run.
+  - `a` allows exactly the changes listed, as the run file keeps them; the run goes on to the checks. A change that
+    is not on the list stops again: one made while the gate waited, or a later edit of an allowed check config
+    (its content hash differs). Gate:accept shows the allowed changes (AC-21).
+  - `r` retries implement with the list and the comment that follows; this is a new attempt (on Opus). `c`
+    cancels.
+  - With `testGlobs` empty, only the check configs are compared. A test renamed or merged is a change too; the
+    human allows it. A test the human weakened by hand at another gate is a change too.
+  - It does not see a weaker assertion that keeps the count (`toBe(3)` → `toBeTruthy()`), nor manifests other
+    than `package.json` (`pyproject.toml`, `Cargo.toml`, `go.mod`).
 - **AC-46:** IF a task's checks pass with an empty task diff, THEN THE SYSTEM SHALL record `commit: "empty"`,
   make no commit, and show it at gate:accept (partner of AC-20).
 - **AC-47:** IF `--resume` finds the spec missing on the base ref, THEN THE SYSTEM SHALL stay at
@@ -681,6 +784,33 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-20 — AC-66, Package manifest (new term): the frozen check also compares `package.json`. The driver's
+  checks run `pnpm test`, and `scripts.test` decides what that does, so `"test": "node --test || true"` made every
+  check green without touching a test. A new dependency stops too: under the driver the human saw it only in the
+  diff at gate:accept. From review: the check settings `package.json` holds (`jest`, `eslintConfig`, `mocha`,
+  `ava`) and `pnpm-workspace.yaml` (overrides, catalog versions) are compared too; a control character in a name
+  or a path is cleaned, as in a value, since it could hide a line the human then allows.
+- 2026-11-19 — AC-67, Role prompts (review), from review: an empty or out-of-date agent file exits 1 instead of
+  running silently; the review gets the task's verify; the task review judges only the given criteria; the
+  missing-file hint says `update`, since `generate` refuses an existing harness.
+- 2026-11-19 — AC-67, AC-64, Role prompts (implement): the implement role takes its rules from the
+  `implementer` agent too. The agent gets a mode for the driver (no `verify`, the schema) and the test conflict
+  exit in a chat as well.
+- 2026-11-19 — AC-67 (new), One source of rules, Role prompts (review): the review role takes its rules from
+  the `code-reviewer` agent. The driver had its own short copy, and the agent's later fixes (less noise, every
+  issue with evidence) never reached it. The agent says `quality: fail` needs a critical issue with evidence;
+  "Blocking review" is unchanged, the engine still blocks on any `quality: fail`.
+- 2026-11-19 — AC-66 (new), Frozen tests, Check config: the driver stops when a task weakens a test it found, or
+  changes a check config. With TEST_CONFLICT (AC-64) the role has a legal way out; this checks it was not
+  bypassed. It stops at a gate, not as a failed attempt, because a legal rename would only use up the attempts.
+  From review: skip marks only after a test call; more assertion forms; `a` allows the listed changes, and a
+  check config is keyed by its content.
+- 2026-11-19 — AC-64 (new): implement may return `TEST_CONFLICT`. With only DONE or BLOCKED, a role that met
+  a wrong test could only change it; a legal way out cuts test cheating (ImpossibleBench: 54 % → 9 %).
+- 2026-11-19 — AC-65 (new), Valid plan: a verify that cannot fail (`|| true`) makes a new plan not valid. Such
+  a verify passes whatever the code does. Only the driver checks it; `.claude/bin/verify` does not. From review:
+  `2>/dev/null ||` is dropped (`test -f x 2>/dev/null || exit 1` can fail); `| tee`, `| cat`, `set +o errexit`
+  and a last line `true` or `exit 0` are added.
 - 2026-11-19 — AC-4 (implement prompt): it lists the allowed shell commands; the role tried
   `node --test <file>`, which is not on the list, and lost a turn.
 - 2026-11-19 — AC-57: the retried role gets the questions it asked with the answer; a short "yes" meant

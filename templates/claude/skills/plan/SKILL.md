@@ -45,6 +45,9 @@ argument-hint: "<stage id, e.g. A0>"
      criterion has a test, no test invents one, code health within its SLOs, everything green.
    - **`verify` is a real check of this task only** — tests filtered by AC id, a type check, a script.
      Never `true`, never the whole suite unless the task is "everything green".
+   - **`verify` must be able to fail.** No `|| true`, `|| :`, `|| echo`, `|| exit 0`, `; true`, `; exit 0`,
+     `set +e`, `set +o errexit`, `| tee` or `| cat`, and no last line `true` or `exit 0`: such a command passes
+     whatever the code does. The driver refuses a plan with one.
    - **A missing test file must be red.** A runner given a file list may skip a file that does not exist yet
      and pass. So a verify that names test files starts with `test -f <file> &&` for each one.
    - **One task = one reviewable step** (roughly one commit). Split anything bigger.
