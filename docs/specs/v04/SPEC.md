@@ -474,7 +474,7 @@ rules, so an improved agent reaches the driver too.
 **Commits** (always the driver's):
 - spec: `docs(<stage>): spec — <title>`;
 - task: `<type>(<stage>): <subject>`;
-- quick: `<type>: <subject>`.
+- quick: `<type>(quick): <subject>`.
 
 The driver stages exactly the paths of the task diff, or the spec's allowed paths. It never stages
 `.claude/tmp/`.
@@ -630,7 +630,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   `quick/<slug>` from HEAD, run base-check, then implement the description as task Q1.
   - The slug is lowercase `[a-z0-9-]`, at most 40 characters, taken from the description.
 - **AC-25:** WHEN Q1's checks pass, THE SYSTEM SHALL review only if the diff lines exceed
-  `quickReviewLines`. It SHALL then commit as `<type>: <subject>` and stop at gate:accept.
+  `quickReviewLines`. It SHALL then commit as `<type>(quick): <subject>` and stop at gate:accept.
   - Q1's checks, and those of a quick fix task, are the `test` command plus lint.
   - A quick fix task follows the same review rule, and has 2 attempts.
 - **AC-26:** WHILE `AGENT_STACK_RUN` names a live quick run whose `branch` is the current branch, spec-gate
@@ -983,6 +983,9 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — AC-25, Commits: a quick commit is `<type>(quick): <subject>`, not `<type>: <subject>`. A repo
+  whose commitlint requires a scope (this one, since 0.4.2) refused every quick commit.
 
 - 2026-11-20 — AC-68–AC-76 (new), Decisions (the driver from a chat), Terms (Gate card, Operator chat, Command
   name, Hint, Harness floor), Contract (CLI `--answer` and `--json`, exit codes, gate input, `codeBy`,
