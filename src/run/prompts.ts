@@ -68,7 +68,8 @@ export function specPrompt(
     "",
     "Task: write a full spec; the branch exists; do not commit, branch or push.",
     "",
-    "Skip step 7 (Hand over) of the skill: the driver commits the spec and stops for the human's merge. Do not ask about committing, merging or handing over.",
+    // By title, never by number: a step added to the skill must not shift which one is skipped (hotfix 0.4.4).
+    "Skip the step **Hand over** of the skill: the driver commits the spec and stops for the human's merge. Do not ask about committing, merging or handing over.",
     "",
     "The driver checks your `## Terms` with `trace --terms` after you: a word the project shares goes into the glossary in this change, and a word for this spec only is marked `(local)`.",
     "",

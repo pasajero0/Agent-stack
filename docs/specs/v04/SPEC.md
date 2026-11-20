@@ -409,8 +409,9 @@ rules, so an improved agent reaches the driver too.
     filled in;
   - the description, and the answers marked "these are the grill";
   - "write a full spec; the branch exists; do not commit, branch or push";
-  - "skip step 7 (Hand over): the driver commits the spec and stops for the human's merge; do not ask about
-    committing, merging or handing over";
+  - "skip the step **Hand over** of the skill: the driver commits the spec and stops for the human's merge; do
+    not ask about committing, merging or handing over". The step is named by its title, never by its number: a
+    step added to the skill must not shift which step is skipped;
   - "the driver checks your `## Terms` with `trace --terms`: a word the project shares goes into the glossary
     in this change, a word for this spec only is marked `(local)`".
 - **plan**:
@@ -1048,6 +1049,11 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — AC-4 (spec prompt), hotfix 0.4.4: the prompt named the skipped step by number ("step 7"). 0.4.3
+  added a step to `/spec`, so step 7 became Review and the spec role was told to skip spec-reviewer. The step is
+  now named by its title. A spec change is committed as `docs(<stage>): spec — <what changed>`: `spec:` is no
+  Conventional Commits type, so commitlint refused it.
 
 - 2026-11-20 — AC-75, AC-68 (from the live task run): the chat shows the spec short at gate:spec-merge (Leonid:
   reading every spec in `less` is no way to work), and runs the driver apart from its watch (a stopped watch

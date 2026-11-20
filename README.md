@@ -77,7 +77,7 @@ may skip. Keeping the whole order outside the model is the job of the driver, `a
    `.claude/tmp/<stage>/tasks.json`, every criterion → a task with a `verify` command and a tier (S/M/L)
    that picks the implementer's model. Until it exists **spec-gate** keeps code closed: in the first trial
    `/plan` was never called, and nothing checked the "done".
-   **Requirements change?** The spec changes first, in the same branch: a `spec: …` commit with a
+   **Requirements change?** The spec changes first, in the same branch: a `docs(<stage>): spec — …` commit with a
    "## Changes" entry, then tests and code. spec-gate keeps code closed while the spec has uncommitted
    edits or an unexplained change — so history always shows the spec before the code it explains.
 4. **Tests first**, named with criterion ids. **cheat-guard** blocks adding skipped tests or suppressed checks.
@@ -97,7 +97,7 @@ Tests catch a broken feature. Two more kinds of drift are measured the way you w
 | SLO — a target | `slo` / `health[].max` in `gates.json`; `layers` boundaries |
 | Breach → stop releases | `STATUS: DONE` blocked; fix it, or justify it in an ADR and the human raises the limit |
 | Time series | `.claude/tmp/health.jsonl`, one line per `health` run |
-| Trace | spec criterion → test (`trace`) → code, in commit order: `spec: …` before the code |
+| Trace | spec criterion → test (`trace`) → code, in commit order: `docs(<stage>): spec — …` before the code |
 
 Only what the branch changed is measured, so old debt never blocks new work and new debt cannot slip in.
 

@@ -218,6 +218,8 @@ describe("headers", () => {
       normaliseHeader("feat", "A0", "Add the thing."),
       normaliseHeader("fix", null, "Quick Fix for the parser..."),
       normaliseHeader("docs", "A0", "y ".repeat(80)),
+      // The spec-change commit the /spec skill asks for (hotfix 0.4.4).
+      "docs(a0): spec — add a criterion for empty input",
     ];
     for (const h of headers) {
       // execFileSync throws on a non-zero exit, so a rejected header fails the test.

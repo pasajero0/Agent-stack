@@ -4,7 +4,7 @@
 #     (origin/<base> if present, else local <base>): a human approved the direction.
 #  2. Later spec changes ride in the same branch and MR as the code, but ahead of it: while the spec has
 #     uncommitted edits, code is closed; a committed spec that differs from the base must say what
-#     changed under "## Changes". So history always reads "spec: …" before the code it explains.
+#     changed under "## Changes". So history always reads "docs(<stage>): spec — …" before the code it explains.
 #  3. The plan follows the spec: code waits until /plan has broken the spec into tasks
 #     (.claude/tmp/<stage>/tasks.json), so verify and evidence-gate have something to check.
 # openPaths (docs, *.md, .claude/) stay open. gates.json → specGate: strict (default) | stage | off.
@@ -74,7 +74,7 @@ git cat-file -e "$ref:$spec" 2>/dev/null ||
 git cat-file -e "HEAD:$spec" 2>/dev/null ||
   deny "this branch does not contain the merged $spec — merge or rebase on $ref first."
 git diff --quiet HEAD -- "$spec" 2>/dev/null ||
-  deny "$spec has uncommitted changes. Commit the spec change first (spec: …, with an entry under ## Changes), then the code."
+  deny "$spec has uncommitted changes. Commit the spec change first (docs(<stage>): spec — …, with an entry under ## Changes), then the code."
 if ! git diff --quiet "$ref" HEAD -- "$spec" 2>/dev/null; then
   [ "$(git show "$ref:$spec" | changes_section)" != "$(git show "HEAD:$spec" | changes_section)" ] ||
     deny "$spec differs from $ref, but its ## Changes section does not say what changed and why. Add the entry, commit it, then the code."
