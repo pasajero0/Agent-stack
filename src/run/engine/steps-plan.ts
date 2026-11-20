@@ -139,7 +139,7 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
       f.add("      note: implement cannot run this verify itself (Claude Code does not allow command substitution by a rule); the driver's checks still run it");
     }
   }
-  f.add(`full task text: ${relative(ctx.projectDir, tasksPath(ctx.projectDir, stage))}`);
+  f.add(`full task text: ${relative(ctx.projectDir, tasksPath(ctx.projectDir, stage))}`, `branch: ${ctx.run.branch}`);
   // AC-81: the work time this plan should take, from the earlier runs in this repo.
   const e = estimate(ctx.projectDir, ctx.run, tasks.length);
   ctx.run.estimateSec = e?.sec ?? null;
@@ -147,7 +147,7 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
   f.whole(...decisionFacts(ctx));
   return {
     gate: "plan-approve",
-    title: `Plan ${stage}: ${tasks.length} task(s), run ${ctx.run.id} on ${ctx.run.branch}`,
+    title: `Plan ${stage}: ${tasks.length} task(s)`,
     facts: f.list,
     keep: f.keep,
     prompts: [{ text: "approve the plan; each verify runs as written", default: null, answers: [A.approve, { ...A.reject, label: "reject (a comment follows; the plan is redone)" }, A.cancel] }],

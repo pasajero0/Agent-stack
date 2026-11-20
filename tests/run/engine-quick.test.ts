@@ -214,7 +214,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(run.next).toBe("gate:limit");
     expect(run.tasks[0]?.attempts).toBe(1);
     const out = text(r);
-    expect(out).toContain("reason: test-conflict");
+    expect(out).toContain("━━ Stopped: test-conflict ━━");
     expect(out).toContain("tests/readme.test.ts:has the line");
     expect(out).toContain("the test wants broken");
     expect(out).toMatch(/r <text> — retry with your answer for the implementer/);

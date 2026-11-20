@@ -15,6 +15,18 @@ import { parseNext, transition, type StepKind } from "./transitions.js";
 
 export type ExitCode = 0 | 1 | 3;
 
+/**
+ * The line after a card when no answer came (AC-29, AC-68): the command and the keys the gate takes, so it does
+ * not read as an error. A gate with no answers (spec-merge) gives the plain resume command.
+ */
+function waitingLine(run: RunFile): string {
+  const answers = run.card?.prompts[0]?.answers ?? [];
+  const keys = answers.map((a) => `${a.key}${a.follows === null ? "" : ` <${a.follows}>`}`).join(" | ");
+  return keys === "" || (run.card?.prompts.length ?? 0) > 1
+    ? `Waiting at ${run.next}. Go on with: ${resumeHint(run.id)}`
+    : `Waiting at ${run.next} for your answer (${keys}): ${resumeHint(run.id)} --answer <answer>`;
+}
+
 /** Puts the run back as it was before the gate: under `--answer` a refused gate applies nothing (AC-70). */
 function restore(run: RunFile, snap: RunFile): void {
   for (const k of Object.keys(run)) delete (run as unknown as Record<string, unknown>)[k];
@@ -65,7 +77,7 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
           return 3;
         }
         writeRun(ctx.projectDir, run);
-        ctx.out(`Waiting at ${run.next}; no answer was given. Answer it with: ${resumeHint(run.id)}`);
+        ctx.out(waitingLine(run));
         return 3;
       }
       if (snap !== null) {

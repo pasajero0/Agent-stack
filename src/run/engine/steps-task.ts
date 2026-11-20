@@ -106,7 +106,7 @@ function answersCard(ctx: Ctx, p: ClarifyOutput, stageId: string): CardInput {
   const cancel = [A.cancel];
   return {
     gate: "answers",
-    title: `Questions before the spec — run ${ctx.run.id}`,
+    title: "Questions before the spec",
     facts: f.list,
     keep: f.keep,
     prompts: [

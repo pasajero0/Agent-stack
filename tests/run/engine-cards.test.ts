@@ -33,6 +33,19 @@ describe("gate cards (AC-68, AC-69)", () => {
     expect(t).toContain("a — approve · r <text> — reject");
   });
 
+  it("v04 AC-68: gate:accept starts with a summary, then time and cost; a skipped command is named once; the waiting line names the keys", async () => {
+    const r = repo();
+    await toPlanApprove(r, [plan(), ...twoTasksDone()]);
+    expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(3);
+    const facts = r.run().card?.facts ?? [];
+    expect(facts[0]).toBe("2 task(s) · 2 commit(s) · checks green · final check green");
+    expect(facts[1]).toMatch(/^time: /);
+    expect(facts.findIndex((f) => f.startsWith("Usage:"))).toBeLessThan(facts.findIndex((f) => f.startsWith("Diff from")));
+    expect(facts).toContain("branch: B1-add-a-greeting");
+    expect(facts.filter((f) => f.includes("(empty lint command)")).length).toBeLessThanOrEqual(1);
+    expect(text(r)).toMatch(/Waiting at gate:accept for your answer \(a \| r <text> \| c\): agent-stack run --resume r-\S+ --answer <answer>/);
+  });
+
   it("v04 AC-77: a verify with command substitution is marked at the plan gate; the plan stays valid", async () => {
     const r = repo();
     const tasks = [
@@ -54,7 +67,7 @@ describe("gate cards (AC-68, AC-69)", () => {
     const run = r.run();
     expect(run.next).toBe("gate:accept");
     expect(run.card?.gate).toBe("accept");
-    expect(text(r)).toMatch(/━━ Accept: run /);
+    expect(text(r)).toMatch(/━━ Accept: B1 · 2 task\(s\) ━━/);
   });
 
   it("v04 AC-69: --status --json gives the run, the kept card and the language; en by default", async () => {

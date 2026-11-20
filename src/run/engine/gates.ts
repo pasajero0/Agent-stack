@@ -124,19 +124,28 @@ function acceptSource(dir: string): string {
 function acceptCard(ctx: Ctx, final: CheckRun | null): CardInput {
   const { run } = ctx;
   const f = new Facts();
+  // AC-68: the summary first, then the time and the cost, then the details.
+  const commits = run.tasks.filter((t) => t.commit !== null && t.commit !== "empty").length;
+  const red = run.tasks.reduce((n, t) => n + t.checks.filter((c) => !c.skipped && c.exit !== 0).length, 0);
+  const finalText = final === null ? "" : ` · final check ${final.exit === 0 ? "green" : "RED"}`;
+  f.add(`${run.tasks.length} task(s) · ${commits} commit(s) · checks ${red === 0 ? "green" : `${red} red`}${finalText}`);
+  f.add(...timeFacts(run));
+  f.whole(`Usage: ${cost(run)}`);
+  f.add(`branch: ${run.branch}`);
   if (run.baseCommit) f.whole(`Diff from ${short(run.baseCommit)}:\n${diffStat(ctx.projectDir, run.baseCommit) || "  (no changes)"}`);
   for (const t of run.tasks) {
-    const checks = t.checks.map((c) => (c.skipped ? `${c.cmd} skipped` : `${c.cmd} → ${c.exit}`)).join("; ");
+    // A skipped command is named once, in Skipped: below.
+    const checks = t.checks.filter((c) => !c.skipped).map((c) => `${c.cmd} → ${c.exit}`).join("; ");
     f.add(`${t.id}: ${commitText(t.commit)}; attempts ${t.attempts}; checks: ${checks || "none"}`);
     for (const n of t.notes) f.add(`${t.id} note: ${n}`);
     for (const c of t.allowedChanges) f.whole(`${t.id} test change allowed: ${c}`);
   }
   if (final !== null) {
-    const red = final.exit !== 0;
-    f.add(`Final check: ${final.cmd} (every task) → ${final.exit}${red ? " RED" : ""}; on ${short(headSha(ctx.projectDir))}`);
+    const isRed = final.exit !== 0;
+    f.add(`Final check: ${final.cmd} (every task) → ${final.exit}${isRed ? " RED" : ""}; on ${short(headSha(ctx.projectDir))}`);
     // A hand fix made while the gate waited is not committed: say so, or the green is taken for the branch's.
     if (dirtyPaths(ctx.projectDir).length > 0) f.add("The final check ran on uncommitted changes; the commits alone may differ.");
-    if (red) {
+    if (isRed) {
       f.whole(final.tail);
       f.add("A later task broke an earlier one: r with a comment adds a fix task; a accepts a red result.");
     }
@@ -144,11 +153,9 @@ function acceptCard(ctx: Ctx, final: CheckRun | null): CardInput {
   const skips = skipped(ctx);
   if (skips.length > 0) f.add(`Skipped: ${skips.join("; ")}`);
   f.whole(...decisionFacts(ctx));
-  f.whole(`Usage: ${cost(run)}`);
-  f.add(...timeFacts(run));
   return {
     gate: "accept",
-    title: `Accept: run ${run.id} on ${run.branch}`,
+    title: `Accept: ${run.mode === "task" ? (run.stage ?? "task") : "quick"} · ${run.tasks.length} task(s)`,
     facts: f.list,
     keep: f.keep,
     prompts: [{ text: "accept the result", default: null, answers: [{ ...A.approve, label: "accept" }, { ...A.reject, label: "reject (a comment follows; it becomes a fix task)" }, A.cancel] }],
@@ -248,7 +255,7 @@ function limitCard(ctx: Ctx): CardInput {
   const p = LIMIT_ANSWERS[reason] ?? LIMIT_ANSWERS["other"];
   return {
     gate: "limit",
-    title: `Stopped — reason: ${reason} — run ${run.id}`,
+    title: `Stopped: ${reason}`,
     facts: f.list,
     keep: f.keep,
     prompts: p ? [{ text: p.text, default: null, answers: p.answers }] : [],

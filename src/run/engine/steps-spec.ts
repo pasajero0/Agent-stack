@@ -157,7 +157,7 @@ const specMergeGate: StepHandler = async (ctx) => {
         : `Push and merge it: git push -u origin spec/${stage}, open and merge the pull request into ${cfg.baseBranch}; then git fetch, and ${resumeHint(run.id)}.`
     );
     f.whole(...decisionFacts(ctx));
-    showCard(ctx, { gate: "spec-merge", title: `Spec ${stage} is ready to review — run ${run.id}`, facts: f.list, keep: f.keep, prompts: [], hint: resumeHint(run.id) });
+    showCard(ctx, { gate: "spec-merge", title: `Spec ${stage} is ready to review`, facts: f.list, keep: f.keep, prompts: [], hint: resumeHint(run.id) });
     return NO_INPUT;
   }
   const name = `${stage}-${slugify(proposalOf(run).stage.title)}`;
