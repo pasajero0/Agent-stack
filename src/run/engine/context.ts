@@ -3,6 +3,7 @@
  * task mode (T9) plugs in as a second `ModeSteps` with its own handlers for clarify … gate:plan-approve.
  */
 import type { Prompter } from "../gate.js";
+import type { Progress } from "./progress.js";
 import type { Next, RunConfig, RunFile, RunTask } from "../types.js";
 import type { StepEvent, StepKind } from "./transitions.js";
 import { commandName } from "./command.js";
@@ -24,6 +25,8 @@ export interface Ctx {
   env: Record<string, string>;
   /** Aborted on SIGINT/SIGTERM: kills the current call, the loop then exits 1 (AC-51). */
   signal: AbortSignal;
+  /** What the run is doing, for `now.json`, `progress.log` and the status line (AC-79). */
+  progress: Progress;
 }
 
 /** `task` is the id from `next` (`implement:<task>` …), null for steps without one. */

@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
+import { lineSplitter, toolLines } from "./engine/progress.js";
 import type { Role } from "./types.js";
 
 export type Model = "opus" | "sonnet";
@@ -48,6 +49,8 @@ export interface CallIo {
   validate?: (value: unknown) => string | null;
   /** Aborting kills the call's whole process group (SIGINT/SIGTERM in the driver, AC-51). */
   signal?: AbortSignal;
+  /** Called with one line per tool the role starts, while the call runs (AC-78). */
+  onTool?: (line: string) => void;
 }
 
 /** What a call may load besides the repo (AC-58): the project's MCP config, and the user CLAUDE.md to exclude. */
@@ -136,7 +139,9 @@ export function buildArgs(spec: CallSpec, scope: CallScope): string[] {
   const args = [
     "-p",
     "--output-format",
-    "json",
+    "stream-json",
+    // stream-json under -p needs --verbose; the events show what the role does while it runs (AC-78).
+    "--verbose",
     "--max-turns",
     String(spec.maxTurns),
     "--model",
@@ -167,15 +172,20 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function parseResult(stdout: string): Record<string, unknown> | null {
-  const text = stdout.trim();
-  if (!text) return null;
-  try {
-    const v: unknown = JSON.parse(text);
-    return isRecord(v) && v["type"] === "result" ? v : null;
-  } catch {
-    return null;
+/** The last event of type `result` in the stream; a line that is not JSON is skipped (AC-78). */
+export function parseResult(stdout: string): Record<string, unknown> | null {
+  const lines = stdout.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const text = (lines[i] ?? "").trim();
+    if (!text) continue;
+    try {
+      const v: unknown = JSON.parse(text);
+      if (isRecord(v) && v["type"] === "result") return v;
+    } catch {
+      // not JSON: skip
+    }
   }
+  return null;
 }
 
 /** The longest denial line, with its "permission denied: " prefix (AC-32). */
@@ -265,6 +275,22 @@ export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcom
     reject: false,
     stripFinalNewline: false,
   });
+  if (io.onTool) {
+    // AC-78: one line per tool the role starts, while it runs.
+    const onTool = io.onTool;
+    const lines = lineSplitter();
+    const decoder = new TextDecoder();
+    const show = (line: string): void => {
+      try {
+        for (const l of toolLines(JSON.parse(line))) onTool(l);
+      } catch {
+        // not JSON: skip
+      }
+    };
+    sub.stdout?.on("data", (chunk: Buffer) => {
+      for (const line of lines.push(decoder.decode(chunk, { stream: true }))) show(line);
+    });
+  }
   let stopped: "timeout" | "aborted" | null = null;
   const stop = (why: "timeout" | "aborted"): void => {
     stopped ??= why;

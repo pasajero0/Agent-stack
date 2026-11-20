@@ -6,6 +6,7 @@ import { resumeRun, startRun } from "../../src/run/engine/index.js";
 import { transition } from "../../src/run/engine/transitions.js";
 import { listRuns, readLock } from "../../src/run/store.js";
 import { runCommand } from "../../src/commands/run.js";
+import { Progress } from "../../src/run/engine/progress.js";
 import { loadRunConfig } from "../../src/run/config.js";
 import type { Ctx, ModeSteps } from "../../src/run/engine/context.js";
 import { runLoop } from "../../src/run/engine/loop.js";
@@ -98,7 +99,7 @@ describe("quick mode: the path", () => {
     const env = r.opts({ gate: ["a"] }).env ?? {};
     const prompter = selectPrompter(env, false);
     const signal = new AbortController().signal;
-    const ctx: Ctx = { projectDir: r.dir, cfg: loadRunConfig(r.dir), run: r.run(), mode, prompter, answering: false, out: (l) => r.out.push(l), env, signal };
+    const ctx: Ctx = { projectDir: r.dir, cfg: loadRunConfig(r.dir), run: r.run(), mode, prompter, answering: false, progress: new Progress(r.dir, r.run().id, r.run().next), out: (l) => r.out.push(l), env, signal };
     const code = await runLoop(ctx).finally(() => prompter.close());
     expect(code, text(r)).toBe(0);
     expect(seen).toEqual([0]);

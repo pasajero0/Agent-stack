@@ -32,6 +32,8 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
     for (;;) {
       if (ctx.signal.aborted) throw new Interrupted();
       const { kind, task } = parseNext(run.next);
+      // AC-79: the step in progress, for now.json and the status line.
+      ctx.progress.step(run.next);
       const handler = handlers[kind];
       if (!handler) throw new RunError(`Step ${kind} is not built for ${run.mode} mode.`, 1);
       const gate = kind.startsWith("gate:");

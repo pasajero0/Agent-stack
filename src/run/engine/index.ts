@@ -26,6 +26,7 @@ import type { Mode, RunConfig, RunFile } from "../types.js";
 import { findTask, type Ctx, type ModeSteps } from "./context.js";
 import { cancelledText, costText } from "./gates.js";
 import { runLoop, type ExitCode } from "./loop.js";
+import { Progress } from "./progress.js";
 import { quickMode } from "./steps-quick.js";
 import { taskMode } from "./steps-task.js";
 import { parseNext } from "./transitions.js";
@@ -90,6 +91,7 @@ async function drive(o: EngineOptions, cfg: RunConfig, run: RunFile, mode: ModeS
     out: outOf(o),
     env,
     signal: o.signal ?? new AbortController().signal,
+    progress: new Progress(o.projectDir, run.id, run.next),
   };
   try {
     before?.(ctx);

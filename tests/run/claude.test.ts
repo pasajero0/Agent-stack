@@ -86,7 +86,8 @@ describe("buildArgs", () => {
     it(`v04 AC-2: ${role} gets -p, json output, max turns, model, schema, its tools and permission mode`, () => {
       const args = buildArgs(anyRole(role, { test: "pnpm test", lint: "", verify: "pnpm vitest run x" }), SCOPE);
       expect(args).toContain("-p");
-      expect(valueAfter(args, "--output-format")).toBe("json");
+      expect(valueAfter(args, "--output-format")).toBe("stream-json");
+      expect(args).toContain("--verbose");
       expect(valueAfter(args, "--max-turns")).toBe("60");
       expect(valueAfter(args, "--model")).toBe(role === "implement" ? "sonnet" : "opus");
       expect(JSON.parse(valueAfter(args, "--json-schema") ?? "null")).toEqual(SCHEMA);
