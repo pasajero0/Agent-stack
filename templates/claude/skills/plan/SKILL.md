@@ -64,7 +64,7 @@ argument-hint: "<stage id, e.g. A0>"
    Under the driver (`agent-stack run`), a retry runs on Opus. By hand, after two failed `verify` runs move
    the task one tier up (`.claude/bin/verify` prints the hint).
 4. **Run `.claude/bin/verify`** once: every task should fail now (red). A `verify` that already passes
-   proves nothing — fix it. Under the driver, skip this step: the driver runs each task's verify before its
+   proves nothing — fix it, except a docs-only task's `true`, which is green by design. Under the driver, skip this step: the driver runs each task's verify before its
    first attempt and notes one that is already green.
 5. Show the plan to the human as a table (id, ACs, tier, verify) before implementing.
 

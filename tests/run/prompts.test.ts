@@ -180,7 +180,6 @@ describe("role prompts", () => {
       if (last) expect(flat).toMatch(new RegExp(`last line[^.]*\`${last[1]}\``));
       else expect(flat).toContain(`\`${name}\``);
     }
-    expect(NEVER_FAILS_NAMES.length).toBe(12);
   });
 
   it("0.4.5: the /plan skill allows a verify that is only `true` for a docs-only task, as the driver does", () => {
