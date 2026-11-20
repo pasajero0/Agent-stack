@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.4 — hotfix
+
+- **run: the spec role reviews its spec again.** 0.4.3 added a step to `/spec`, and the driver named the step to
+  skip by its number, so under the driver every spec was written without spec-reviewer. The step is now named by
+  its title (Hand over).
+- **A spec change is committed as `docs(<stage>): spec — <what changed>`.** The `/spec` skill, the normative rules,
+  spec-gate's message and README said `spec: …`, which is no Conventional Commits type: commitlint refused it.
+
+### Upgrading from 0.4.3
+
+- Run `agent-stack update` for the `/spec` skill, `_normative` and spec-gate. The driver fix needs no step.
+
+
 ## 0.4.3 — see the run; specs state their limits
 
 - **run: see a run while it works.** Each tool a role starts prints a line under its step (`· Read src/a.ts`,
