@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 
-/** Scopes from CONTRIBUTING.md: code areas, doc kinds, and a spec with its release (`driver-0.4.2`). */
-const SCOPES = ["run", "hooks", "harness", "cli", "ci", "deps", "release", "readme", "changelog", "glossary", "adr", "contributing"];
+/** Scopes from CONTRIBUTING.md: code areas, doc kinds, a quick run of the driver, a spec with its release. */
+const SCOPES = ["run", "hooks", "harness", "cli", "ci", "deps", "release", "readme", "changelog", "glossary", "adr", "contributing", "quick"];
 const SPEC_SCOPE = /^[a-z]+-\d+\.\d+\.\d+$/;
 
 /**

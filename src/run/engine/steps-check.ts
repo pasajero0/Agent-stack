@@ -137,7 +137,7 @@ export const commit: StepHandler = async (ctx, id) => {
     return next === null ? { type: "committed-last" } : { type: "committed", task: next };
   };
   const out = lastImplement(ctx);
-  const header = normaliseHeader(out.commit.type, ctx.run.mode === "task" ? ctx.run.stage : null, out.commit.subject);
+  const header = normaliseHeader(out.commit.type, ctx.run.mode === "task" ? ctx.run.stage : "quick", out.commit.subject);
   const head = headSha(dir);
   if (head !== base && git(dir, ["log", "-1", "--format=%s"]).stdout.trim() === header) {
     task.commit = head;

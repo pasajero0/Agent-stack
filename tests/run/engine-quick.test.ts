@@ -34,7 +34,7 @@ describe("quick mode: the path", () => {
     expect(run.baseCommit).toBe(head);
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
     expect(sh(r.dir, "rev-list", "--count", `main..${BRANCH}`)).toBe("1");
-    expect(sh(r.dir, "log", "-1", "--format=%s")).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "-1", "--format=%s")).toBe("fix(quick): fix the README line");
     expect(sh(origin, "for-each-ref")).toBe("");
     expect(run.tasks[0]?.commit).toBe(sh(r.dir, "rev-parse", "HEAD"));
     expect(readLock(r.dir)).toBeNull();
@@ -347,7 +347,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     const task = r.run().tasks[0];
     expect(task?.attempts).toBe(2);
     expect(task?.lastFeedback).toContain("commit");
-    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix(quick): fix the README line");
     expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nfixed\n");
   });
 
@@ -361,7 +361,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(code, text(r)).toBe(0);
     expect(r.run().tasks[0]?.lastFeedback).toContain("branch");
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
-    expect(sh(r.dir, "log", "-1", "--format=%s", BRANCH)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "-1", "--format=%s", BRANCH)).toBe("fix(quick): fix the README line");
   });
   it("v04 AC-43: implement committing on the run's branch, then switching to main, is soft-reset on the run's branch", async () => {
     const r = repo();
@@ -376,7 +376,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(task?.attempts).toBe(2);
     expect(task?.lastFeedback).toContain("commit");
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
-    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix(quick): fix the README line");
     expect(sh(r.dir, "rev-parse", "main")).toBe(main);
     expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nfixed\n");
   });
@@ -394,7 +394,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(task?.lastFeedback).toContain("commit");
     expect(task?.lastFeedback).toContain("stray");
     expect(sh(r.dir, "branch", "--show-current")).toBe(BRANCH);
-    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix: fix the README line");
+    expect(sh(r.dir, "log", "--format=%s", `main..${BRANCH}`)).toBe("fix(quick): fix the README line");
     expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nfixed\n");
   });
 

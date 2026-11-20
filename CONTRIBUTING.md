@@ -31,6 +31,7 @@ Do not name a branch like a tag (`v0.4.2`): git then cannot tell them apart.
 | `readme`, `changelog`, `glossary`, `adr`, `contributing` | that document |
 | `<spec>-<version>` | a spec change, before the code: `docs(driver-0.4.2): …` |
 | `<stage>` | a commit `agent-stack run` makes for a stage with a folder in `docs/specs/`: `feat(c1): …` |
+| `quick` | a commit of `agent-stack run quick`: a small fix with no spec, `fix(quick): …` |
 
 Tests take the scope of the code they test: `test(hooks): …`.
 

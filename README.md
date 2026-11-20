@@ -161,7 +161,7 @@ agent-stack run --cancel [<run id>]                    cancel a waiting or inter
 
 **Quick mode.** Creates `quick/<slug>` from HEAD, runs your test command on it (it must pass), then one
 implement call. The driver runs the checks (the test command, plus lint on changed files). A diff above
-`quickReviewLines` is also reviewed. Then the driver commits (`<type>: <subject>`) and stops at the accept gate.
+`quickReviewLines` is also reviewed. Then the driver commits (`<type>(quick): <subject>`) and stops at the accept gate.
 
 **Task mode.**
 1. *Clarify* (Opus): up to 5 questions with recommended answers, a size (task, story, epic) and a stage id.
