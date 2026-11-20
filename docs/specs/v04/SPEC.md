@@ -57,6 +57,11 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
   - Off.
 
   Turns per call, attempts per task and the review-loop stop apply whatever the kind.
+- **The driver from a chat (Leonid, 20/11/26).** A chat runs the driver and passes the human's answers; it
+  does no step's work. `codeBy: "driver"` is opt-in and holds even with `specGate: "off"`. The chat may turn a
+  clear worded reply into a gate key and says which key it sent; when the reply is unclear, it asks. It never
+  runs `agent-stack update` itself: that changes its own guards. A run with no human (autonomous) from a chat
+  waits for the sandbox of 0.5. The chat speaks English unless `language.chat` or the human says otherwise.
 
 ## Terms
 
@@ -123,6 +128,20 @@ word for this spec only is marked `(local)`.
   the next criterion or heading.
 - **Driver call**: a Claude process the driver started, with `AGENT_STACK_RUN=<run id>` in its environment.
   Its hooks inherit that variable. A command the model runs cannot set the environment of a hook process.
+- **Gate card**: what a gate shows, built once as data when the run reaches the gate and kept in the run file
+  (`card`). The terminal prints it for a person (AC-68); `--status --json` gives the same card to a program
+  (AC-69). Fields are in the Contract ("Gate card").
+- **Operator chat**: a Claude Code chat that runs the driver for the human with `--answer` and `--status --json`,
+  and does no step's work itself (AC-70, AC-71, AC-75).
+- **Command name** (local): how a hint names the driver: `agent-stack` when an `agent-stack` is found on `PATH`
+  and either is the same file as the running `cli.mjs` (symlinks followed) or prints the same version for
+  `agent-stack --version` (a pnpm global install is a shell shim, not a symlink); otherwise `node "<the running
+  cli.mjs path>"`. It is found once per process. A hint adds the subcommand: `<command name> run --resume <id>`,
+  `<command name> update`.
+- **Hint** (local): a line the driver prints with a command for the human to run.
+- **Harness floor** (local): the lowest harness version this driver needs, a constant in the driver: **0.4.1**
+  (the agent sections the driver reads, AC-67). It rises only when the driver needs a harness file or section
+  that an older harness lacks. Versions compare as numbers, part by part: 0.10.0 is above 0.4.2.
 
 ## References
 
@@ -134,6 +153,7 @@ Glosses for references kept outside git.
 - **7.12**: lessons between runs.
 - **V9**: untrusted browser input.
 - **README "Limits"**: known gaps, for example "Bash can write any file".
+- **The sandbox of 0.5**: the planned OS sandbox for commands (release 0.5, security and isolation).
 
 ## Model and state transitions
 
@@ -199,23 +219,39 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 ```text
 agent-stack run task  [--stage <id>] "<description>"   start a task run
 agent-stack run quick "<description>"                  start a quick run
-agent-stack run --resume [<run id>]                    continue a waiting or interrupted run (default: the locked one)
-agent-stack run --status [<run id>]                    print the run; change nothing
+agent-stack run --resume [<run id>] [--answer <text>]… continue a waiting or interrupted run (default: the locked one)
+agent-stack run --status [<run id>] [--json]           print the run; change nothing
 agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
 ```
 
+`--answer` may repeat; each one is one line of gate input for the gate the run waits at, and only that gate
+(AC-70). `--answer ""` is Enter. A key and what follows it go in one `--answer`, as at the terminal:
+
+```text
+--resume <id> --answer "" --answer "" --answer "no, split on spaces only" --answer "" --answer "" --answer "" --answer ""
+                                     gate:answers: 5 questions, size, stage id (Enter keeps)
+--resume <id> --answer a             gate:plan-approve or gate:accept: approve
+--resume <id> --answer "r split T2 in two"    reject with a comment
+--resume <id> --answer "f 60"        gate:limit, reason fuse: raise to 60
+```
+
+`--json` prints the run and its gate card as one JSON object (AC-69).
+
 Exit codes:
 - **0**: finished, cancelled, or `--status`.
-- **3**: waiting at `gate:spec-merge`, or at any gate when no terminal is attached.
-- **1**: a refusal or an error. The message says what to do.
+- **3**: waiting at `gate:spec-merge`, or at any gate when no terminal is read (none is attached, or
+  `--answer` was given).
+- **1**: a refusal or an error, also an `--answer` the gate does not take (AC-70). The message says what to do.
 
 `--stage <id>` fills in the stage id the gate proposes. The id is still validated (AC-7).
 
 **Gate input**
 
-The driver reads gate input from the terminal. When `AGENT_STACK_GATE_INPUT` names a file, it reads the
-answers from that file instead, one line per prompt. That variable is the test seam, and nothing else sets it.
-When the file runs out, the gate behaves as AC-29: it is recorded, and the driver exits with code 3.
+The driver reads gate input from the terminal. When `--answer` is given, it reads those instead, in order, one
+per prompt, and never the terminal; `--answer` wins over `AGENT_STACK_GATE_INPUT` (AC-70). When
+`AGENT_STACK_GATE_INPUT` names a file, it reads the answers from that file, one line per prompt. That variable
+is the test seam, and nothing else sets it. When the file runs out, the gate behaves as AC-29: it is recorded,
+and the driver exits with code 3.
 
 - **answers**:
   - per question: Enter accepts the recommended answer; text replaces it. Each question's prompt says so:
@@ -228,7 +264,8 @@ When the file runs out, the gate behaves as AC-29: it is recorded, and the drive
 - **limit**:
   - reasons attempts, blocked or review loop: `r` retry, `c` cancel;
   - reason decision: `r` retry (a comment follows), `c` cancel (AC-57);
-  - reason test conflict: `r` retry (a comment follows), `c` cancel (AC-64);
+  - reason test conflict: `r` retry (the answer for the implementer follows; its prompt says so:
+    `answer for the implementer>`), `c` cancel (AC-64);
   - reason tests changed: `a` allow, `r` retry (a comment follows), `c` cancel (AC-66);
   - reason fuse: `f <n>` sets a new limit for this run, in the fuse's own unit (calls or dollars); it must be
     above what is used so far. `c` cancels.
@@ -249,6 +286,54 @@ accept fractions.
 
 Any other value is refused when a run starts, with code 1.
 
+**`.claude/gates.json` → `codeBy`**
+
+Optional, top level, read by spec-gate (AC-71): `"anyone"` (the default when the key is missing) or
+`"driver"`. A seed key is not added by `update`, so a repo turns it on by hand.
+
+**`.claude/gates.json` → `language`**
+
+Optional, top level (AC-76): `{ "chat": "<code>", "terms": "<code>" }`, each a language code matching
+`^[a-z]{2,3}(-[A-Za-z]{2}|-[0-9]{3})?$` (`en`, `ru`, `pt-BR`); both default to `en`. `chat` is the language the
+operator chat speaks to the human. `terms` names the language the project's terms are written in: gate keys,
+commands, ids and glossary words. The chat shows terms as they are and never translates them. The driver's own
+terminal text stays English.
+
+**Gate card** (in the run file as `card`, and in `--status --json`)
+
+```json
+{
+  "gate": "plan-approve",
+  "run": "r-20261119-232844",
+  "stage": "A4",
+  "title": "Plan A4: 2 tasks",
+  "facts": ["T1  S · sonnet · AC-1,3,5,6,7   Write tests/count.test.js first, then src/count.js", "      verify: …",
+            "full task text: .claude/tmp/A4/tasks.json"],
+  "source": "sha256 of tasks.json when the card was built",
+  "prompts": [
+    { "text": "approve the plan", "default": null,
+      "answers": [ { "key": "a", "follows": null, "label": "approve" },
+                   { "key": "r", "follows": "text", "label": "reject" },
+                   { "key": "c", "follows": null, "label": "cancel" } ] }
+  ],
+  "hint": "agent-stack run --resume r-20261119-232844"
+}
+```
+
+- `gate`: `answers` | `spec-merge` | `plan-approve` | `limit` | `accept`; `stage`: string or null.
+- `facts`: strings, in the order AC-68 prints them, never cut: the terminal print cuts, the data does not.
+- `source`: the sha256 of the inputs the gate decides on (gate:plan-approve: the sha256 of `tasks.json`; gate:accept: the HEAD commit id);
+  null for other gates.
+- `prompts`: one per line of input the gate reads, in order. gate:answers has one per question, then the size
+  (`answers`: `task`, `story`, `epic`, `c`), then the stage id; the stage-id prompt is read only when the size is
+  task or story, so with epic a stage-id answer is an extra answer (AC-70). gate:spec-merge has none. `default`
+  is what `--answer ""` (Enter) gives, or null when Enter is not an answer. An answer with `follows: null` is the
+  key alone. With `"text"` or `"number"`, what follows comes after the key on the same line (`r split T2`), or,
+  for `"text"`, as the next answer (`--answer r --answer "split T2"`). The question prompts of gate:answers take
+  free text, so their `answers` list only `c`.
+- `hint`: the command to continue, with the command name.
+- The run file's `card` is set when the run reaches a gate and back to null when the gate decides.
+
 **Run file (`run.json`)**
 
 | Field | Type |
@@ -258,6 +343,7 @@ Any other value is refused when a run starts, with code 1.
 | `status` | `running` \| `waiting` \| `finished` \| `cancelled` |
 | `next` | one of the values listed above |
 | `returnTo` | the `next` value that gate:limit returns to, or null |
+| `card` | the gate card of the gate the run waits at, or null (written when the run reaches the gate) |
 | `limitReason` | `attempts` \| `blocked` \| `review-loop` \| `fuse` \| `decision` \| `test-conflict` \| `tests-changed` \| null |
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
@@ -436,7 +522,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - check the spec's terms (AC-59);
   - commit those paths as `docs(<stage>): spec — <title>`.
 - **AC-9:** WHEN size epic is confirmed, THE SYSTEM SHALL write `split.md` from `proposal.split` and print
-  `agent-stack run task --stage <id> "<goal>"` for each part. It SHALL finish the run without writing code.
+  `<command name> run task --stage <id> "<goal>"` for each part (AC-73). It SHALL finish the run without writing code.
 - **AC-10:** WHEN the spec is committed, THE SYSTEM SHALL stop at gate:spec-merge, print how to approve it,
   and exit with code 3.
   - With `origin/<base>`: push `spec/<stage>`, merge its pull request, then `git fetch`.
@@ -735,6 +821,105 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-56:** WHEN a test or lint command is empty, THE SYSTEM SHALL skip it in base-check and in checks, and
   show the skip at the next gate.
 
+### Gate cards and the operator chat
+
+- **AC-68:** WHEN the run reaches a gate, THE SYSTEM SHALL build its gate card, write it to the run file, and
+  print it:
+  ```text
+  ━━ <title> ━━
+    <fact>
+    <fact>
+  Needed from you: <prompt text>
+    <key> — <label> · <key> <text|number> — <label> · …
+  ```
+  - The facts are what the gate's criterion lists (AC-6 answers, AC-10 spec merge, AC-12 and AC-13 plan
+    approval, AC-21 accept, AC-35 / AC-38 / AC-57 / AC-64 / AC-66 limit, AC-32 human decisions). The card
+    changes the layout, not the content.
+  - gate:answers: one fact per question with its recommended answer, then the size and the stage id; the
+    prompts follow the card one by one (AC-48).
+  - gate:plan-approve: each task is two lines: `<id>  <tier> · <model>[ · risky] · <criteria>   <description>`,
+    then `      verify: <verify>`. `<criteria>` is the ids joined by `,` with the `AC-` prefix written once
+    (`AC-1,3,5`). The last fact is `full task text: <path of tasks.json>`. A verify command is never cut, since
+    the human approves it as written.
+  - The terminal cuts a one-line fact longer than 100 characters to 100, the last of them `…`. It never cuts a
+    verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), or a multi-line output (the tails of
+    AC-33 and AC-61, a BLOCKED report): those print as they are. The card data is never cut.
+  - The waiting line of AC-29 and the steps of AC-10 follow the card; they are its `hint`.
+  - The final check of gate:accept runs once, when the run reaches the gate; a resume at gate:accept shows the
+    kept card and does not run it again. The card names the HEAD it ran on.
+  - IF, when the gate decides, its inputs differ from the card's `source` (`tasks.json` was replaced, or HEAD
+    moved), THEN THE SYSTEM SHALL rebuild the card (at gate:accept: run the final check again), print it, and
+    ask again at the terminal; under `--answer` it SHALL refuse with code 1: "the gate changed; read the card
+    again". So the human approves only what the card showed. A gate:answers resume uses the card's `default`
+    for the stage id; IF that id now fails AC-7, THEN AC-48 applies.
+- **AC-69:** WHEN `--status --json` runs, THE SYSTEM SHALL print one JSON object, change nothing and exit 0:
+  `{ "run": { …AC-23 fields: "id", "mode", "status", "next", "branch", "attempts" (task id → count), "calls",
+  "costUsd", "costUnknownCalls" (AC-62), "fuse" }, "card": <gate card or null>, "language": { "chat", "terms" },
+  "warnings": [ … ] }`.
+  - `card` is the kept card only when the run is `waiting`; a live or interrupted run gives null, even while a
+    terminal prompt is open.
+  - IF there is no run, or the named run does not exist (AC-53), THEN it SHALL print `{"run": null, "card":
+    null, …}` with the reason in `warnings`, and exit 0.
+- **AC-70:** WHEN `--resume` runs with one or more `--answer <text>`, THE SYSTEM SHALL use them, in order, as
+  the input of the gate the run waits at, and SHALL NOT read the terminal. Then the run goes on as usual: it stops
+  at the next gate with code 3, or ends with its usual code (0 finished or cancelled, 1 an error).
+  - IF the run is not `waiting` at a gate that reads input (it is interrupted, or waits at gate:spec-merge),
+    THEN THE SYSTEM SHALL refuse with code 1 before anything runs.
+  - IF an answer is not one the prompt takes, THEN THE SYSTEM SHALL refuse with code 1, say why, apply nothing,
+    and keep the run waiting at the gate. For a stage id that fails AC-7, the message names the free id AC-48
+    offers.
+  - IF answers are left after the gate decides, THEN THE SYSTEM SHALL refuse with code 1, apply nothing, keep
+    the run waiting, and name the extra answers. So one `--resume` can never answer two gates.
+  - IF the answers run out before the gate decides, THEN THE SYSTEM SHALL apply nothing, keep the run waiting
+    and exit 3; the next `--resume` starts at the gate's first prompt.
+  - IF `--answer` comes without `--resume`, THEN THE SYSTEM SHALL refuse with code 1 and say it needs
+    `--resume`.
+- **AC-71:** WHILE `gates.json → codeBy` is `"driver"`, spec-gate SHALL deny every Edit, Write, MultiEdit and
+  NotebookEdit outside `openPaths`, unless the hook runs in a driver call of a live run, in any mode, on that
+  run's branch. The message says to run the work through the driver (`/drive`).
+  - Only three spec-gate exits come before it: no `gates.json`, no file path in the tool input, and a path
+    outside the project. Then `openPaths`, then this check, then the rest: it holds with `specGate: "off"` or
+    `"stage"`.
+  - In a repo with no commits it does not apply, since a run needs a commit to branch from; spec-gate says that
+    `codeBy` starts after the first commit.
+  - With the key missing or `"anyone"`, or with no `gates.json`, nothing changes.
+  - IF the key has any other value, THEN spec-gate SHALL act as for `"driver"` and say the value is unknown.
+  - `openPaths` (for example docs, `*.md`, `.claude/`) stay open: the human may still write a spec through the
+    chat; it still needs the merge (AC-10). A file written through Bash is not caught (README "Limits").
+- **AC-72:** WHEN a run starts or resumes, THE SYSTEM SHALL read `templateVersion` from `.claude/.harness.json`,
+  before any call. IF it is lower than the harness floor, THEN THE SYSTEM SHALL refuse with code 1:
+  `the harness is <version>; this driver needs <floor> or later: run <command name> update, then commit .claude/`.
+  - A missing file, a file that is not valid JSON, a missing key, or a version that is not `x.y.z` counts as
+    "missing": the message then says `the harness is missing`.
+  - `--status` and `--cancel` do not check it.
+- **AC-73:** THE SYSTEM SHALL write every command it prints in a hint with the command name, including: AC-9's
+  `run task --stage` lines, the steps of AC-10, the waiting line of AC-29, the lines of AC-50, the `update`
+  hints of AC-67 and AC-72, the interrupted lines of AC-74, the "cancel it" and "resume" hints of the error
+  messages, and the usage errors of `run`. No hint names `agent-stack` literally. A path with a space is quoted.
+- **AC-74:** WHEN the driver stops on SIGINT or SIGTERM (AC-51), THE SYSTEM SHALL say that the run is kept and
+  holds the lock, and print both the `--resume` and the `--cancel` command.
+- **AC-75:** THE SYSTEM SHALL ship a `drive` skill (`templates/claude/skills/drive/SKILL.md`, deployed by
+  `generate` and `update` to `.claude/skills/drive/SKILL.md`) that tells the operator chat to:
+  - start a run with `run task` or `run quick` for the human's request, and run every `--resume … --answer` too,
+    in the background, and wait for it: a step takes minutes, and a killed command interrupts the run (AC-51);
+  - at each stop, read `--status --json` and show the card in `language.chat`: what happened, what is needed,
+    its recommendation; gate keys, commands and ids stay as they are;
+  - pass the answer with `--resume <id> --answer …`: a key the human typed as it is; a clear worded reply as
+    the key it means, saying which key it sent; an unclear reply is asked again; Enter is `--answer ""`; a free
+    answer that is exactly `c` is sent only when the human means cancel;
+  - never do a step's work itself while a run is open (waiting, interrupted or live): no code, spec or plan
+    edits;
+  - at the end, report what was done, the commits, the cost, and what the human should check.
+  - IF a driver command exits 1 (a dirty tree, a red base, an old harness, a lock), THEN the skill SHALL tell
+    the chat to show the message and its hint, change nothing, and ask the human; it SHALL NOT run
+    `agent-stack update` or fix code to get past it.
+- **AC-76:** THE SYSTEM SHALL read `gates.json → language` and give it in `--status --json` (AC-69), so the
+  operator chat speaks `language.chat` and keeps terms in `language.terms`. With the key missing, both are `en`.
+  - IF a value does not match the pattern in the Contract, or `language` is not an object, THEN THE SYSTEM SHALL
+    use `en` for that value (for both, when it is not an object) and add a warning.
+  - WHEN the human asks the chat for another language, the skill SHALL tell the chat to switch for that chat
+    and to say that `language.chat` in `gates.json` makes it the default; the chat does not edit `gates.json`.
+
 ## Non-functional requirements
 
 - **Engine speed:** with the fake `claude` and `AGENT_STACK_GATE_INPUT`, the whole task path (AC-5 to AC-22)
@@ -761,15 +946,20 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **Worktree per run and parallel runs.** They wait for 2.W1–2.W7.
 - **The browser check** (7.11, with V9) **and lessons after a run** (7.12).
 - **Push, PR, merge and `git fetch`:** these are the human's (D2).
-- **Bash forging the run file:** this is the known guard-file gap (README "Limits"). Both bypasses (AC-18,
-  AC-26) also need `AGENT_STACK_RUN` and a live run on the current branch.
+- **The operator chat answering a gate on its own:** it passes the human's answer; a recommendation is only
+  shown. A run without a human (autonomous) from a chat waits for the sandbox of 0.5.
+- **Buttons for gate answers in a chat:** the human answers in words.
+- **The driver's own terminal text in another language:** it stays English; only the operator chat speaks
+  `language.chat`.
+- **Bash forging the run file:** this is the known guard-file gap (README "Limits"). The three bypasses (AC-18,
+  AC-26, AC-71) also need `AGENT_STACK_RUN` and a live run on the current branch.
   - Caveat: while a run is live, a nested `AGENT_STACK_RUN=<id> claude -p …` started from Bash gets the
     bypass in that nested process. This is within the known Bash gap.
 
 ## How to verify
 
 ```bash
-pnpm vitest run -t "v04 AC-"     # engine + e2e with the fake claude; hook tests for AC-18, AC-26, AC-27 carry the same prefix
+pnpm vitest run -t "v04 AC-"     # engine + e2e with the fake claude; hook tests for AC-18, AC-26, AC-27, AC-71 carry the same prefix
 pnpm typecheck
 ```
 
@@ -781,9 +971,20 @@ Manual check, once, with the real `claude` on a scratch repo:
    - the spec committed on `spec/<stage>`;
    - after a local merge and `--resume`, a plan in which every task ends green;
    - the embedded skills followed: a spec-reviewer pass, EARS criteria.
+3. In a Claude Code chat with `codeBy: "driver"`: `/drive <a small feature>`. Expect the chat to start the run,
+   show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
 
+- 2026-11-20 — AC-68–AC-76 (new), Decisions (the driver from a chat), Terms (Gate card, Operator chat, Command
+  name, Hint, Harness floor), Contract (CLI `--answer` and `--json`, exit codes, gate input, `codeBy`,
+  `language`, the Gate card schema, run file `card`): the driver can be run from a chat. Leonid: a task given in a chat must go through the
+  driver, not be done by the chat on its own. The gates were hard to read in a terminal ("ужасно нечитаемо"),
+  hints named `agent-stack` when it was started through `node …/cli.mjs`, Ctrl-C did not say the lock stays,
+  and an old harness stopped a run halfway (`agent … is out of date`). The test-conflict retry prompt asks for
+  the answer for the implementer, not "What should change?". The chat speaks English unless `language.chat`
+  says otherwise (Leonid: the chat language and the terms language may differ). From review: answers reach only
+  the gate the run waits at; a card that went stale is rebuilt before a decision.
 - 2026-11-20 — AC-66, Package manifest (new term): the frozen check also compares `package.json`. The driver's
   checks run `pnpm test`, and `scripts.test` decides what that does, so `"test": "node --test || true"` made every
   check green without touching a test. A new dependency stops too: under the driver the human saw it only in the
