@@ -29,8 +29,9 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 ├── settings.json          # hook registration + permission allow-list
 ├── settings.local.json    # read-deny for build/generated noise (yours after generate)
 ├── hooks/                 # deterministic shell hooks, run outside the model
-│   ├── guard-bash.sh        # block git push (in any form), foreign package managers; installs, download-
-│   │                        #   and-run (npx, dlx, curl | sh) and reading secrets: ask / deny
+│   ├── guard-bash.sh        # block git push (in any form), foreign package managers; installs (also a bare
+│   │                        #   `pnpm install`: use --frozen-lockfile), download-and-run (npx, dlx, curl | sh)
+│   │                        #   and reading secrets: ask / deny
 │   ├── guard-file.sh        # protect the harness itself, generated files, lockfiles, tasks.json; confirm
 │   │                        #   editing .env; reading env files and keys: ask / deny
 │   ├── spec-gate.sh         # the spec leads the code: first spec merged, later changes committed first, then /plan
@@ -256,7 +257,13 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
   - the network is not restricted (`curl`, `gh gist`, WebFetch) — turn on Claude Code's `/sandbox`;
   - irreversible commands (`rm -rf`, `git reset --hard`) are left to Claude Code's own permission prompt;
   - tool results (web pages, MCP output) are not checked for injected instructions;
-  - agent prompts, skills, CI workflows and `package.json` scripts are editable without a prompt.
+  - agent prompts, skills, CI workflows and `package.json` scripts are editable without a prompt. A bare install or
+    update typed in Bash (`pnpm install`, `pnpm -C x install`, `pnpm up`, `yarn`) asks first; a package script
+    that runs one (`"setup": "pnpm install"`) is not caught. Under `agent-stack run` a changed script, a new
+    dependency or a changed `jest`/`eslintConfig` setting stops the run; in a chat session the edit itself is not
+    caught;
+  - manifests other than `package.json` (`pyproject.toml`, `Cargo.toml`, `go.mod`) are not compared, and a
+    lockfile edited through Bash is not caught.
 - **The MCP catalog is not maintained:** most entries run `npx -y` without a pinned version, and
   `server-github` is archived upstream. Check an entry before `mcp install`.
 
