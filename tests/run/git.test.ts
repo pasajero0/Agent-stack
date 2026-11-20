@@ -236,7 +236,7 @@ describe("headers", () => {
     expect(s.endsWith("-")).toBe(false);
   });
 
-  it("Q1: slugify cuts at the last whole word that fits in 40 characters", () => {
+  it("v04 AC-24: slugify cuts at the last whole word that fits in 40 characters", () => {
     expect(slugify("A5 reverse text function and reverse npm script")).toBe("a5-reverse-text-function-and-reverse-npm");
     // a word that ends exactly at 40 characters stays whole
     expect(slugify(`${"a".repeat(39)}b next`)).toBe(`${"a".repeat(39)}b`);
