@@ -13,6 +13,7 @@ const SLOW = [
   "tests/run/git.test.ts",
   "tests/run/progress.test.ts",
   "tests/run/timing.test.ts",
+  "tests/run/watch.test.ts",
 ];
 
 export default defineConfig({

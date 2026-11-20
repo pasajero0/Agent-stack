@@ -157,6 +157,7 @@ agent-stack run task [--stage <id>] "<description>"    a spec, a plan and one or
 agent-stack run --resume [<run id>] [--answer <text>]… continue a waiting or interrupted run
 agent-stack run --status [<run id>] [--json]           print the run; change nothing
 agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
+agent-stack run --watch [<run id>]                     show the run live until it ends; change nothing
 ```
 
 **Quick mode.** Creates `quick/<slug>` from HEAD, runs your test command on it (it must pass), then one
@@ -208,7 +209,9 @@ one `--resume` answers one gate, and extra or wrong answers apply nothing), and 
 step's work itself. To hold that with a hook, set `"codeBy": "driver"` in `.claude/gates.json`: then only a live
 driver call edits code (docs and `.claude/` stay open). The chat speaks English unless
 `"language": { "chat": "ru", "terms": "en" }` says otherwise; terms, keys and commands are never translated.
-To see a run while it works: each tool a role starts prints a line under its step (`· Read src/a.ts`,
+To see a run while it works, open `agent-stack run --watch` in any terminal (also the one inside VSCode): each
+step with its time, the step in progress with its last tool lines, and the gate it waits at. Each tool a role
+starts also prints a line under its step (`· Read src/a.ts`,
 `· Bash pnpm test`), the run folder keeps `now.json` and `progress.log`, and `.claude/bin/run-status` gives one
 line for Claude Code's status line (`run <id> · implement:T1 · 1:35 · $0.46 · Edit src/a.ts`). It is off by
 default, since a project status line would replace yours; turn it on in `.claude/settings.local.json`:
