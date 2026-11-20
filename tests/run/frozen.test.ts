@@ -92,6 +92,77 @@ describe("frozen tests and check configs (AC-66)", () => {
     expect(testChanges(dir, base, GLOBS)).toEqual(["tests/a.rs: assertions 3 → 1", "tests/test_a.py: assertions 2 → 0"]);
   });
 
+  it("v04 AC-66: a weakened or removed script in package.json is a change; a new script is not", () => {
+    const pkg = (scripts: Record<string, string>): string => `${JSON.stringify({ name: "x", scripts }, null, 2)}\n`;
+    const { dir, base } = based({ "package.json": pkg({ test: "node --test", lint: "eslint ." }) });
+    write(dir, "package.json", pkg({ test: "node --test || true", count: "node scripts/count.js" }));
+    expect(testChanges(dir, base, GLOBS)).toEqual([
+      "changed script test in package.json (now: node --test || true)",
+      "deleted script lint in package.json",
+    ]);
+  });
+
+  it("v04 AC-66: a new or changed dependency is a change, in a nested and in a new package.json too; a removed one is not", () => {
+    const { dir, base } = based({
+      "package.json": `${JSON.stringify({ dependencies: { a: "^1.0.0", gone: "^1.0.0" }, devDependencies: { vitest: "^2.0.0" } })}\n`,
+    });
+    write(dir, "package.json", `${JSON.stringify({ dependencies: { a: "^1.0.0", "left-pad": "^1.3.0" }, devDependencies: { vitest: "^3.0.0" }, pnpm: { overrides: { b: "1.0.0" } } })}\n`);
+    write(dir, "packages/web/package.json", `${JSON.stringify({ name: "web", dependencies: { react: "^19.0.0" } })}\n`);
+    expect(testChanges(dir, base, GLOBS)).toEqual([
+      "new dependency left-pad in package.json (dependencies: ^1.3.0)",
+      "changed dependency vitest in package.json (devDependencies: ^2.0.0 → ^3.0.0)",
+      "new dependency b in package.json (pnpm.overrides: 1.0.0)",
+      "new dependency react in packages/web/package.json (dependencies: ^19.0.0)",
+    ]);
+  });
+
+  it("v04 AC-66: a package.json that is no longer JSON is a change, keyed by content; a long script value is cut and hashed", () => {
+    const { dir, base } = based({ "package.json": `${JSON.stringify({ scripts: { test: "vitest run" } })}\n` });
+    write(dir, "package.json", "{ not json\n");
+    const now = sh(dir, "hash-object", "--", "package.json").slice(0, 7);
+    expect(testChanges(dir, base, GLOBS)).toEqual([`package.json is not valid JSON (now ${now})`]);
+    const long = `vitest run ${"--reporter=dot ".repeat(10)}|| true`;
+    write(dir, "package.json", `${JSON.stringify({ scripts: { test: long } })}\n`);
+    const [line] = testChanges(dir, base, GLOBS);
+    expect(line).toMatch(/^changed script test in package\.json \(now: vitest run --reporter=dot .{50,}… [0-9a-f]{7}\)$/);
+    expect(line?.length).toBeLessThan(150);
+    write(dir, "package.json", `${JSON.stringify({ scripts: { test: `${long} ` } })}\n`);
+    expect(testChanges(dir, base, GLOBS)).not.toEqual([line]);
+    // A newline would break the gate list: it is replaced, and the hash keeps the line keyed by content.
+    write(dir, "package.json", `${JSON.stringify({ scripts: { test: "vitest\nrun" } })}\n`);
+    expect(testChanges(dir, base, GLOBS)).toEqual([expect.stringMatching(/^changed script test in package\.json \(now: vitest run… [0-9a-f]{7}\)$/)]);
+  });
+
+  it("v04 AC-66: check settings inside package.json and pnpm-workspace.yaml are compared", () => {
+    const { dir, base } = based({
+      "package.json": `${JSON.stringify({ jest: { testMatch: ["**/*.test.js"] }, eslintConfig: { rules: {} } })}\n`,
+      "pnpm-workspace.yaml": "packages:\n  - apps/*\n",
+    });
+    write(dir, "package.json", `${JSON.stringify({ jest: { testPathIgnorePatterns: ["/"] }, mocha: { spec: "none" } })}\n`);
+    write(dir, "pnpm-workspace.yaml", "packages:\n  - apps/*\ncatalog:\n  react: 19.0.0\n");
+    const changes = testChanges(dir, base, GLOBS);
+    expect(changes).toContain(`changed check config pnpm-workspace.yaml (now ${sh(dir, "hash-object", "--", "pnpm-workspace.yaml").slice(0, 7)})`);
+    expect(changes).toContainEqual(expect.stringMatching(/^changed setting jest in package\.json \(now [0-9a-f]{7}\)$/));
+    expect(changes).toContain("deleted setting eslintConfig in package.json");
+    expect(changes).toContainEqual(expect.stringMatching(/^changed setting mocha in package\.json \(now [0-9a-f]{7}\)$/));
+  });
+
+  it("v04 AC-66: a control character in a dependency name cannot hide a line; a deleted package.json lists its scripts", () => {
+    const { dir, base } = based({ "package.json": `${JSON.stringify({ scripts: { test: "vitest run" } })}\n`, "web/package.json": "{}\n" });
+    write(dir, "web/package.json", `${JSON.stringify({ dependencies: { "a\u001b[1A\u001b[2Kb": "1.0.0" } })}\n`);
+    rmSync(join(dir, "package.json"));
+    const changes = testChanges(dir, base, GLOBS);
+    expect(changes).toContain("deleted script test in package.json");
+    expect(changes).toContainEqual(expect.stringMatching(/^new dependency a \[1A \[2Kb… [0-9a-f]{7} in web\/package\.json \(dependencies: 1\.0\.0\)$/));
+    expect(changes.join("\n")).not.toContain("\u001b");
+  });
+
+  it("v04 AC-66: package.json with only a version bump or a new field is no change", () => {
+    const { dir, base } = based({ "package.json": `${JSON.stringify({ version: "1.0.0", scripts: { test: "x" }, dependencies: { a: "1" } })}\n` });
+    write(dir, "package.json", `${JSON.stringify({ version: "1.1.0", description: "d", scripts: { test: "x" }, dependencies: { a: "1" } }, null, 2)}\n`);
+    expect(testChanges(dir, base, GLOBS)).toEqual([]);
+  });
+
   it("v04 AC-66: a test file that became a folder is replaced, not a crash; a file with a NUL byte is not counted", () => {
     const { dir, base } = based({ "tests/a.test.ts": JS, "tests/blob.bin": "a\0expect(1)\n" });
     rmSync(join(dir, "tests/a.test.ts"));
