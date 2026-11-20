@@ -221,6 +221,8 @@ describe("trace reads criteria as the driver does (0.4.5)", () => {
     const r = trace(dir);
     expectExit(r, 0);
     expect(r.out).toContain("trace A0: 2/2 criteria have tests");
+    // The loose line is named, with the form that counts.
+    expect(r.out).toContain("note: a line like '- AC-3 …' is not a criterion; write it as '- **AC-3:** …'");
     expect(specAcIds(spec)).toEqual(["AC-1", "AC-2"]);
   });
 });

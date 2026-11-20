@@ -115,6 +115,11 @@ echo "trace $stage: $traced/$total criteria have tests"
 [ -n "$missing" ] && echo "  missing tests: $(printf '%s' "$missing" | tr '\n' ' ')"
 [ -n "$orphan" ] && echo "  tests for criteria not in the spec: $(printf '%s' "$orphan" | tr '\n' ' ')— update the spec first, or remove them"
 [ -n "$terms_line" ] && echo "$terms_line"
+# A line that looks like a criterion but is not in the form above is not counted: say so, or its tests turn into
+# "not in the spec" with no hint why (0.4.5).
+loose=$(grep -E '^[[:space:]]*[-*][[:space:]]*\**AC-[0-9]+' "$spec" | grep -vE '^[[:space:]]*[-*][[:space:]]*\*\*AC-[0-9]+:\*\*' |
+  grep -Eo 'AC-[0-9]+' | head -1 | sed '/^$/d')
+[ -n "$loose" ] && echo "  note: a line like '- $loose …' is not a criterion; write it as '- **$loose:** …'"
 if [ "$total" -eq 0 ]; then
   echo "  no criteria found — list them as '- **AC-1:** …' in the spec"
   exit 1
