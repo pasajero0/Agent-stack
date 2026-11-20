@@ -909,12 +909,18 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - pass the answer with `--resume <id> --answer …`: a key the human typed as it is; a clear worded reply as
     the key it means, saying which key it sent; an unclear reply is asked again; Enter is `--answer ""`; a free
     answer that is exactly `c` is sent only when the human means cancel;
-  - never do a step's work itself while a run is open (waiting, interrupted or live): no code, spec or plan
-    edits;
-  - at the end, report what was done, the commits, the cost, and what the human should check.
+  - never do a step's work itself, while a run is open (waiting, interrupted or live) or after it: no code, spec
+    or plan edits; a later fix is a new run;
+  - never merge, push or open a pull request itself, also when the human agrees: at gate:spec-merge it gives the
+    merge command and resumes when the human says it is done;
+  - at the end, report what was done, the commits (sha and subject as they are), the cost, and what the human
+    should check.
   - IF a driver command exits 1 (a dirty tree, a red base, an old harness, a lock), THEN the skill SHALL tell
     the chat to show the message and its hint, change nothing, and ask the human; it SHALL NOT run
     `agent-stack update` or fix code to get past it.
+- **AC-77:** WHEN a plan task's verify holds command substitution (`$(` or a backtick), THE SYSTEM SHALL add a
+  fact under that task at gate:plan-approve: `note: implement cannot run this verify itself (Claude Code does not
+  allow command substitution by a rule); the driver's checks still run it`. The plan stays valid.
 - **AC-76:** THE SYSTEM SHALL read `gates.json → language` and give it in `--status --json` (AC-69), so the
   operator chat speaks `language.chat` and keeps terms in `language.terms`. With the key missing, both are `en`.
   - IF a value does not match the pattern in the Contract, or `language` is not an object, THEN THE SYSTEM SHALL
@@ -984,7 +990,9 @@ Manual check, once, with the real `claude` on a scratch repo:
   driver, not be done by the chat on its own. The gates were hard to read in a terminal ("ужасно нечитаемо"),
   hints named `agent-stack` when it was started through `node …/cli.mjs`, Ctrl-C did not say the lock stays,
   and an old harness stopped a run halfway (`agent … is out of date`). The test-conflict retry prompt asks for
-  the answer for the implementer, not "What should change?". The chat speaks English unless `language.chat`
+  the answer for the implementer, not "What should change?". From the live check (20/11): the chat merged the
+  spec branch itself and offered a hand fix after the run, so AC-75 now forbids both; the implementer was denied
+  a verify with `$(…)`, so AC-77 marks such a verify at the plan gate. The chat speaks English unless `language.chat`
   says otherwise (Leonid: the chat language and the terms language may differ). From review: answers reach only
   the gate the run waits at; a card that went stale is rebuilt before a decision.
 - 2026-11-20 — AC-66, Package manifest (new term): the frozen check also compares `package.json`. The driver's
