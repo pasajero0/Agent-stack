@@ -133,6 +133,10 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
     const model = implementModel(info, { ...newTask(t.id), attempts: 1 });
     f.add(`${t.id}  ${t.tier} · ${model}${info.risky ? " · risky" : ""} · ${criteriaText(t.ac)}   ${t.desc}`);
     f.whole(`      verify: ${t.verify}`);
+    // AC-77: Claude Code allows no command substitution by a rule, so --allowedTools never lets implement run it.
+    if (/\$\(|`/.test(t.verify)) {
+      f.add("      note: implement cannot run this verify itself (Claude Code does not allow command substitution by a rule); the driver's checks still run it");
+    }
   }
   f.add(`full task text: ${relative(ctx.projectDir, tasksPath(ctx.projectDir, stage))}`);
   f.whole(...decisionFacts(ctx));

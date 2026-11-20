@@ -88,8 +88,11 @@ describe("buildHarnessFiles", () => {
     expect(t).toContain("say which key you sent");
     expect(t).toContain("Do no step's work yourself");
     expect(t).toContain("Do not run `agent-stack update`");
+    expect(t).toContain("Never merge, push or open a pull request yourself");
+    expect(t).toContain("A later fix is a new run");
+    expect(t).toContain("not translated");
     expect(t).toContain("language.chat");
-    expect(t).toMatch(/report in the chat language: what was done, the commits, the cost/);
+    expect(t).toMatch(/report in the chat language: what was done, the commits .* the cost from the run/);
   });
 
   it("ships the spec-driven skills with their templates", () => {

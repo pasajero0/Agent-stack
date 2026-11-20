@@ -33,6 +33,20 @@ describe("gate cards (AC-68, AC-69)", () => {
     expect(t).toContain("a — approve · r <text> — reject");
   });
 
+  it("v04 AC-77: a verify with command substitution is marked at the plan gate; the plan stays valid", async () => {
+    const r = repo();
+    const tasks = [
+      { id: "T1", ac: ["AC-1"], tier: "S" as const, desc: "say hello", verify: 'test "$(cat hello.txt)" = hi' },
+      { id: "T2", ac: ["AC-2"], tier: "S" as const, desc: "say bye", verify: "test -f bye.txt" },
+    ];
+    await toPlanApprove(r, [plan({ tasks })]);
+    const facts = r.run().card?.facts ?? [];
+    const i = facts.findIndex((f) => f.includes("verify: test \"$(cat hello.txt)\""));
+    expect(facts[i + 1]).toContain("note: implement cannot run this verify itself");
+    expect(facts.filter((f) => f.includes("cannot run this verify")).length).toBe(1);
+    expect(r.run().next).toBe("gate:plan-approve");
+  });
+
   it("v04 AC-68: a gate's card is cleared once the gate decides; the next gate keeps its own", async () => {
     const r = repo();
     await toPlanApprove(r, [plan(), ...twoTasksDone()]);

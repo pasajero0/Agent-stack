@@ -11,10 +11,12 @@ their answer, and report. Spec: the driver spec, AC-68 to AC-76.
 
 ## Rules
 
-1. **Do no step's work yourself** while a run is open (waiting, interrupted or live): no edits of code, the spec
-   or the plan, no commits. With `codeBy: "driver"` in `.claude/gates.json` a hook refuses your code edits anyway.
+1. **Do no step's work yourself**: no edits of code, the spec or the plan, no commits — while a run is open
+   (waiting, interrupted or live) and after it. A later fix is a new run (`/drive <the fix>`); offer that, never a
+   hand edit. With `codeBy: "driver"` in `.claude/gates.json` a hook refuses your code edits anyway.
 2. **The human decides at every gate.** Never answer a gate on your own. Show your recommendation, then pass what
-   the human said.
+   the human said. **Never merge, push or open a pull request yourself**, also when the human agrees: merging the
+   spec branch is the human's approval. Give the exact command, and wait for "done".
 3. **Never get past a refusal by changing things.** When a driver command exits 1 (a dirty tree, a red base, an
    old harness, a lock, a refused answer), show its message and the hint, change nothing, and ask the human. Do
    not run `agent-stack update`, do not fix code, do not cancel a run, unless the human says so.
@@ -37,8 +39,8 @@ Use `agent-stack` when `command -v agent-stack` finds it. Otherwise take the com
    - one line: what happened (the title);
    - the facts that matter for the decision, in plain words (for a plan: each task, its model and its verify);
    - what is needed from the human, the answers it takes, and your recommendation with one reason.
-   At gate:spec-merge the card has no answers: the human reviews and merges the spec branch; then resume without
-   `--answer`.
+   At gate:spec-merge the card has no answers: show the human the merge command from the card and let them run
+   it; when they say it is done, resume without `--answer`.
 3. **Pass the answer** with `<cmd> run --resume <id> --answer "<line>"`, again in the background:
    - a key the human typed (`a`, `r fix X`, `f 60`, `c`) as it is;
    - a clear worded reply as the key it means, and say which key you sent ("sent `a` — approve");
@@ -49,9 +51,9 @@ Use `agent-stack` when `command -v agent-stack` finds it. Otherwise take the com
    One `--resume` answers one gate. Extra answers are refused; nothing is applied.
 4. **On exit 1**, follow rule 3. "The gate changed since its card was shown" means the plan or the code moved:
    read `--status --json` again and show the new card.
-5. **At the end** (exit 0), report in the chat language: what was done, the commits, the cost from the run
-   (with calls of unknown cost, if any), and what the human should check before pushing. Push and merge are
-   the human's.
+5. **At the end** (exit 0), report in the chat language: what was done, the commits (sha and subject as they
+   are, not translated), the cost from the run (with calls of unknown cost, if any), and what the human should
+   check before pushing. Push and merge are the human's; give their commands.
 
 ## Do not
 
