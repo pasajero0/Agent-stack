@@ -12,6 +12,7 @@ import { writeRun } from "../store.js";
 import type { GateRecord, RunFile } from "../types.js";
 import { judgeCall } from "./call.js";
 import { newTask, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
+import { estimate, estimateText } from "./timing.js";
 import { A, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
 import { ask, comment, humanFeedback, NO_INPUT, recordGate } from "./gates.js";
 import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, tasksPath, type PlanTask } from "./plan-file.js";
@@ -139,6 +140,10 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
     }
   }
   f.add(`full task text: ${relative(ctx.projectDir, tasksPath(ctx.projectDir, stage))}`);
+  // AC-81: the work time this plan should take, from the earlier runs in this repo.
+  const e = estimate(ctx.projectDir, ctx.run, tasks.length);
+  ctx.run.estimateSec = e?.sec ?? null;
+  f.add(estimateText(e));
   f.whole(...decisionFacts(ctx));
   return {
     gate: "plan-approve",

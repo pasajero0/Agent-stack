@@ -7,6 +7,7 @@ import { nonePrompter } from "../gate.js";
 import { releaseLock, writeRun } from "../store.js";
 import type { RunFile } from "../types.js";
 import { GateChanged } from "./card.js";
+import { closeStep, openStep } from "./timing.js";
 import { cancelHint, Interrupted, resumeHint, type Ctx, type StepHandler } from "./context.js";
 import { acceptGate, cancelledText, finishedText, limitGate } from "./gates.js";
 import { commonHandlers } from "./steps-common.js";
@@ -32,8 +33,9 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
     for (;;) {
       if (ctx.signal.aborted) throw new Interrupted();
       const { kind, task } = parseNext(run.next);
-      // AC-79: the step in progress, for now.json and the status line.
+      // AC-79: the step in progress, for now.json and the status line; AC-81: its time.
       ctx.progress.step(run.next);
+      openStep(run, run.next);
       const handler = handlers[kind];
       if (!handler) throw new RunError(`Step ${kind} is not built for ${run.mode} mode.`, 1);
       const gate = kind.startsWith("gate:");
@@ -72,6 +74,7 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
         ctx.answering = false;
       }
       if (gate) run.card = null;
+      closeStep(run);
       const t = transition(run.next, event, run.returnTo);
       if (kind === "gate:limit") {
         run.returnTo = null;
@@ -87,6 +90,8 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
       }
     }
   } catch (e) {
+    // A gate refused under --answer keeps waiting, so its entry stays open (AC-70, AC-81).
+    if (run.status !== "waiting") closeStep(run);
     writeRun(ctx.projectDir, run);
     if (e instanceof Interrupted) {
       // AC-74: the lock stays with the run, so a new run is refused until this one goes on or is cancelled.

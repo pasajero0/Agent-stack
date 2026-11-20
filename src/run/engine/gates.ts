@@ -6,6 +6,7 @@ import { runCheck, type CheckRun } from "../checks.js";
 import { RunError } from "../errors.js";
 import { diffStat, dirtyPaths, git, headSha } from "../git.js";
 import type { CardAnswer, GateRecord, RunFile } from "../types.js";
+import { timeFacts } from "./timing.js";
 import { A, cardText, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
 import { fuseText } from "./call.js";
 import { Interrupted, newTask, resumeHint, type Ctx, type StepHandler } from "./context.js";
@@ -144,6 +145,7 @@ function acceptCard(ctx: Ctx, final: CheckRun | null): CardInput {
   if (skips.length > 0) f.add(`Skipped: ${skips.join("; ")}`);
   f.whole(...decisionFacts(ctx));
   f.whole(`Usage: ${cost(run)}`);
+  f.add(...timeFacts(run));
   return {
     gate: "accept",
     title: `Accept: run ${run.id} on ${run.branch}`,
