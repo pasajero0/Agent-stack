@@ -5,6 +5,8 @@ import { RunError } from "./errors.js";
 /** `null` means no input is available: the caller records the gate and exits 3. */
 export interface Prompter {
   ask(prompt: string): Promise<string | null>;
+  /** Answers not read yet; only `--answer` input counts them (AC-70). */
+  left?(): string[];
   /** Releases the input. Safe to call more than once. */
   close(): void;
 }
@@ -22,6 +24,20 @@ export function filePrompter(path: string): Prompter {
   return {
     async ask() {
       return next < lines.length ? (lines[next++] ?? null) : null;
+    },
+    close() {},
+  };
+}
+
+/** `--answer` lines, in order; they are never mixed with the terminal (AC-70). */
+export function answersPrompter(answers: readonly string[]): Prompter {
+  let next = 0;
+  return {
+    async ask() {
+      return next < answers.length ? (answers[next++] ?? null) : null;
+    },
+    left() {
+      return answers.slice(next);
     },
     close() {},
   };

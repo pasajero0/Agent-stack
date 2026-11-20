@@ -7,6 +7,7 @@ import {
   statusRun,
   type ExitCode,
 } from "../run/engine/index.js";
+import { commandName } from "../run/engine/command.js";
 
 export interface RunOptions {
   /** `true` for the flag alone, a run id when one is given. */
@@ -14,6 +15,10 @@ export interface RunOptions {
   status?: string | boolean;
   cancel?: string | boolean;
   stage?: string;
+  /** `--answer`, repeatable: the input of the gate the run waits at (AC-70). */
+  answer?: string[];
+  /** `--json` with `--status` (AC-69). */
+  json?: boolean;
 }
 
 export interface RunIo {
@@ -51,11 +56,20 @@ export async function runCommand(
     out(`--resume, --status and --cancel take a run id, not a mode ("${mode}").`);
     return 1;
   }
-  if (given(options.status)) return statusRun({ ...base, id: idOf(options.status) });
+  const answers = options.answer ?? [];
+  if (answers.length > 0 && !given(options.resume)) {
+    out("--answer needs --resume: it answers the gate a waiting run stops at.");
+    return 1;
+  }
+  if (options.json === true && !given(options.status)) {
+    out("--json goes with --status.");
+    return 1;
+  }
+  if (given(options.status)) return statusRun({ ...base, id: idOf(options.status), json: options.json === true });
   if (given(options.cancel)) return cancelRun({ ...base, id: idOf(options.cancel) });
-  if (given(options.resume)) return withSignals((signal) => resumeRun({ ...base, signal, id: idOf(options.resume) }));
+  if (given(options.resume)) return withSignals((signal) => resumeRun({ ...base, signal, id: idOf(options.resume), ...(answers.length > 0 ? { answers } : {}) }));
   if (mode === undefined) {
-    out('Say what to run: agent-stack run quick "<description>" or run task "<description>"; or --resume, --status, --cancel.');
+    out(`Say what to run: ${commandName()} run quick "<description>" or run task "<description>"; or --resume, --status, --cancel.`);
     return 1;
   }
   if (mode !== "quick" && mode !== "task") {

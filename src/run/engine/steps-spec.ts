@@ -13,20 +13,22 @@ import { writeRun } from "../store.js";
 import type { RunConfig, RunFile } from "../types.js";
 import { judgeCall } from "./call.js";
 import { resumeHint, type Ctx, type StepHandler } from "./context.js";
-import { humanFeedback, NO_INPUT, recordGate, showDecisions } from "./gates.js";
+import { humanFeedback, NO_INPUT, recordGate } from "./gates.js";
+import { decisionFacts, Facts, showCard } from "./card.js";
 import { specPath } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, under, withFeedback, type RoleMark } from "./role-bounds.js";
 import { toLimit } from "./task-core.js";
+import { commandName } from "./command.js";
 
 /** The stored clarify output; a run file without a valid one cannot go on. */
 export function proposalOf(run: RunFile): ClarifyOutput {
   const p = parseClarify(run.proposal);
-  if (typeof p === "string") throw new RunError(`Run ${run.id} has no valid clarify proposal (${p}); cancel it: agent-stack run --cancel ${run.id}.`, 1);
+  if (typeof p === "string") throw new RunError(`Run ${run.id} has no valid clarify proposal (${p}); cancel it: ${commandName()} run --cancel ${run.id}.`, 1);
   return p;
 }
 
 export function stageOf(run: RunFile): string {
-  if (run.stage === null) throw new RunError(`Run ${run.id} has no confirmed stage id; cancel it: agent-stack run --cancel ${run.id}.`, 1);
+  if (run.stage === null) throw new RunError(`Run ${run.id} has no confirmed stage id; cancel it: ${commandName()} run --cancel ${run.id}.`, 1);
   return run.stage;
 }
 
@@ -147,15 +149,15 @@ const specMergeGate: StepHandler = async (ctx) => {
   const base = baseRef(dir, cfg.baseBranch);
   const file = specPath(cfg, stage);
   if (!existsOnRef(dir, base, file)) {
-    ctx.out(`== gate:spec-merge — run ${run.id} ==`);
-    ctx.out(`The spec is committed on spec/${stage}, but ${file} is not on ${base} yet.`);
+    const f = new Facts().add(`The spec is committed on spec/${stage}, but ${file} is not on ${base} yet.`);
     // AC-10, AC-47: with no origin/<base> the local merge is the approval, so a push would only confuse.
-    ctx.out(
+    f.whole(
       base === cfg.baseBranch
         ? `Review spec/${stage}, then approve it with a local merge: git checkout ${cfg.baseBranch} && git merge spec/${stage}; then ${resumeHint(run.id)}.`
         : `Push and merge it: git push -u origin spec/${stage}, open and merge the pull request into ${cfg.baseBranch}; then git fetch, and ${resumeHint(run.id)}.`
     );
-    showDecisions(ctx);
+    f.whole(...decisionFacts(ctx));
+    showCard(ctx, { gate: "spec-merge", title: `Spec ${stage} is ready to review — run ${run.id}`, facts: f.list, keep: f.keep, prompts: [], hint: resumeHint(run.id) });
     return NO_INPUT;
   }
   const name = `${stage}-${slugify(proposalOf(run).stage.title)}`;

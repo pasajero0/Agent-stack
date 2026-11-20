@@ -5,6 +5,7 @@
 import type { Prompter } from "../gate.js";
 import type { Next, RunConfig, RunFile, RunTask } from "../types.js";
 import type { StepEvent, StepKind } from "./transitions.js";
+import { commandName } from "./command.js";
 
 export interface Ctx {
   projectDir: string;
@@ -13,6 +14,11 @@ export interface Ctx {
   run: RunFile;
   mode: ModeSteps;
   prompter: Prompter;
+  /**
+   * The gate the run waits at reads `--answer` lines (AC-70): an invalid answer is a refusal, and the answers
+   * reach only that gate. Cleared once it decides.
+   */
+  answering: boolean;
   out: (line: string) => void;
   /** Extra environment for Claude calls (AGENT_STACK_CLAUDE and the fake's variables in tests). */
   env: Record<string, string>;
@@ -107,4 +113,8 @@ export function findTask(ctx: Ctx, id: string): RunTask {
   return t;
 }
 
-export const resumeHint = (id: string): string => `agent-stack run --resume ${id}`;
+/** The hint to continue a run, with the command name (AC-73). */
+export const resumeHint = (id: string): string => `${commandName()} run --resume ${id}`;
+
+/** The hint to cancel a run, with the command name (AC-73, AC-74). */
+export const cancelHint = (id: string): string => `${commandName()} run --cancel ${id}`;

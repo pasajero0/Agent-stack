@@ -4,9 +4,9 @@
  */
 import { rmSync } from "node:fs";
 import { DEFAULT_STAGE_PATTERN } from "../../claude/gates.js";
-import { loadRunConfig } from "../config.js";
+import { loadRunConfig, readLanguage } from "../config.js";
 import { RunError } from "../errors.js";
-import { selectPrompter, type Prompter } from "../gate.js";
+import { answersPrompter, selectPrompter, type Prompter } from "../gate.js";
 import { branchExists, createBranch, currentBranch, dirtyPaths, headSha } from "../git.js";
 import {
   acquireLock,
@@ -29,6 +29,7 @@ import { runLoop, type ExitCode } from "./loop.js";
 import { quickMode } from "./steps-quick.js";
 import { taskMode } from "./steps-task.js";
 import { parseNext } from "./transitions.js";
+import { commandName, requireHarness } from "./command.js";
 
 export type { ExitCode } from "./loop.js";
 
@@ -48,6 +49,8 @@ export interface EngineOptions {
   pid?: number;
   now?: Date;
   prompter?: Prompter;
+  /** `--answer` lines for the gate the run waits at (AC-70); only `--resume` takes them. */
+  answers?: string[];
 }
 
 const outOf = (o: EngineOptions): ((line: string) => void) => o.out ?? ((line) => console.log(line));
@@ -67,20 +70,23 @@ async function guard(o: EngineOptions, fn: () => Promise<ExitCode>): Promise<Exi
 
 function modeSteps(mode: Mode): ModeSteps {
   const steps = MODES[mode];
-  if (!steps) throw new RunError(`${mode} mode: not built yet. Use agent-stack run quick "<description>" for now.`, 1);
+  if (!steps) throw new RunError(`${mode} mode: not built yet. Use ${commandName()} run quick "<description>" for now.`, 1);
   return steps;
 }
 
 /** Builds the context, runs the loop and closes the prompter whatever happens. */
 async function drive(o: EngineOptions, cfg: RunConfig, run: RunFile, mode: ModeSteps, before?: (ctx: Ctx) => void): Promise<ExitCode> {
   const env = o.env ?? {};
-  const prompter = o.prompter ?? selectPrompter({ ...process.env, ...env }, o.isTTY ?? Boolean(process.stdin.isTTY));
+  const answering = o.answers !== undefined && o.answers.length > 0;
+  // AC-70: `--answer` wins over AGENT_STACK_GATE_INPUT and the terminal.
+  const prompter = answering ? answersPrompter(o.answers ?? []) : (o.prompter ?? selectPrompter({ ...process.env, ...env }, o.isTTY ?? Boolean(process.stdin.isTTY)));
   const ctx: Ctx = {
     projectDir: o.projectDir,
     cfg,
     run,
     mode,
     prompter,
+    answering,
     out: outOf(o),
     env,
     signal: o.signal ?? new AbortController().signal,
@@ -102,14 +108,14 @@ function refuseDirty(dir: string, when: string): void {
 /** AC-50: names the locked run and its commands. */
 function lockRefusal(dir: string): RunError {
   const lock = readLock(dir);
-  if (!lock) return new RunError("A run lock exists (.claude/tmp/runs/lock) but cannot be read. Remove it with: agent-stack run --cancel", 1);
+  if (!lock) return new RunError(`A run lock exists (.claude/tmp/runs/lock) but cannot be read. Remove it with: ${commandName()} run --cancel`, 1);
   const state = lockedRunState(dir);
   return new RunError(
     [
       `Run ${lock.id} holds the lock (${state}); one run per repo.`,
-      `  agent-stack run --resume ${lock.id}`,
-      `  agent-stack run --status ${lock.id}`,
-      `  agent-stack run --cancel ${lock.id}`,
+      `  ${commandName()} run --resume ${lock.id}`,
+      `  ${commandName()} run --status ${lock.id}`,
+      `  ${commandName()} run --cancel ${lock.id}`,
     ].join("\n"),
     1
   );
@@ -119,8 +125,10 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
   return guard(o, async () => {
     const dir = o.projectDir;
     const description = o.description.trim();
-    if (description === "") throw new RunError('The description is empty: say what to do, e.g. agent-stack run quick "fix the README typo".', 1);
+    if (description === "") throw new RunError(`The description is empty: say what to do, e.g. ${commandName()} run quick "fix the README typo".`, 1);
     const cfg = loadRunConfig(dir);
+    // AC-72: an old harness stops the run here, before any call, not halfway at a missing agent section.
+    requireHarness(dir);
     if (o.mode === "task" && cfg.stagePattern !== DEFAULT_STAGE_PATTERN) {
       throw new RunError(`gates.json sets a custom stagePattern (${cfg.stagePattern}); task mode needs the default ${DEFAULT_STAGE_PATTERN}. Remove the key, or use run quick.`, 1);
     }
@@ -153,6 +161,7 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       humanDecisions: [],
       costUsd: 0,
       costUnknownCalls: 0,
+      card: null,
       calls: 0,
       fuse: cfg.fuse,
     };
@@ -201,13 +210,18 @@ export function resumeRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
     const dir = o.projectDir;
     const lock = readLock(dir);
     const id = o.id ?? lock?.id;
-    if (!id) throw new RunError('No run to resume: no run holds the lock. Start one with agent-stack run quick "<description>".', 1);
+    if (!id) throw new RunError(`No run to resume: no run holds the lock. Start one with ${commandName()} run quick "<description>".`, 1);
     const run = readRunStrict(dir, id);
     if (run.status === "finished" || run.status === "cancelled") throw new RunError(`Run ${id} is ${run.status}; there is nothing to resume.`, 1);
     if (lock && lock.id !== id) throw lockRefusal(dir);
     if (lock && run.status === "running" && pidAlive(lock.pid)) {
       throw new RunError(`Run ${id} is live (pid ${lock.pid}); it is already running and cannot be resumed twice.`, 1);
     }
+    // AC-70: answers reach only the gate the run waits at, and only one that reads input.
+    if (o.answers !== undefined && o.answers.length > 0 && (run.status !== "waiting" || !run.next.startsWith("gate:") || run.next === "gate:spec-merge")) {
+      throw new RunError(`--answer needs a run waiting at a gate that takes an answer; run ${id} is ${run.status} at ${run.next}. Nothing was applied.`, 1);
+    }
+    requireHarness(dir);
     const cfg = loadRunConfig(dir);
     const mode = modeSteps(run.mode);
     const { kind, task } = parseNext(run.next);
@@ -258,7 +272,7 @@ export function cancelRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
       throw new RunError(`Run ${id} is already ${run.status}; there is nothing to cancel.`, 1);
     }
     if (ours && lock && run.status === "running" && pidAlive(lock.pid)) {
-      throw new RunError(`Run ${id} is live (pid ${lock.pid}): stop it first (Ctrl-C), then agent-stack run --cancel ${id}.`, 1);
+      throw new RunError(`Run ${id} is live (pid ${lock.pid}): stop it first (Ctrl-C), then ${commandName()} run --cancel ${id}.`, 1);
     }
     run.status = "cancelled";
     writeRun(dir, run);
@@ -268,12 +282,37 @@ export function cancelRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
   });
 }
 
-/** Prints the run and changes nothing; always exit 0 (AC-23, AC-53). */
-export async function statusRun(o: EngineOptions & { id?: string }): Promise<ExitCode> {
+/** The run for a program: AC-23's fields, the kept card while the run waits, the language (AC-69, AC-76). */
+function statusJson(dir: string, id: string | undefined): string {
+  const { language, warnings } = readLanguage(dir);
+  if (!id) return JSON.stringify({ run: null, card: null, language, warnings: [...warnings, "no run in this repo"] });
+  let run: RunFile;
+  try {
+    run = readRunStrict(dir, id);
+  } catch (e) {
+    return JSON.stringify({ run: null, card: null, language, warnings: [...warnings, e instanceof Error ? e.message : String(e)] });
+  }
+  const attempts = Object.fromEntries(run.tasks.map((t) => [t.id, t.attempts]));
+  const out = {
+    run: { id: run.id, mode: run.mode, status: run.status, next: run.next, branch: run.branch, attempts, calls: run.calls, costUsd: run.costUsd, costUnknownCalls: run.costUnknownCalls, fuse: run.fuse },
+    // A live or interrupted run waits at no gate, even while a terminal prompt is open.
+    card: run.status === "waiting" ? run.card : null,
+    language,
+    warnings,
+  };
+  return JSON.stringify(out);
+}
+
+/** Prints the run and changes nothing; always exit 0 (AC-23, AC-53, AC-69). */
+export async function statusRun(o: EngineOptions & { id?: string; json?: boolean }): Promise<ExitCode> {
   const dir = o.projectDir;
   const out = outOf(o);
   const lock = readLock(dir);
   const id = o.id ?? lock?.id ?? listRuns(dir).at(-1);
+  if (o.json) {
+    out(statusJson(dir, id));
+    return 0;
+  }
   if (!id) {
     out("No run in this repo.");
     return 0;

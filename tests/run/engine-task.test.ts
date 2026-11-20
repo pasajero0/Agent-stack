@@ -412,7 +412,7 @@ describe("task mode: the whole path", () => {
     expect(run.tasks.map((t) => t.id)).toEqual(["T1", "T2"]);
     expect(sh(r.dir, "log", "--format=%s", `main..${WORK_BRANCH}`)).toBe("fix(b1): add the bye file\nfix(b1): add the hello file");
     const t = text(r);
-    expect(t).toContain("gate:accept");
+    expect(t).toContain("━━ Accept:");
     expect(t).toContain("hello.txt");
     expect(t).toContain(".claude/bin/verify T1 → 0");
     expect(t).toContain("$0.0");
@@ -449,7 +449,7 @@ describe("task mode: the whole path", () => {
     await toSpecMerge(r, [plan({ tasks: one }), impl({ writes: { "hello.txt": "hello\n" }, subject: "Add the hello file" }), review()]);
     mergeSpec(r);
     expect(await resumeRun({ ...r.opts({ gate: ["a", "a"] }) }), text(r)).toBe(0);
-    expect(text(r)).toContain("== gate:accept");
+    expect(text(r)).toContain("━━ Accept:");
     expect(text(r)).not.toContain("Final check");
   });
 

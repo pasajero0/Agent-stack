@@ -10,20 +10,40 @@
 # openPaths (docs, *.md, .claude/) stay open. gates.json → specGate: strict (default) | stage | off.
 # A repository with no commits yet is open too: there is nothing to merge a spec into before the scaffold.
 # So is a live quick run of the driver on this branch (gates-lib: driver_run_on_branch).
+# gates.json → codeBy: "driver" closes code to everything but a live driver run on this branch, any mode.
 set -euo pipefail
 . "$(dirname "$0")/gates-lib.sh"
 require_jq
 
 [ -f "$GATES_FILE" ] || exit 0 # harness without gates.json (older version): gate not configured
-mode=$(gate_get '.specGate')
-mode=${mode:-strict}
-[ "$mode" = "off" ] && exit 0
 
 path=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')
 [ -z "$path" ] && exit 0
 rel=$(rel_path "$path")
 case "$rel" in /*) exit 0 ;; esac # outside the project
 gate_list '.openPaths' | glob_match_any "$rel" && exit 0
+
+# codeBy "driver": code changes only inside a driver call, so a chat runs the work through the driver
+# (/drive) instead of doing it. Checked before specGate, so "off" does not open it (spec AC-71).
+code_by=$(gate_get '.codeBy')
+case "$code_by" in
+  "" | anyone) ;;
+  *)
+    if repo_is_empty; then
+      # stdout JSON: a note on stderr with exit 0 is not shown to anyone.
+      jq -n --arg m "spec-gate: codeBy \"$code_by\" starts after the first commit; this edit is not held by it." '{systemMessage: $m}'
+    elif ! driver_run_on_branch; then
+      unknown=""
+      [ "$code_by" = driver ] || unknown=" (the value \"$code_by\" is unknown, so it is read as \"driver\")"
+      echo "Blocked by spec-gate ($rel): gates.json → codeBy is \"driver\"$unknown — code changes only through the driver. Run the work with /drive (agent-stack run task or run quick); do not edit code yourself." >&2
+      exit 2
+    fi
+    ;;
+esac
+
+mode=$(gate_get '.specGate')
+mode=${mode:-strict}
+[ "$mode" = "off" ] && exit 0
 
 # Bootstrap: an empty repository has no base branch to read a spec from — the scaffold comes first.
 repo_is_empty && exit 0

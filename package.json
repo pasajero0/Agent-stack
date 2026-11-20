@@ -1,6 +1,6 @@
 {
   "name": "@pasajero_0/agent-stack",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "CLI that deploys a Claude Code harness (hooks, subagents, skills, guards) onto your repo and manages MCP servers",
   "type": "module",
   "main": "./dist/index.js",
@@ -16,7 +16,9 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "vitest run",
+    "test": "pnpm test:fast && pnpm test:slow",
+    "test:fast": "vitest run --project fast",
+    "test:slow": "vitest run --project slow",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prepare": "husky || true",

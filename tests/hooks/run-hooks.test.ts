@@ -6,6 +6,7 @@ import {
   deployHarness,
   edit,
   git,
+  patchGates,
   readTool,
   runHook,
   write,
@@ -306,5 +307,54 @@ describe("guard-file: symlinks are followed", () => {
     link(dir, "notes/x", "y");
     link(dir, "notes/y", "x");
     expect(runHook(dir, "guard-file.sh", writeTool(join(dir, "notes/x"), "x")).code).toBe(0);
+  });
+});
+
+describe("spec-gate: codeBy driver (AC-71)", () => {
+  /** A repo whose stage spec and plan would let code through, so only codeBy can block. */
+  function open(codeBy: unknown, specGate = "off"): string {
+    const dir = repo("fix/login");
+    patchGates(dir, { codeBy, specGate });
+    return dir;
+  }
+
+  it("v04 AC-71: with codeBy driver, a chat edit of code is denied even with specGate off; docs stay open", () => {
+    const dir = open("driver");
+    const r = runHook(dir, "spec-gate.sh", codeEdit(dir), NO_ENV);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("codeBy is \"driver\"");
+    expect(r.stderr).toContain("/drive");
+    expect(runHook(dir, "spec-gate.sh", edit(join(dir, "docs/notes.md")), NO_ENV).code).toBe(0);
+    expect(runHook(dir, "spec-gate.sh", writeTool(join(dir, "src/new.ts")), NO_ENV).code).toBe(2);
+  });
+
+  it("v04 AC-71: a live driver call of any mode on its branch may edit code", () => {
+    const dir = open("driver");
+    writeRun(dir, { mode: "task" });
+    writeLock(dir, RUN, LIVE);
+    expect(runHook(dir, "spec-gate.sh", codeEdit(dir), env(RUN)).code).toBe(0);
+    // The same run, interrupted: closed again.
+    writeLock(dir, RUN, DEAD);
+    expect(runHook(dir, "spec-gate.sh", codeEdit(dir), env(RUN)).code).toBe(2);
+  });
+
+  it("v04 AC-71: codeBy missing or anyone changes nothing; an unknown value is read as driver and says so", () => {
+    expect(runHook(open("anyone"), "spec-gate.sh", codeEdit(open("anyone")), NO_ENV).code).toBe(0);
+    const unset = repo("fix/login");
+    patchGates(unset, { specGate: "off" });
+    expect(runHook(unset, "spec-gate.sh", codeEdit(unset), NO_ENV).code).toBe(0);
+    const typo = open("drivr");
+    const r = runHook(typo, "spec-gate.sh", codeEdit(typo), NO_ENV);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("\"drivr\" is unknown");
+  });
+
+  it("v04 AC-71: in a repo with no commits codeBy does not apply yet, and says so", () => {
+    const dir = deployHarness();
+    git(dir, "init", "-q", "-b", "main");
+    patchGates(dir, { codeBy: "driver" });
+    const r = runHook(dir, "spec-gate.sh", codeEdit(dir), NO_ENV);
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout).systemMessage).toContain("starts after the first commit");
   });
 });

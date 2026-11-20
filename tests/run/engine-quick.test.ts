@@ -41,7 +41,7 @@ describe("quick mode: the path", () => {
     const calls = readdirSync(join(r.dir, ".claude/tmp/runs", run.id, "calls"));
     expect(calls).toEqual(["1-implement.json"]);
     expect(r.logged()[0]?.env.AGENT_STACK_RUN).toBe(run.id);
-    expect(text(r)).toContain("gate:accept");
+    expect(text(r)).toContain("━━ Accept:");
     expect(text(r)).toMatch(/-> implement:Q1 · implement · sonnet · call 1\/40 \.\.\./);
     expect(text(r)).toMatch(/ {3}ok in \d+s/);
   });
@@ -98,7 +98,7 @@ describe("quick mode: the path", () => {
     const env = r.opts({ gate: ["a"] }).env ?? {};
     const prompter = selectPrompter(env, false);
     const signal = new AbortController().signal;
-    const ctx: Ctx = { projectDir: r.dir, cfg: loadRunConfig(r.dir), run: r.run(), mode, prompter, out: (l) => r.out.push(l), env, signal };
+    const ctx: Ctx = { projectDir: r.dir, cfg: loadRunConfig(r.dir), run: r.run(), mode, prompter, answering: false, out: (l) => r.out.push(l), env, signal };
     const code = await runLoop(ctx).finally(() => prompter.close());
     expect(code, text(r)).toBe(0);
     expect(seen).toEqual([0]);
@@ -216,7 +216,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(out).toContain("reason: test-conflict");
     expect(out).toContain("tests/readme.test.ts:has the line");
     expect(out).toContain("the test wants broken");
-    expect(out).toMatch(/r retry \(your answer follows/);
+    expect(out).toMatch(/r <text> — retry with your answer for the implementer/);
     // The attempt's edits are kept for the retry.
     expect(readFileSync(join(r.dir, "README.md"), "utf8")).toBe("# demo\nhalf\n");
 
@@ -253,7 +253,7 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(run.limitReason).toBe("tests-changed");
     expect(run.returnTo).toBe("checks:Q1");
     expect(text(r)).toContain("deleted test file tests/readme.test.ts");
-    expect(text(r)).toMatch(/a allow/);
+    expect(text(r)).toMatch(/a — allow exactly these/);
 
     const code = await resumeRun({ ...r.opts({ gate: ["a", "a"] }) });
     expect(code, text(r)).toBe(0);

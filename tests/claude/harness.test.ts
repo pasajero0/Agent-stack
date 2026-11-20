@@ -76,6 +76,25 @@ describe("buildHarnessFiles", () => {
     expect(rubric).toMatch(/recompute every example/i);
   });
 
+  it("v04 AC-75: ships the drive skill for the operator chat with each instruction the spec lists", () => {
+    const f = byPath(".claude/skills/drive/SKILL.md");
+    expect(f).toBeDefined();
+    expect(f!.content).toMatch(/^---\ndescription: /);
+    const t = f!.content.replace(/\s+/g, " ");
+    expect(t).toContain("in the background");
+    expect(t).toContain("--status --json");
+    expect(t).toContain("--resume <id> --answer");
+    expect(t).toContain('Enter (accept the default) is `--answer ""`');
+    expect(t).toContain("say which key you sent");
+    expect(t).toContain("Do no step's work yourself");
+    expect(t).toContain("Do not run `agent-stack update`");
+    expect(t).toContain("Never merge, push or open a pull request yourself");
+    expect(t).toContain("A later fix is a new run");
+    expect(t).toContain("not translated");
+    expect(t).toContain("language.chat");
+    expect(t).toMatch(/report in the chat language: what was done, the commits .* the cost from the run/);
+  });
+
   it("ships the spec-driven skills with their templates", () => {
     for (const skill of ["grill", "adr", "spec", "plan"]) {
       const f = byPath(`.claude/skills/${skill}/SKILL.md`);

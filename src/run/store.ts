@@ -5,7 +5,11 @@ import { isObj, parseFuse } from "./config.js";
 import { RunError } from "./errors.js";
 import type {
   AnswerRecord,
+  CardAnswer,
+  CardGate,
+  CardPrompt,
   CheckResult,
+  GateCard,
   GateRecord,
   LimitReason,
   Mode,
@@ -171,6 +175,36 @@ function answer(v: unknown, f: string): AnswerRecord {
   return { question: str(o.question, f), answer: str(o.answer, f) };
 }
 
+const CARD_GATES: readonly CardGate[] = ["answers", "spec-merge", "plan-approve", "limit", "accept"];
+
+function cardAnswer(v: unknown, f: string): CardAnswer {
+  const o = obj(v, f);
+  const follows = o.follows === null ? null : oneOf(["text", "number"] as const, o.follows, `${f}.follows`);
+  return { key: str(o.key, f), follows, label: str(o.label, f) };
+}
+
+function cardPrompt(v: unknown, f: string): CardPrompt {
+  const o = obj(v, f);
+  return { text: str(o.text, f), default: strOrNull(o.default, `${f}.default`), answers: arr(o.answers, `${f}.answers`, cardAnswer) };
+}
+
+/** The kept gate card (AC-68); a run file from before it has none. */
+function card(v: unknown, f: string): GateCard | null {
+  if (v === undefined || v === null) return null;
+  const o = obj(v, f);
+  return {
+    gate: oneOf(CARD_GATES, o.gate, `${f}.gate`),
+    run: str(o.run, `${f}.run`),
+    stage: strOrNull(o.stage, `${f}.stage`),
+    title: str(o.title, `${f}.title`),
+    facts: strings(o.facts, `${f}.facts`),
+    keep: arr(o.keep, `${f}.keep`, (x) => count(x, `${f}.keep`)),
+    prompts: arr(o.prompts, `${f}.prompts`, cardPrompt),
+    source: strOrNull(o.source, `${f}.source`),
+    hint: str(o.hint, `${f}.hint`),
+  };
+}
+
 /** Field-by-field check of a parsed run file; throws `Malformed(<field>)`. */
 function toRunFile(v: unknown, id: string): RunFile {
   const o = obj(v, "run.json");
@@ -200,6 +234,7 @@ function toRunFile(v: unknown, id: string): RunFile {
     costUnknownCalls: o.costUnknownCalls === undefined ? 0 : count(o.costUnknownCalls, "costUnknownCalls"),
     calls: count(o.calls, "calls"),
     fuse: parseFuse(o.fuse) ?? bad("fuse"),
+    card: card(o.card, "card"),
   };
 }
 

@@ -78,6 +78,13 @@ it here first.
   several tasks), **epic** (several stages; the run proposes a split and stops).
 - **Gate** — a point where the run waits for the human: answers, spec merge, plan approval, acceptance,
   limit.
+- **Gate card** — what a gate shows, built once (rebuilt only when it goes stale) and kept in the run file: a title, the facts, what the human
+  must decide, and the answers it takes. The terminal prints it short for a person; `--status --json` gives the
+  same card to a program. One source, so the two never say different things.
+- **Operator chat** — a Claude Code chat that runs the driver for the human: it starts a run, shows each gate
+  card, passes the human's answer with `--answer`, and reports at the end. It does no step's work itself; the
+  driver's roles do. With `codeBy: "driver"` a hook holds this: code edits outside `openPaths` and outside a
+  driver call are refused. It speaks `language.chat` (English by default) and keeps terms in `language.terms`.
 - **Attempt** — one pass of implement → checks → review for a task. Limited (task 3, quick 2); a later
   attempt runs on Opus.
 - **Limit gate** — where a run stops when attempts run out, review findings stop shrinking, or the fuse

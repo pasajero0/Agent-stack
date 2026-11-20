@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { DEFAULT_STAGE_PATTERN } from "../claude/gates.js";
 import { RunError } from "./errors.js";
 import type { Fuse, RunConfig } from "./types.js";
+import { commandName } from "./engine/command.js";
 
 const DEFAULTS = {
   maxTurns: 60,
@@ -97,7 +98,7 @@ export function loadRunConfig(projectDir: string): RunConfig {
     parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
-    throw new RunError(`Cannot read ${path}: ${why}. Run \`agent-stack generate\` or fix the file.`, 1);
+    throw new RunError(`Cannot read ${path}: ${why}. Run \`${commandName()} generate\` or fix the file.`, 1);
   }
   if (!isObj(parsed)) throw new RunError(`${path} must contain a JSON object.`, 1);
 
@@ -120,4 +121,37 @@ export function loadRunConfig(projectDir: string): RunConfig {
     // The same default as .claude/bin/trace: docs/GLOSSARY.md unless gates.json names one ("" for none).
     glossary: dirPath(str(parsed, "glossary", "docs/GLOSSARY.md")),
   };
+}
+
+/** A language code (AC-76): `en`, `ru`, `pt-BR`, `es-419`. */
+const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z]{2}|-[0-9]{3})?$/;
+
+export interface Language {
+  chat: string;
+  terms: string;
+}
+
+/**
+ * `gates.json → language` for the operator chat (AC-76): both default to `en`; a bad value is `en` with a
+ * warning. It never refuses, so `--status --json` always answers.
+ */
+export function readLanguage(projectDir: string): { language: Language; warnings: string[] } {
+  const warnings: string[] = [];
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(readFileSync(join(projectDir, ".claude", "gates.json"), "utf8"));
+  } catch {
+    return { language: { chat: "en", terms: "en" }, warnings };
+  }
+  const v = isObj(parsed) ? parsed["language"] : undefined;
+  if (v === undefined) return { language: { chat: "en", terms: "en" }, warnings };
+  if (!isObj(v)) return { language: { chat: "en", terms: "en" }, warnings: ["gates.json → language is not an object; using en"] };
+  const pick = (key: "chat" | "terms"): string => {
+    const x = v[key];
+    if (x === undefined) return "en";
+    if (typeof x === "string" && LANGUAGE.test(x)) return x;
+    warnings.push(`gates.json → language.${key} ${JSON.stringify(x)} is not a language code; using en`);
+    return "en";
+  };
+  return { language: { chat: pick("chat"), terms: pick("terms") }, warnings };
 }

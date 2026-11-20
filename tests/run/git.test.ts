@@ -221,7 +221,9 @@ describe("headers", () => {
     ];
     for (const h of headers) {
       // execFileSync throws on a non-zero exit, so a rejected header fails the test.
-      execFileSync("pnpm", ["exec", "commitlint"], { cwd: repoRoot, input: `${h}\n`, stdio: "pipe" });
+      // A target repo's rules: plain Conventional Commits, not this repo's scope list.
+      const config = join(repoRoot, "tests/run/commitlint.conventional.mjs");
+      execFileSync("pnpm", ["exec", "commitlint", "--config", config], { cwd: repoRoot, input: `${h}\n`, stdio: "pipe" });
     }
   }, 60_000);
 
