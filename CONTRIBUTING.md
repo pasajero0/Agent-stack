@@ -30,6 +30,7 @@ Do not name a branch like a tag (`v0.4.2`): git then cannot tell them apart.
 | `release` | the version bump and the release title |
 | `readme`, `changelog`, `glossary`, `adr`, `contributing` | that document |
 | `<spec>-<version>` | a spec change, before the code: `docs(driver-0.4.2): …` |
+| `<stage>` | a commit `agent-stack run` makes for a stage with a folder in `docs/specs/`: `feat(c1): …` |
 
 Tests take the scope of the code they test: `test(hooks): …`.
 
