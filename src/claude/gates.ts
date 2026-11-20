@@ -1,3 +1,4 @@
+import { SKIP_MARKS } from "../run/engine/skip-marks.js";
 import type { HarnessParams } from "../detect/harness-params.js";
 
 /** interactive: step-by-step diff confirmation (default). autonomous: no confirmations, hard limits. */
@@ -67,23 +68,16 @@ export interface LayerRule {
 // Union across stacks on purpose: a pattern for another language costs nothing and keeps the
 // guard stack-agnostic. POSIX ERE only (no \b) — must behave the same in BSD and GNU grep.
 export const CHEAT_PATTERNS = [
-  // Skip marks: the same forms as frozen.ts SKIPS (tests/run/skip-marks.test.ts keeps the two lists equal).
-  "(^|[^A-Za-z0-9_])(it|test|describe|suite|context|bench)\\.(skip|only|todo)",
-  "(^|[^A-Za-z0-9_.])this\\.skip[[:space:]]*\\(",
-  "(^|[^A-Za-z0-9_.])(xit|xtest|xdescribe|fit|fdescribe)[[:space:]]*\\(",
+  // Skip marks come from the one list shared with the frozen-tests count (0.4.5).
+  ...SKIP_MARKS.map((m) => m.ere),
   "@ts-ignore",
   "@ts-nocheck",
   "eslint-disable",
   "biome-ignore",
   "(:|[[:space:]]as)[[:space:]]*any([^A-Za-z0-9_]|$)",
-  "@pytest\\.mark\\.(skip|xfail)",
-  "pytest\\.skip\\(",
-  "@unittest\\.skip",
   "#[[:space:]]*type:[[:space:]]*ignore",
   "#[[:space:]]*noqa",
-  "t\\.Skip(Now|f)?\\(",
   "//[[:space:]]*nolint",
-  "#\\[ignore\\]",
 ];
 
 export const INSTALL_PATTERNS = [

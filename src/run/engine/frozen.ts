@@ -9,6 +9,7 @@ import { basename, join } from "node:path";
 import { globMatch } from "../checks.js";
 import { existsOnRef, git, taskDiffPaths } from "../git.js";
 import type { RunTask } from "../types.js";
+import { SKIPS_REGEX } from "./skip-marks.js";
 
 /** Check configs; a pattern with `/` matches the whole path, any other the file name in any folder. */
 const CHECK_CONFIGS: readonly string[] = [
@@ -34,9 +35,8 @@ const CHECK_CONFIGS: readonly string[] = [
 // `(?<![.\w])` keeps `re.test(` and `submit(` out of the test count.
 const TESTS = /(?<![.\w])(?:it|test)(?:\.\w+)*\s*\(|\bdef\s+test_|\bfunc\s+Test|#\[test\]/g;
 const ASSERTIONS = /\bexpect\s*\(|\b(?:debug_)?assert(?:_\w+|\.\w+|[A-Z]\w*)?!?\s*[\s(]|\bt\.(?:Errorf?|Fatalf?)\s*\(/g;
-// Only after a test call, so `iter().skip(1)` or `cursor.skip(n)` is not one.
-export const SKIPS =
-  /(?<![.\w])(?:it|test|describe|suite|context|bench)\.(?:skip|only|todo)\w*|(?<![.\w])[xf](?:it|describe|test)\s*\(|\bthis\.skip\s*\(|\bpytest\.skip\s*\(|@pytest\.mark\.(?:skip|xfail)|@unittest\.skip|\bt\.Skip\w*\s*\(|#\[ignore\]/g;
+// The skip marks are one list, shared with cheat-guard (skip-marks.ts).
+export const SKIPS = SKIPS_REGEX;
 
 const count = (text: string, re: RegExp): number => (text.match(re) ?? []).length;
 
