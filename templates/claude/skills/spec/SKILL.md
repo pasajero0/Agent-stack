@@ -15,9 +15,9 @@ every code edit for the stage. So the spec must be good enough to build from wit
 
 - **Full spec** — the stage has behaviour a user or a client can see: an API, a screen, a CLI command.
 - **Light spec** — setup or mechanical work with nothing to see: scaffold, tooling, CI, a dependency bump,
-  a move. Write `<specsDir>/<stage>/SPEC.md` from `${CLAUDE_SKILL_DIR}/light-template.md`: Purpose, a
-  checklist of `AC-n` each with the command that proves it, Out of scope. No unhappy-path partners, no
-  spec-reviewer. Then go to step 8. If the work turns out to have behaviour, switch to a full spec. A
+  a move. Write `<specsDir>/<stage>/SPEC.md` from `${CLAUDE_SKILL_DIR}/light-template.md`, keeping its
+  sections (the template is the one list of them): a checklist of `AC-n`, each with the command that proves it.
+  No unhappy-path partners, no spec-reviewer. Then go to step 8. If the work turns out to have behaviour, switch to a full spec. A
   "## Changes" entry that turns a full spec light says why — trace stops checking its tests.
 
 ## Steps (full spec)

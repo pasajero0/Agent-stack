@@ -57,6 +57,9 @@ const NEVER_FAILS: readonly [RegExp, string][] = [
   [/\n\s*exit\s+0\s*$/, "a last line exit 0"],
 ];
 
+/** The names of the patterns, for the `/plan` skill's own list and its test (one source, 0.4.5). */
+export const NEVER_FAILS_NAMES: readonly string[] = NEVER_FAILS.map(([, name]) => name);
+
 /** The pattern that keeps `verify` from failing, or null. */
 export function neverFails(verify: string): string | null {
   return NEVER_FAILS.find(([re]) => re.test(verify))?.[1] ?? null;

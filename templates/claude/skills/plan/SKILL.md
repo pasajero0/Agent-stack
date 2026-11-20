@@ -44,7 +44,9 @@ argument-hint: "<stage id, e.g. A0>"
    - **Last task:** `"verify": ".claude/bin/trace && .claude/bin/health && <full test command>"` — every
      criterion has a test, no test invents one, code health within its SLOs, everything green.
    - **`verify` is a real check of this task only** — tests filtered by AC id, a type check, a script.
-     Never `true`, never the whole suite unless the task is "everything green".
+     Never `true`, except a task that changes only documentation (Markdown, comments, no behaviour), whose
+     verify is `true`: the driver accepts exactly that. Never the whole suite unless the task is "everything
+     green".
    - **`verify` must be able to fail.** No `|| true`, `|| :`, `|| echo`, `|| exit 0`, `; true`, `; exit 0`,
      `set +e`, `set +o errexit`, `| tee` or `| cat`, and no last line `true` or `exit 0`: such a command passes
      whatever the code does. The driver refuses a plan with one.
@@ -62,7 +64,7 @@ argument-hint: "<stage id, e.g. A0>"
    Under the driver (`agent-stack run`), a retry runs on Opus. By hand, after two failed `verify` runs move
    the task one tier up (`.claude/bin/verify` prints the hint).
 4. **Run `.claude/bin/verify`** once: every task should fail now (red). A `verify` that already passes
-   proves nothing — fix it. Under the driver, skip this step: the driver runs each task's verify before its
+   proves nothing — fix it, except a docs-only task's `true`, which is green by design. Under the driver, skip this step: the driver runs each task's verify before its
    first attempt and notes one that is already green.
 5. Show the plan to the human as a table (id, ACs, tier, verify) before implementing.
 

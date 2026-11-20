@@ -96,9 +96,9 @@ word for this spec only is marked `(local)`.
   - tests: `it(`, `test(` (also with a modifier: `it.skip(`, `test.each(`), `def test_`, `func Test`, `#[test]`;
   - assertions: `expect(`, `assert` (also `assert.x(`, `assert_eq!(`, `assert!(`, `debug_assert!(`,
     `assertEqual(`, `assertThat(`), `t.Error(`, `t.Fatal(` and their `f` forms;
-  - skip marks: `.skip`, `.only`, `.todo` (and `.skipIf`) after `it`, `test`, `describe`, `suite`, `context` or
-    `bench`; `xit(`, `xdescribe(`, `xtest(`, `this.skip(`, `pytest.skip(`, `@pytest.mark.skip`,
-    `@pytest.mark.xfail`, `@unittest.skip`, `t.Skip`, `#[ignore]`. So `iter().skip(1)` is not one.
+  - skip marks: the forms in the one list `SKIP_MARKS` (`src/run/engine/skip-marks.ts`), which cheat-guard's seed
+    patterns are built from too — `.skip`, `.only`, `.todo`, `.skipIf` after a test call; `xit(`, `fit(` and the
+    like; `this.skip()`; pytest, unittest, Go and Rust marks. So `iter().skip(1)` or `this.skip(2)` is not one.
 
   A file that is no longer a regular file (a folder, a submodule) is "replaced"; a file with a NUL byte is not
   counted.
@@ -125,7 +125,8 @@ word for this spec only is marked `(local)`.
 
   They match case-insensitively, as whole words.
 - **Criterion text** (local): in the merged spec, the line starting `- **AC-n:**` and its continuation lines, up to
-  the next criterion or heading.
+  the next criterion or heading. `.claude/bin/trace` counts a criterion only in this form too, so the driver and
+  `trace` see the same criteria.
 - **Driver call**: a Claude process the driver started, with `AGENT_STACK_RUN=<run id>` in its environment.
   Its hooks inherit that variable. A command the model runs cannot set the environment of a hook process.
 - **Gate card**: what a gate shows, built once as data when the run reaches the gate and kept in the run file
@@ -567,8 +568,9 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     it may not test the task. Gate:accept shows the note (AC-21). The run goes on.
   - A red result is the expected state; nothing is noted.
   - A timeout is AC-60. Quick mode's Q1, a fix task F*k* and a later attempt are not checked.
-- **AC-17:** WHEN the plan role runs, THE SYSTEM SHALL require in its prompt that every task end green.
-  - The `/plan` skill SHALL say the same: tests first inside a task, and no test-only tasks.
+- **AC-17:** WHEN the plan role runs, THE SYSTEM SHALL embed the `/plan` skill (AC-4), which requires that every
+  task end green: tests first inside a task, and no test-only tasks. The prompt SHALL NOT repeat the rule: the
+  skill is its one source (One source of rules).
   - Its "after two failed verify runs move one tier up" SHALL read "under the driver, a retry runs on Opus".
 - **AC-18:** WHILE `AGENT_STACK_RUN` names a live run whose `branch` is the current branch, evidence-gate
   SHALL not block. The driver decides the result.
@@ -1049,6 +1051,14 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-20 — Frozen tests (0.4.5, from review): the skip marks are one list in code, `SKIP_MARKS`, from which
+  both the frozen-tests count and cheat-guard's seed patterns are built; the Term points to it instead of copying
+  it. `fit(`/`fdescribe(` now count, `this.skip` only without arguments (Mocha's form).
+
+- 2026-11-20 — AC-17, Criterion text (0.4.5, one source of truth): the plan prompt no longer repeats "every task
+  ends green" — the embedded `/plan` skill is its source; `trace` reads criterion lines in the driver's strict
+  form (`- **AC-n:**`), since a looser form let the two count different criteria.
 
 - 2026-11-20 — AC-4 (spec prompt), hotfix 0.4.4: the prompt named the skipped step by number ("step 7"). 0.4.3
   added a step to `/spec`, so step 7 became Review and the spec role was told to skip spec-reviewer. The step is

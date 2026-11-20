@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.5 — one source of truth
+
+From an audit of rules written in several places (`.claude/tmp/sources/rules-audit-2026-11-20.md`): each rule now
+lives in one place, and a test keeps the other places in step.
+
+- **Skip marks are one list** (`SKIP_MARKS`): cheat-guard's seed patterns and the frozen-tests count are built from
+  it. cheat-guard now also catches `.todo` and Mocha's `this.skip()`; frozen tests also count `fit(` and
+  `fdescribe(`. `this.skip(n)` (a parser method) and `context.todos` are no longer skip marks.
+- **`trace` reads criteria like the driver:** only a line `- **AC-n:**`, one id per line. A loose `- AC-3` line no
+  longer counts, and `trace` names it with the form to use.
+- **`/plan`:** allows a verify of `true` for a docs-only task, as the driver does, and lists every pattern the
+  driver refuses (a test reads them from the driver). The plan prompt no longer repeats "every task ends green":
+  the embedded skill says it.
+- **Docs:** `/spec` points to the light template for its sections; README points to the `gates.json` seed for
+  `openPaths`; CONTRIBUTING says why the release commit has two headers. A test keeps commit scopes equal in
+  CONTRIBUTING and commitlint.
+
+### Upgrading from 0.4.4
+
+- **Write criteria as `- **AC-n:** …`.** `trace` (and evidence-gate through it) no longer counts `- AC-1 …` or
+  `* AC-1: …`; it says so for each such line. The driver always read only this form.
+- Run `agent-stack update` for `trace`, `/spec` and `/plan`. The new cheat-guard patterns are in the `gates.json`
+  seed, which `update` does not touch: a new repo gets them; in an existing one, copy `cheatPatterns` from a fresh
+  `agent-stack generate` into a scratch folder if you want them.
+
+
 ## 0.4.4 — hotfix
 
 - **run: the spec role reviews its spec again.** 0.4.3 added a step to `/spec`, and the driver named the step to
