@@ -851,8 +851,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     verify, an AC-66 change line, an AC-32 line (cut at 120 by AC-32), the cost line, or a multi-line output (the tails of
     AC-33 and AC-61, a BLOCKED report): those print as they are. The card data is never cut.
   - The waiting line of AC-29 and the steps of AC-10 follow the card; they are its `hint`. The waiting line
-    reads `Waiting at <gate> for your answer: <hint> --answer <keys>`, the keys from the card's first prompt
-    (`a | r <text> | c`), so it does not read as an error.
+    reads `Waiting at <gate> for your answer (<keys>): <hint> --answer <answer>`, the keys from the card's first
+    prompt (`a | r <text> | c`), so it does not read as an error.
   - A title names the gate and its subject, not the run id or the branch (both are facts or in the hint):
     `Plan <stage>: <n> task(s)`, `Accept: <stage or quick> · <n> task(s)`, `Stopped: <reason>`,
     `Spec <stage> is ready to review`, `Questions before the spec`.
