@@ -4,12 +4,12 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCheck, verifyTail, type CheckRun } from "../checks.js";
+import { verifyTail, type CheckRun } from "../checks.js";
 import { commitPaths, diffLines, git, headSha, normaliseHeader, taskDiffPaths } from "../git.js";
 import { reviewPrompt } from "../prompts.js";
 import { blockingCount, isBlocking, parseReview, type ReviewOutput } from "../schemas.js";
 import { judgeCall } from "./call.js";
-import { Interrupted, type CheckItem, type Ctx, type StepHandler } from "./context.js";
+import { driverCheck, Interrupted, type CheckItem, type Ctx, type StepHandler } from "./context.js";
 import { newChanges, testChangesText } from "./frozen.js";
 import { lastImplement, START_NOTE } from "./steps-implement.js";
 import { baseOf, failAttempt, taskOf, timedOutError, toLimit } from "./task-core.js";
@@ -34,7 +34,7 @@ export const checks: StepHandler = async (ctx, id) => {
   const items = ctx.mode.checkItems(ctx, task, info);
   const runs: CheckRun[] = [];
   for (const item of items) {
-    const r = await runCheck(item.cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
+    const r = await driverCheck(ctx, item.cmd);
     if (r.aborted) throw new Interrupted();
     if (r.timedOut) throw timedOutError(ctx, "checks", r);
     runs.push(r);

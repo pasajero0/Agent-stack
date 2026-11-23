@@ -10,7 +10,9 @@ argument-hint: "<stage id, e.g. A0>"
 - The spec is merged: `git cat-file -e origin/<base>:<specsDir>/$ARGUMENTS/SPEC.md` succeeds (`git fetch`
   first), or — when there is no `origin/<base>` — the same with the local `<base>`. That is the branch
   spec-gate reads. `baseBranch` and `specsDir` are in `.claude/gates.json`. If not — stop: no plan before
-  the merge.
+  the merge. With `specFlow: "branch"` in `.claude/gates.json`: the spec is committed on the current branch
+  (`git cat-file -e HEAD:<specsDir>/$ARGUMENTS/SPEC.md`) and the human approved it; stay on this branch and
+  skip step 1.
 - Read the merged spec in full, and the ADRs it links.
 
 ## Steps

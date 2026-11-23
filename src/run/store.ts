@@ -2,6 +2,7 @@ import * as nodeFs from "node:fs";
 import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isObj, parseFuse } from "./config.js";
+import { DEFAULT_SPEC_FLOW, SPEC_FLOWS } from "./spec-flow.js";
 import { RunError } from "./errors.js";
 import type {
   AnswerRecord,
@@ -93,6 +94,7 @@ const FIXED_NEXT = [
   "gate:answers",
   "spec",
   "gate:spec-merge",
+  "gate:spec-approve",
   "plan",
   "gate:plan-approve",
   "base-check",
@@ -160,6 +162,11 @@ function task(v: unknown, f: string): RunTask {
   };
 }
 
+/** A git object id (sha-1 or sha-256): it goes to git as an argument, so nothing else may pass (AC-87). */
+function gitId(v: unknown, f: string): string {
+  return typeof v === "string" && /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(v) ? v : bad(f);
+}
+
 function gate(v: unknown, f: string): GateRecord {
   const o = obj(v, f);
   const g: GateRecord = { gate: str(o.gate, f), at: str(o.at, f), decision: str(o.decision, f), comment: strOrNull(o.comment, f) };
@@ -168,6 +175,7 @@ function gate(v: unknown, f: string): GateRecord {
   }
   if (o.asked !== undefined) g.asked = strings(o.asked, `${f}.asked`);
   if (o.reason !== undefined) g.reason = oneOf(LIMITS, o.reason, `${f}.reason`);
+  if (o.head !== undefined) g.head = gitId(o.head, `${f}.head`);
   return g;
 }
 
@@ -176,7 +184,7 @@ function answer(v: unknown, f: string): AnswerRecord {
   return { question: str(o.question, f), answer: str(o.answer, f) };
 }
 
-const CARD_GATES: readonly CardGate[] = ["answers", "spec-merge", "plan-approve", "limit", "accept"];
+const CARD_GATES: readonly CardGate[] = ["answers", "spec-merge", "spec-approve", "plan-approve", "limit", "accept"];
 
 function cardAnswer(v: unknown, f: string): CardAnswer {
   const o = obj(v, f);
@@ -220,6 +228,9 @@ function toRunFile(v: unknown, id: string): RunFile {
     id,
     description: str(o.description, "description"),
     mode: oneOf(MODES, o.mode, "mode"),
+    // AC-84: a run file from before the spec flow reads as merge.
+    specFlow: o.specFlow === undefined ? DEFAULT_SPEC_FLOW : oneOf(SPEC_FLOWS, o.specFlow, "specFlow"),
+    specApproved: o.specApproved === undefined || o.specApproved === null ? null : gitId(o.specApproved, "specApproved"),
     status: oneOf(STATUSES, o.status, "status"),
     next: next(o.next, "next"),
     returnTo: o.returnTo === null ? null : next(o.returnTo, "returnTo"),

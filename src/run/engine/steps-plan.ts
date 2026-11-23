@@ -15,6 +15,7 @@ import { newTask, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "
 import { estimate, estimateText } from "./timing.js";
 import { A, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
 import { ask, comment, humanFeedback, NO_INPUT, recordGate } from "./gates.js";
+import { specChanged, toSpecApprove } from "./spec-change.js";
 import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, tasksPath, type PlanTask } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, withFeedback, type RoleMark } from "./role-bounds.js";
 import { implementModel, lastCallOutput } from "./steps-implement.js";
@@ -182,11 +183,14 @@ const planApproveGate: StepHandler = async (ctx) => {
   const { run } = ctx;
   const dir = ctx.projectDir;
   const stage = stageOf(run);
+  // AC-88: the plan is approved only against the approved spec.
+  if (specChanged(ctx)) return toSpecApprove(ctx);
   let tasks = planShown(ctx, stage);
   for (;;) {
     const a = await ask(ctx, "plan> ");
     if (a === null) return NO_INPUT;
     const s = a.trim();
+    if ((s === "a" || s === "r" || s.startsWith("r ")) && specChanged(ctx)) return toSpecApprove(ctx);
     if ((s === "a" || s === "r" || s.startsWith("r ")) && run.card?.source !== planSource(ctx, stage)) {
       // The plan changed while the gate waited: show the new one before any decision (AC-68).
       tasks = planShown(ctx, stage);

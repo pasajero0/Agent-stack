@@ -46,6 +46,8 @@ const mk = (id: string, over: Partial<RunFile> = {}): RunFile => ({
   id,
   description: "d",
   mode: "task",
+  specFlow: "merge",
+  specApproved: null,
   status: "running",
   next: "clarify",
   returnTo: null,

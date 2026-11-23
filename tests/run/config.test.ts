@@ -41,6 +41,7 @@ const DEFAULTS = {
   specsDir: "docs/specs",
   adrDir: "docs/adr",
   baseBranch: "main",
+  specFlow: "merge",
   stagePattern: DEFAULT_STAGE_PATTERN,
   glossary: "docs/GLOSSARY.md",
 };

@@ -4,7 +4,6 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { runCheck } from "../checks.js";
 import type { Model } from "../claude.js";
 import { isObj } from "../config.js";
 import { RunError } from "../errors.js";
@@ -14,9 +13,10 @@ import { parseImplement, type ImplementOutput } from "../schemas.js";
 import { runDir } from "../store.js";
 import type { Role, RunTask } from "../types.js";
 import { roleCall } from "./call.js";
-import { Interrupted, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
+import { driverCheck, Interrupted, resumeHint, type Ctx, type StepHandler, type TaskInfo } from "./context.js";
 import { baseOf, failAttempt, taskOf, timedOutError, toLimit } from "./task-core.js";
 import { taskNext } from "./transitions.js";
+import { specChanged, toSpecApprove } from "./spec-change.js";
 import { commandName } from "./command.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
@@ -82,13 +82,15 @@ export const START_NOTE = "its verify passed before the task started";
 async function startCheck(ctx: Ctx, task: RunTask, info: TaskInfo): Promise<void> {
   const cmd = ctx.mode.startCheck?.(ctx, task, info) ?? null;
   if (cmd === null) return;
-  const r = await runCheck(cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
+  const r = await driverCheck(ctx, cmd);
   if (r.aborted) throw new Interrupted();
   if (r.timedOut) throw timedOutError(ctx, "start check", r);
   if (!r.skipped && r.exit === 0) task.notes.push(`${START_NOTE}, so it may not test the task: check the plan's verify.`);
 }
 
 export const implement: StepHandler = async (ctx, id) => {
+  // AC-88: every attempt, T and F, starts from the approved spec.
+  if (specChanged(ctx)) return toSpecApprove(ctx);
   const task = taskOf(ctx, id);
   const info = ctx.mode.taskInfo(ctx, task.id);
   if (task.taskBase === null) {

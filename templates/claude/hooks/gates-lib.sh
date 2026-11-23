@@ -138,12 +138,38 @@ glob_match_any() {
 # wrapper words or env assignments.
 CMD_START='(^|[;&|({`"'"'"'])[[:space:]]*((env|command|exec|nohup|time|sudo|then|do|else|!)[[:space:]]+)*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
 
+# SPEC_FLOWS — the spec flow names (AC-83). A copy of SPEC_FLOWS in src/run/spec-flow.ts, held equal to it
+# by tests/hooks/spec-flow.test.ts; the first is the default.
+SPEC_FLOWS="merge branch"
+
+# spec_flow → gates.json → specFlow, or the default when unset. Exit 1 (printing the value) for a name not in
+# SPEC_FLOWS.
+spec_flow() {
+  local v f
+  v=$(gate_get '.specFlow')
+  [ -n "$v" ] || { printf '%s' "${SPEC_FLOWS%% *}"; return 0; }
+  for f in $SPEC_FLOWS; do
+    [ "$v" = "$f" ] && { printf '%s' "$v"; return 0; }
+  done
+  printf '%s' "$v"
+  return 1
+}
+
 # active_stage → stage id taken from the current git branch, so the agent cannot quietly point the
 # gates at another stage: the last path segment of the branch must match gates.json → stagePattern
 # (capture group 1; default: letters+digits at the start — A0-ingest, feat/A0-ingest, spec/A0 → A0).
+# In spec flow branch (AC-89) the stage of the live task run that AGENT_STACK_RUN names on this branch comes
+# first: a work branch like v2-login would give v2.
 # Empty on a branch without a stage (main), on a detached HEAD, or outside git.
 active_stage() {
   local branch pattern s
+  if [ "$(spec_flow)" = "branch" ] && driver_run_on_branch task; then
+    s=$(jq -r '.stage // empty' "$PROJECT_DIR/.claude/tmp/runs/$AGENT_STACK_RUN/run.json" 2>/dev/null)
+    case "$s" in
+      "" | *[!A-Za-z0-9._-]* | .*) ;;
+      *) printf '%s' "$s"; return 0 ;;
+    esac
+  fi
   branch=$(git -C "$PROJECT_DIR" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 0
   pattern=$(gate_get '.stagePattern')
   [ -n "$pattern" ] || pattern='^([A-Za-z]+[0-9]+)([-_.]|$)'

@@ -5,6 +5,7 @@
 import { rmSync } from "node:fs";
 import { DEFAULT_STAGE_PATTERN } from "../../claude/gates.js";
 import { loadRunConfig, readLanguage } from "../config.js";
+import { requireSameFlow } from "../spec-flow.js";
 import { RunError } from "../errors.js";
 import { answersPrompter, selectPrompter, type Prompter } from "../gate.js";
 import { branchExists, createBranch, currentBranch, dirtyPaths, headSha } from "../git.js";
@@ -140,6 +141,10 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
     const mode = modeSteps(o.mode);
     const branch = currentBranch(dir);
     if (branch === null) throw new RunError("HEAD is detached: check out a branch first (git switch <branch>).", 1);
+    // AC-86: spec flow branch keeps the run on a work branch, never on the base branch.
+    if (cfg.specFlow === "branch" && branch === cfg.baseBranch) {
+      throw new RunError(`gates.json specFlow is "branch": the run works on your own branch, not on ${cfg.baseBranch}. Switch to a work branch first: git switch -c <name>`, 1);
+    }
     refuseDirty(dir, "to start a run");
     const head = headSha(dir);
     const plan = mode.start({ projectDir: dir, cfg, description, stage: o.stage ?? null, branch, head });
@@ -148,6 +153,8 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       id,
       description,
       mode: o.mode,
+      specFlow: cfg.specFlow,
+      specApproved: null,
       status: "running",
       next: plan.next,
       returnTo: null,
@@ -157,7 +164,8 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       stagePrefill: plan.stagePrefill,
       size: null,
       branch: plan.newBranch ?? branch,
-      baseCommit: plan.newBranch ? head : null,
+      // AC-90: a quick run in spec flow branch makes no branch; its diff still starts at HEAD.
+      baseCommit: plan.newBranch || o.mode === "quick" ? head : null,
       tasks: plan.tasks,
       // Filled once the branch exists, so a kill in between leaves no false entry (AC-55).
       createdBranches: [],
@@ -203,14 +211,15 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
  * An existing one is left to the branch check: it is checked out by the human, never created again.
  */
 function restoreRunBranch(dir: string, run: RunFile): void {
-  if (run.baseCommit === null || branchExists(dir, run.branch)) return;
+  // AC-85: in spec flow branch the branch is the human's own; the driver never creates it.
+  if (run.specFlow === "branch" || run.baseCommit === null || branchExists(dir, run.branch)) return;
   refuseDirty(dir, `to create the run's branch ${run.branch} again`);
   createBranch(dir, run.branch, run.baseCommit);
   if (!run.createdBranches.includes(run.branch)) run.createdBranches.push(run.branch);
 }
 
 /** Steps whose resume needs a clean tree (AC-49); spec and plan check their bounds when they start. */
-const CLEAN_ON_RESUME = new Set(["gate:spec-merge", "gate:plan-approve", "base-check"]);
+const CLEAN_ON_RESUME = new Set(["gate:spec-merge", "gate:spec-approve", "gate:plan-approve", "base-check"]);
 
 const INTERRUPTED_FEEDBACK = "The previous session was interrupted; continue from `git status`.";
 
@@ -232,6 +241,7 @@ export function resumeRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
     }
     requireHarness(dir);
     const cfg = loadRunConfig(dir);
+    requireSameFlow(run, cfg.specFlow);
     const mode = modeSteps(run.mode);
     const { kind, task } = parseNext(run.next);
     if (kind !== "gate:spec-merge") {
@@ -303,7 +313,7 @@ function statusJson(dir: string, id: string | undefined): string {
   }
   const attempts = Object.fromEntries(run.tasks.map((t) => [t.id, t.attempts]));
   const out = {
-    run: { id: run.id, mode: run.mode, status: run.status, next: run.next, branch: run.branch, attempts, calls: run.calls, costUsd: run.costUsd, costUnknownCalls: run.costUnknownCalls, fuse: run.fuse, ...times(run), estimateSec: run.estimateSec },
+    run: { id: run.id, mode: run.mode, specFlow: run.specFlow, status: run.status, next: run.next, branch: run.branch, attempts, calls: run.calls, costUsd: run.costUsd, costUnknownCalls: run.costUnknownCalls, fuse: run.fuse, ...times(run), estimateSec: run.estimateSec },
     // A live or interrupted run waits at no gate, even while a terminal prompt is open.
     card: run.status === "waiting" ? run.card : null,
     language,

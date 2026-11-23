@@ -51,6 +51,9 @@ Use `agent-stack` when `command -v agent-stack` finds it. Otherwise take the com
    file in a terminal: its purpose in one or two lines, each criterion in one line, the constraints, what is out
    of scope, and a link to the spec file (it is in the working tree on the spec branch). Then show the merge
    command from the card and let the human run it; when they say it is done, resume without `--answer`.
+   At gate:spec-approve (spec flow `branch`) show the spec short the same way; there is no merge: the human's
+   answer is the approval (`a`, `r <what to change>`, `c`). When it comes back after a spec change, show the
+   newest `## Changes` entry; it takes `a` or `c`.
 3. **Pass the answer** with `<cmd> run --resume <id> --answer "<line>"`, again in the background:
    - a key the human typed (`a`, `r fix X`, `f 60`, `c`) as it is;
    - a clear worded reply as the key it means, and say which key you sent ("sent `a` — approve");

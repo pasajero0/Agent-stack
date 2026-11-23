@@ -4,6 +4,8 @@
  */
 import { RunError } from "../errors.js";
 import { nonePrompter } from "../gate.js";
+import { readSpecFlow } from "../config.js";
+import { requireSameFlow } from "../spec-flow.js";
 import { releaseLock, writeRun } from "../store.js";
 import type { RunFile } from "../types.js";
 import { GateChanged } from "./card.js";
@@ -44,6 +46,8 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
   try {
     for (;;) {
       if (ctx.signal.aborted) throw new Interrupted();
+      // AC-84: a gates.json edit while the run is open stops it before the next step.
+      requireSameFlow(run, readSpecFlow(ctx.projectDir));
       const { kind, task } = parseNext(run.next);
       // AC-79: the step in progress, for now.json and the status line; AC-81: its time.
       ctx.progress.step(run.next);
@@ -81,6 +85,9 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
         return 3;
       }
       if (snap !== null) {
+        // AC-88: a gate that found a changed spec read none of its answers; say so, they are not applied.
+        const unused = event.type === "spec-changed" ? (ctx.prompter.left?.() ?? []) : [];
+        if (unused.length > 0) ctx.out(`Not used: ${unused.map((a) => JSON.stringify(a)).join(", ")} — the spec changed, so ${run.next} decided nothing. Read the new card.`);
         // The answers reach only this gate; the next one waits for the human again.
         ctx.prompter = nonePrompter;
         ctx.answering = false;
@@ -88,7 +95,7 @@ export async function runLoop(ctx: Ctx): Promise<ExitCode> {
       if (gate) run.card = null;
       closeStep(run);
       const t = transition(run.next, event, run.returnTo);
-      if (kind === "gate:limit") {
+      if (kind === "gate:limit" || event.type === "reapproved") {
         run.returnTo = null;
         run.limitReason = null;
       }

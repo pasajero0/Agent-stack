@@ -2,6 +2,7 @@
  * What every step handler gets, and the interface a mode implements. Quick mode is `steps-quick.ts`;
  * task mode (T9) plugs in as a second `ModeSteps` with its own handlers for clarify … gate:plan-approve.
  */
+import { runCheck, type CheckRun } from "../checks.js";
 import type { Prompter } from "../gate.js";
 import type { Progress } from "./progress.js";
 import type { Next, RunConfig, RunFile, RunTask } from "../types.js";
@@ -121,3 +122,13 @@ export const resumeHint = (id: string): string => `${commandName()} run --resume
 
 /** The hint to cancel a run, with the command name (AC-73, AC-74). */
 export const cancelHint = (id: string): string => `${commandName()} run --cancel ${id}`;
+
+/**
+ * A check the driver runs. Only the harness scripts (`.claude/bin/…`: verify, trace) get `AGENT_STACK_RUN`, so
+ * they find the stage of a run in spec flow branch, whose branch name has none (AC-89); the project's own
+ * commands (test, lint) do not, so nothing they start passes as a driver call.
+ */
+export function driverCheck(ctx: Ctx, cmd: string): Promise<CheckRun> {
+  const env: Record<string, string> = /^\s*\.claude\/bin\//.test(cmd) ? { AGENT_STACK_RUN: ctx.run.id } : {};
+  return runCheck(cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal, env);
+}

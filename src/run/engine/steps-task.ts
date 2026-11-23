@@ -25,10 +25,13 @@ import { commandName } from "./command.js";
 
 const isFix = (id: string): boolean => /^F\d+$/.test(id);
 
+/** Where spec folders count as taken: the base ref, or HEAD in spec flow branch (AC-7, AC-85). */
+const specRef = (ctx: Ctx): string => (ctx.run.specFlow === "branch" ? "HEAD" : baseRef(ctx.projectDir, ctx.cfg.baseBranch));
+
 /** Stage ids in use: spec folders on the base ref and `spec/*` branches, sorted (AC-48). */
 export function usedStageIds(ctx: Ctx): string[] {
   const dir = ctx.projectDir;
-  const base = baseRef(dir, ctx.cfg.baseBranch);
+  const base = specRef(ctx);
   const lines = (out: string): string[] => out.split("\n").map((l) => l.trim()).filter((l) => l !== "");
   // Folders only (-d): a README.md in the specs folder is not an id.
   const tree = git(dir, ["ls-tree", "-d", "--name-only", `${base}:${ctx.cfg.specsDir}`]);
@@ -88,7 +91,7 @@ export function stageIdProblem(ctx: Ctx, id: string): string | null {
   if (!m || m[1] !== id) {
     return "it must be letters then digits, like A1";
   }
-  const base = baseRef(dir, ctx.cfg.baseBranch);
+  const base = specRef(ctx);
   const specDir = `${ctx.cfg.specsDir}/${id}`;
   if (existsOnRef(dir, base, specDir)) return `${specDir}/ already exists on ${base}`;
   if (branchExists(dir, `spec/${id}`)) return `branch spec/${id} already exists`;

@@ -7,6 +7,8 @@
 #     changed under "## Changes". So history always reads "docs(<stage>): spec — …" before the code it explains.
 #  3. The plan follows the spec: code waits until /plan has broken the spec into tasks
 #     (.claude/tmp/<stage>/tasks.json), so verify and evidence-gate have something to check.
+# In spec flow branch (gates.json → specFlow, AC-89) 1 is: the spec committed on this branch, no merge; the
+# human approves it at the driver's gate:spec-approve. 2 holds without the check against the base.
 # openPaths (docs, *.md, .claude/) stay open. gates.json → specGate: strict (default) | stage | off.
 # A repository with no commits yet is open too: there is nothing to merge a spec into before the scaffold.
 # So is a live quick run of the driver on this branch (gates-lib: driver_run_on_branch).
@@ -48,13 +50,16 @@ mode=${mode:-strict}
 # Bootstrap: an empty repository has no base branch to read a spec from — the scaffold comes first.
 repo_is_empty && exit 0
 
-# A quick fix run by the driver has no stage spec or plan: open only while that run is live on this branch.
-driver_run_on_branch quick && exit 0
-
 deny() {
   echo "Blocked by spec-gate ($rel): $1" >&2
   exit 2
 }
+
+# Spec flow (AC-83): how a human approves a spec. An unknown name opens nothing.
+flow=$(spec_flow) || deny "gates.json → specFlow \"$flow\" is not a spec flow; use one of: $SPEC_FLOWS."
+
+# A quick fix run by the driver has no stage spec or plan: open only while that run is live on this branch.
+driver_run_on_branch quick && exit 0
 
 stage=$(active_stage)
 if [ -z "$stage" ]; then
@@ -66,18 +71,26 @@ specs=$(gate_get '.specsDir')
 spec="${specs:-docs/specs}/$stage/SPEC.md"
 cd "$PROJECT_DIR"
 git rev-parse --git-dir >/dev/null 2>&1 || deny "not a git repository — the spec gate reads the merged spec from git."
-ref=$(base_ref)
-[ -n "$ref" ] || deny "base branch '$(gate_get '.baseBranch')' not found — set baseBranch in .claude/gates.json."
+if [ "$flow" = "branch" ]; then
+  # AC-89: spec, plan and code share this branch; the human approves the spec in the chat, not by a merge.
+  git cat-file -e "HEAD:$spec" 2>/dev/null ||
+    deny "$spec is not committed on this branch. In spec flow branch commit the spec first (docs(<stage>): spec — …), and get the human's approval; then the code."
+  git diff --quiet HEAD -- "$spec" 2>/dev/null ||
+    deny "$spec has uncommitted changes. Commit the spec change first (docs(<stage>): spec — …, with an entry under ## Changes), then the code."
+else
+  ref=$(base_ref)
+  [ -n "$ref" ] || deny "base branch '$(gate_get '.baseBranch')' not found — set baseBranch in .claude/gates.json."
 
-git cat-file -e "$ref:$spec" 2>/dev/null ||
-  deny "$spec is not merged into $ref. The stage's first spec goes through its own MR, merged by a human (git fetch if it was just merged)."
-git cat-file -e "HEAD:$spec" 2>/dev/null ||
-  deny "this branch does not contain the merged $spec — merge or rebase on $ref first."
-git diff --quiet HEAD -- "$spec" 2>/dev/null ||
-  deny "$spec has uncommitted changes. Commit the spec change first (docs(<stage>): spec — …, with an entry under ## Changes), then the code."
-if ! git diff --quiet "$ref" HEAD -- "$spec" 2>/dev/null; then
-  [ "$(git show "$ref:$spec" | changes_section)" != "$(git show "HEAD:$spec" | changes_section)" ] ||
-    deny "$spec differs from $ref, but its ## Changes section does not say what changed and why. Add the entry, commit it, then the code."
+  git cat-file -e "$ref:$spec" 2>/dev/null ||
+    deny "$spec is not merged into $ref. The stage's first spec goes through its own MR, merged by a human (git fetch if it was just merged)."
+  git cat-file -e "HEAD:$spec" 2>/dev/null ||
+    deny "this branch does not contain the merged $spec — merge or rebase on $ref first."
+  git diff --quiet HEAD -- "$spec" 2>/dev/null ||
+    deny "$spec has uncommitted changes. Commit the spec change first (docs(<stage>): spec — …, with an entry under ## Changes), then the code."
+  if ! git diff --quiet "$ref" HEAD -- "$spec" 2>/dev/null; then
+    [ "$(git show "$ref:$spec" | changes_section)" != "$(git show "HEAD:$spec" | changes_section)" ] ||
+      deny "$spec differs from $ref, but its ## Changes section does not say what changed and why. Add the entry, commit it, then the code."
+  fi
 fi
 
 # The plan itself is always writable — even with openPaths narrowed below .claude/ — or /plan could never
