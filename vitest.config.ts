@@ -14,6 +14,7 @@ const SLOW = [
   "tests/run/progress.test.ts",
   "tests/run/timing.test.ts",
   "tests/run/watch.test.ts",
+  "tests/eval/**/*.test.ts",
 ];
 
 export default defineConfig({
