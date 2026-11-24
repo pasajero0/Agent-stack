@@ -38,7 +38,8 @@ it here first.
 ## Pipeline
 
 - **Stage** — a unit of planned work with an id (`A0`, `PAY-12`, `v04`), one spec and one branch. The gates
-  read the stage from the branch name (`stagePattern`).
+  read the stage from the branch name (`stagePattern`). The id names what the stage does: a word, then a
+  number (`stats1`), not a code that only a plan explains (`M1`).
 - **Spec** — `docs/specs/<stage>/SPEC.md`: acceptance criteria in EARS, unhappy paths, edge cases, numeric
   NFRs, how to verify. **Full** for visible behaviour, **light** (a checklist) for setup work. Approved by a
   human; how depends on the spec flow.
