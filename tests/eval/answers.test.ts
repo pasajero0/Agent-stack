@@ -1,8 +1,8 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { makeFakeExecutable } from "../run/engine-fixture.js";
-import { EVAL_SCRIPT, runEval, tempDir } from "./helpers.js";
+import { copyEvalScript, runEval, tempDir } from "./helpers.js";
 
 beforeAll(makeFakeExecutable);
 
@@ -81,10 +81,9 @@ function tries(outDir: string): Try[] {
 /** A copy of the eval script in a fake repo root whose bin/cli.mjs is a stub driver (STUB_MODE picks its behaviour). */
 function stubRoot(): string {
   const root = tempDir();
-  mkdirSync(join(root, "scripts"));
   mkdirSync(join(root, "bin"));
   mkdirSync(join(root, "dist"));
-  copyFileSync(EVAL_SCRIPT, join(root, "scripts", "eval.mjs"));
+  copyEvalScript(root);
   writeFileSync(join(root, "dist", "index.js"), "");
   writeFileSync(join(root, "package.json"), JSON.stringify({ version: "0.0.0" }));
   writeFileSync(

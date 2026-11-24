@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { EVAL_SCRIPT, REPO_ROOT, runEval, tempDir } from "./helpers.js";
+import { copyEvalScript, REPO_ROOT, runEval, tempDir } from "./helpers.js";
 
 /** A tasks dir with one valid task `ok-1`, so a refusal can only come from the flag under test. */
 function tasksDirWithTask(): string {
@@ -93,9 +93,7 @@ describe("eval runner flags", () => {
 describe("eval runner dist check", () => {
   it("evals1 AC-10: without dist/index.js it prints the message, exits 1, tries nothing and does not build", () => {
     const root = tempDir();
-    mkdirSync(join(root, "scripts"));
-    const copy = join(root, "scripts", "eval.mjs");
-    copyFileSync(EVAL_SCRIPT, copy);
+    const copy = copyEvalScript(root);
     const r = runEval(["--tasks-dir", tasksDirWithTask(), "--task", "ok-1"], { script: copy });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("dist/ is missing: run pnpm build first");

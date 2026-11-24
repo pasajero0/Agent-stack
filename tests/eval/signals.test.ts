@@ -1,10 +1,10 @@
 /** Try timeout (AC-14) and signals (AC-16): the eval runner stops the running child and leaves no orphan process. */
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { makeFakeExecutable } from "../run/engine-fixture.js";
-import { EVAL_SCRIPT, FAKE, tempDir } from "./helpers.js";
+import { copyEvalScript, EVAL_SCRIPT, FAKE, tempDir } from "./helpers.js";
 
 beforeAll(makeFakeExecutable);
 
@@ -62,8 +62,8 @@ function claudeWrapper(pidLog: string): string {
 /** A copy of the eval script in a fake repo root whose bin/cli.mjs is a stub (STUB_MODE picks its behaviour). */
 function stubRoot(): string {
   const root = tempDir();
-  for (const d of ["scripts", "bin", "dist"]) mkdirSync(join(root, d));
-  copyFileSync(EVAL_SCRIPT, join(root, "scripts", "eval.mjs"));
+  for (const d of ["bin", "dist"]) mkdirSync(join(root, d));
+  copyEvalScript(root);
   writeFileSync(join(root, "dist", "index.js"), "");
   writeFileSync(join(root, "package.json"), JSON.stringify({ version: "0.0.0" }));
   writeFileSync(
