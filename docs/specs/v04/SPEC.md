@@ -38,7 +38,8 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
 
 - **Quick mode** passes spec-gate only through the driver's own calls.
 - **Review:** after every task, on that task's diff. It is simple in part 1.
-- **Spec approval:** stop, merge, resume.
+- **Spec approval:** in spec flow `merge` (the default): stop, merge, resume. In spec flow `branch` (Leonid,
+  2026-11-23; ADR-0001 amendment): stop, approve at gate:spec-approve, go on in the same branch.
 - **Epic:** the run proposes a split and stops.
 - **Models:**
   - judgment roles run on Opus;
@@ -66,7 +67,7 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
 ## Terms
 
 Shared words are defined in [docs/GLOSSARY.md](../../GLOSSARY.md): stage, spec, plan, task, tier, verify,
-driver, mode, size, gate, attempt, fuse, live run, driver call, test conflict. Below is only what this spec makes precise; a
+driver, mode, size, gate, attempt, fuse, live run, driver call, test conflict, spec flow. Below is only what this spec makes precise; a
 word for this spec only is marked `(local)`.
 
 - **Step**: one unit of the pipeline that the driver executes. Steps are clarify, spec, plan, base-check,
@@ -88,7 +89,7 @@ word for this spec only is marked `(local)`.
   - a non-empty `verify` that can fail (AC-65);
   - `passes: false`.
 
-  Every criterion id of the merged spec appears in some task.
+  Every criterion id of the approved spec appears in some task.
 - **Task diff** (local): changes since the task's base commit (HEAD when its first attempt started). It counts
   tracked changes plus untracked files, and always excludes `.claude/tmp/`.
 - **Frozen tests** (local): the files matching `gates.json → testGlobs` that exist at the task's base commit. In
@@ -124,7 +125,7 @@ word for this spec only is marked `(local)`.
   - migration, concurrency, race, lock.
 
   They match case-insensitively, as whole words.
-- **Criterion text** (local): in the merged spec, the line starting `- **AC-n:**` and its continuation lines, up to
+- **Criterion text** (local): in the approved spec, the line starting `- **AC-n:**` and its continuation lines, up to
   the next criterion or heading. `.claude/bin/trace` counts a criterion only in this form too, so the driver and
   `trace` see the same criteria.
 - **Driver call**: a Claude process the driver started, with `AGENT_STACK_RUN=<run id>` in its environment.
@@ -159,7 +160,8 @@ Glosses for references kept outside git.
 ## Model and state transitions
 
 Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `cancelled`. `next` holds one of:
-- `clarify`, `gate:answers`, `spec`, `gate:spec-merge`, `plan`, `gate:plan-approve`, `base-check`;
+- `clarify`, `gate:answers`, `spec`, `gate:spec-merge`, `gate:spec-approve`, `plan`, `gate:plan-approve`,
+  `base-check`;
 - `implement:<task>`, `checks:<task>`, `review:<task>`, `commit:<task>`;
 - `gate:accept`, `gate:limit`.
 
@@ -183,11 +185,23 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | gate:accept | accept | run finished | AC-22 |
 | gate:accept | reject + comment | implement:F*k* → … → commit:F*k* → gate:accept | AC-22 |
 
+**Task mode, spec flow `branch`** (only the rows that differ; AC-83 to AC-90)
+
+| `next` | Event | New `next` | Criterion |
+| --- | --- | --- | --- |
+| — | `run task "<d>"` on a branch that is not the base branch | clarify (the run stays on that branch) | AC-85 |
+| gate:answers | size task/story confirmed, stage id valid | spec (no new branch) | AC-85 |
+| spec | SPEC.md written in bounds, terms checked | driver commits → gate:spec-approve | AC-87 |
+| gate:spec-approve | approve | plan (same branch) | AC-87 |
+| gate:spec-approve | reject + comment | spec | AC-87 |
+| implement:T*n*/F*k*, gate:plan-approve, gate:accept | the spec changed since its approval | gate:spec-approve → `returnTo` (approve again) or cancelled | AC-88 |
+
 **Quick mode**
 
 | `next` | Event | New `next` | Criterion |
 | --- | --- | --- | --- |
 | — | `run quick "<d>"` | base-check (driver created `quick/<slug>`) | AC-24 |
+| — | `run quick "<d>"`, spec flow `branch` | base-check (no new branch) | AC-90 |
 | base-check | `test` exits 0 | implement:Q1 | AC-24 |
 | checks:Q1 | green, diff lines ≤ `quickReviewLines` | commit:Q1 → gate:accept | AC-25 |
 | checks:Q1 | green, diff lines > `quickReviewLines` | review:Q1 → commit:Q1 → gate:accept | AC-25 |
@@ -263,6 +277,8 @@ and the driver exits with code 3.
     why and offers a free id instead (AC-48);
   - `c` cancels.
 - **plan-approve** and **accept**: `a` approve, `r` reject (a comment follows), `c` cancel.
+- **spec-approve**: `a` approve, `r` reject (a comment follows), `c` cancel. When it comes back after a spec
+  change (AC-88): `a` approve the changed spec, `c` cancel.
 - **limit**:
   - reasons attempts, blocked or review loop: `r` retry, `c` cancel;
   - reason decision: `r` retry (a comment follows), `c` cancel (AC-57);
@@ -293,6 +309,12 @@ Any other value is refused when a run starts, with code 1.
 Optional, top level, read by spec-gate (AC-71): `"anyone"` (the default when the key is missing) or
 `"driver"`. A seed key is not added by `update`, so a repo turns it on by hand.
 
+**`.claude/gates.json` → `specFlow`**
+
+Optional, top level, read by the driver and by spec-gate (AC-83): `"merge"` (the default when the key is
+missing) or `"branch"`. The allowed names are one list in code, `SPEC_FLOWS`; gates-lib's copy is held equal to
+it by a test. A seed key is not added by `update`, so a repo turns it on by hand.
+
 **`.claude/gates.json` → `language`**
 
 Optional, top level (AC-76): `{ "chat": "<code>", "terms": "<code>" }`, each a language code matching
@@ -322,10 +344,10 @@ terminal text stays English.
 }
 ```
 
-- `gate`: `answers` | `spec-merge` | `plan-approve` | `limit` | `accept`; `stage`: string or null.
+- `gate`: `answers` | `spec-merge` | `spec-approve` | `plan-approve` | `limit` | `accept`; `stage`: string or null.
 - `facts`: strings, in the order AC-68 prints them, never cut: the terminal print cuts, the data does not.
 - `keep`: the indexes of the facts the terminal never cuts (AC-68).
-- `source`: the sha256 of the inputs the gate decides on (gate:plan-approve: the sha256 of `tasks.json`; gate:accept: the HEAD commit id, plus a hash of the
+- `source`: the sha256 of the inputs the gate decides on (gate:plan-approve: the sha256 of `tasks.json`; gate:spec-approve: the git blob id of the spec at HEAD; gate:accept: the HEAD commit id, plus a hash of the
   uncommitted changes when there are any);
   null for other gates.
 - `prompts`: one per line of input the gate reads, in order. gate:answers has one per question, then the size
@@ -344,9 +366,11 @@ terminal text stays English.
 | --- | --- |
 | `id`, `description` | string |
 | `mode` | `task` \| `quick` |
+| `specFlow` | `merge` \| `branch`, copied from config at start; a run file without it reads as `merge` (AC-84) |
+| `specApproved` | the git blob id of the spec the human approved at gate:spec-approve, or null (AC-87) |
 | `status` | `running` \| `waiting` \| `finished` \| `cancelled` |
 | `next` | one of the values listed above |
-| `returnTo` | the `next` value that gate:limit returns to, or null |
+| `returnTo` | the `next` value that gate:limit or gate:spec-approve (AC-88) returns to, or null |
 | `card` | the gate card of the gate the run waits at, or null (written when the run reaches the gate) |
 | `steps` | `[{ "step": <next>, "start": <ISO>, "end": <ISO or null> }]`, one entry per step as it ran (AC-81) |
 | `estimateSec` | the work time estimated at gate:plan-approve (task) or at start (quick), or null (AC-81) |
@@ -404,20 +428,20 @@ rules, so an improved agent reaches the driver too.
   - size the work;
   - propose a stage id; for an epic, a split;
   - the stage-id rule, "letters then digits, like A1", and the ids already in use (spec folders on the base
-    ref and `spec/*` branches), which the driver lists (AC-48).
+    ref — on HEAD in spec flow `branch` — and `spec/*` branches), which the driver lists (AC-48).
 - **spec**:
   - the full text of the `/spec` skill, with `$ARGUMENTS` = `<stage> <title>` and `${CLAUDE_SKILL_DIR}`
     filled in;
   - the description, and the answers marked "these are the grill";
   - "write a full spec; the branch exists; do not commit, branch or push";
-  - "skip the step **Hand over** of the skill: the driver commits the spec and stops for the human's merge; do
-    not ask about committing, merging or handing over". The step is named by its title, never by its number: a
+  - "skip the step **Hand over** of the skill: the driver commits the spec and stops for the human's approval;
+    do not ask about committing, merging or handing over". The step is named by its title, never by its number: a
     step added to the skill must not shift which step is skipped;
   - "the driver checks your `## Terms` with `trace --terms`: a word the project shares goes into the glossary
     in this change, a word for this spec only is marked `(local)`".
 - **plan**:
   - the full text of the `/plan` skill, filled in;
-  - "the spec is merged and the branch exists — skip the precondition and step 1; do not run verify,
+  - "the spec is approved and the branch exists — skip the precondition and step 1; do not run verify,
     commit or implement";
   - "do not write `tasks.json`: return the tasks in your output; the program writes the file";
   - "**every task ends green**: its test is written first inside the task and its verify passes when the
@@ -798,7 +822,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   list the changes:
   - when a run starts;
   - right before the driver creates `spec/<stage>`, `<stage>-<slug>` or `quick/<slug>`;
-  - when a run resumes at gate:spec-merge, gate:plan-approve or base-check.
+  - when a run resumes at gate:spec-merge, gate:spec-approve, gate:plan-approve or base-check.
 
   When a run resumes at spec or plan, the tree SHALL be clean outside that role's bounds. At implement,
   checks, review, commit or gate:limit, changes outside `.claude/tmp/` are part of the current task's diff.
@@ -929,9 +953,9 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     or plan edits; a later fix is a new run;
   - never merge, push or open a pull request itself, also when the human agrees: at gate:spec-merge it gives the
     merge command and resumes when the human says it is done;
-  - at gate:spec-merge, show the spec short in the chat — its purpose, each criterion in one line, the
+  - at gate:spec-merge and gate:spec-approve, show the spec short in the chat — its purpose, each criterion in one line, the
     constraints and what is out of scope — and a link to the spec file, so the human decides without reading the
-    file in a terminal;
+    file in a terminal; at gate:spec-approve there is no merge command, the human's answer is the approval;
   - run the driver as its own background job and follow its output file; never run the driver inside the watch
     command, since stopping the watch would stop the run;
   - while a driver command runs, follow its output (Claude Code's Monitor) and tell the human in one line when a
@@ -996,6 +1020,58 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - WHEN the human asks the chat for another language, the skill SHALL tell the chat to switch for that chat
     and to say that `language.chat` in `gates.json` makes it the default; the chat does not edit `gates.json`.
 
+### Spec flow
+
+- **AC-83:** THE SYSTEM SHALL read `gates.json → specFlow` when a run starts and copy it to the run file;
+  `--status --json` SHALL give it as `run.specFlow`. With the key missing it is `merge`, and every criterion above
+  holds as written. WHERE spec flow is `branch`, AC-85 to AC-90 replace AC-7's base-ref check, AC-8's branch
+  creation, AC-10, AC-11, AC-47 and AC-24's `quick/<slug>`.
+  - IF the value is not one of `SPEC_FLOWS`, THEN `run task` and `run quick` SHALL refuse to start with code 1
+    and name the allowed values, and spec-gate SHALL deny every code edit with the same names. spec-gate checks
+    the value after its `specGate: off` and empty-repository exits, before the quick bypass (AC-26).
+- **AC-84:** IF, on `--resume` or before any step, `gates.json → specFlow` differs from the run file's
+  `specFlow`, THEN THE SYSTEM SHALL change nothing, keep `next`, exit with code 1, and say which flow the run
+  started with and that it must be finished or cancelled (`--cancel <id>`) before the flow changes. A run file
+  without `specFlow` reads as `merge`. A finished or cancelled run does not hold the flow.
+- **AC-85:** WHEN `run task` starts with spec flow `branch` on a branch that is not the base branch, THE SYSTEM
+  SHALL keep the whole run on that branch:
+  - `branch` is the current branch, and `createdBranches` stays empty;
+  - AC-7 checks `<specsDir>/<id>/` on HEAD, not on the base ref;
+  - the spec role runs and its output is checked and committed as in AC-8, on that branch;
+  - for an epic, AC-9 holds, and each part's `run task --stage` runs on the same branch, one after another.
+- **AC-86:** IF spec flow is `branch` and `run task` or `run quick` starts on the base branch or on a detached
+  HEAD, THEN THE SYSTEM SHALL refuse with code 1, change nothing, and say to switch to a work branch first
+  (`git switch -c <name>`).
+- **AC-87:** WHEN the spec is committed in spec flow `branch`, THE SYSTEM SHALL stop at gate:spec-approve: exit 3
+  when no terminal is read (AC-29); at a terminal it reads the answer.
+  - The card: title `Spec <stage>: approve`; facts: the spec path, its Purpose, one line per criterion (id and
+    its first line), the Out of scope items; one prompt `approve the spec` with `a`, `r` (text follows), `c`;
+    `source` is the spec's blob id at HEAD.
+  - `a`: SHALL record `specApproved` (the spec's blob id at HEAD) and `baseCommit` (HEAD), then run the plan
+    role on the same branch.
+  - `r <comment>`: SHALL run the spec role again with the comment, commit on the same branch as
+    `docs(<stage>): spec — <title>`, and stop at gate:spec-approve again.
+  - IF after `r` the spec role leaves the spec unchanged, THEN THE SYSTEM SHALL commit nothing and stop at
+    gate:spec-approve again, with the fact `the spec role changed nothing`.
+- **AC-88:** IF, at the start of any implement attempt (T*n* or F*k*) or when gate:plan-approve or gate:accept
+  decides, the spec at HEAD is not the approved blob, THEN THE SYSTEM SHALL set `returnTo` to that step or gate
+  and stop at gate:spec-approve again (exit 3 as in AC-87).
+  - The card adds the diff stat of the spec since the approved version and its newest `## Changes` entry; the
+    prompt takes `a` (record the new blob, go to `returnTo` with the same plan) and `c` (cancel).
+  - IF the spec has uncommitted changes, or its `## Changes` section is the same as in the approved version,
+    THEN THE SYSTEM SHALL keep `next`, exit with code 1, and say to commit the change with an entry under
+    `## Changes` first; `--resume` checks again.
+- **AC-89:** WHILE spec flow is `branch`, spec-gate SHALL:
+  - take the stage from the live task run that `AGENT_STACK_RUN` names on this branch, else from the branch name;
+  - require the spec committed on HEAD with no uncommitted changes, instead of the spec on the base ref;
+  - skip the `## Changes` check against the base ref (AC-88 holds it inside a run);
+  - keep the plan check.
+  - IF no stage is found, THEN it SHALL behave as in spec flow `merge`.
+  - The `/spec` skill's hand-over SHALL say: in spec flow `branch`, commit the spec on the current branch; the
+    human's approval in the chat replaces the merge.
+- **AC-90:** WHEN `run quick` starts with spec flow `branch`, THE SYSTEM SHALL create no branch and work on the
+  current branch (AC-24 otherwise holds); AC-26's bypass holds for that branch.
+
 ## Non-functional requirements
 
 - **Engine speed:** with the fake `claude` and `AGENT_STACK_GATE_INPUT`, the whole task path (AC-5 to AC-22)
@@ -1009,6 +1085,12 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   (`src/utils/shell.ts`). The wrapper is extended with stdin, a timeout and kill.
 
 ## Out of scope
+
+- **Spec flow:** a new plan after an approved spec change (AC-88 keeps the plan; a new criterion with no task
+  fails `trace` in the last task's verify (gate:limit), or in the final check at gate:accept (red, AC-61); with
+  one plan task and the change made at gate:accept, nothing catches it; the human cancels and starts a new run); spec-gate reading the run file's flow (a `specFlow` edit while a role runs holds until the next step,
+  AC-84); a per-run flag for the flow (it lives only in `gates.json`); an approval
+  gate when working by hand in flow `branch` (the commit and the human's word in the chat are the approval).
 
 - **Later modes:** bug and refactor (part 2), and "auto" mode selection.
 - **Baseline compare and flaky-test probing** (part 4). Until then a red `test` at the base stops the run
@@ -1035,7 +1117,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 ## How to verify
 
 ```bash
-pnpm vitest run -t "v04 AC-"     # engine + e2e with the fake claude; hook tests for AC-18, AC-26, AC-27, AC-71 carry the same prefix
+pnpm vitest run -t "v04 AC-"     # engine + e2e with the fake claude; hook tests for AC-18, AC-26, AC-27, AC-71, AC-83, AC-89 carry the same prefix
 pnpm typecheck
 ```
 
@@ -1051,6 +1133,11 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-23 — AC-83–AC-90 (new), Contract (`gates.json → specFlow`, gate `spec-approve`, run file `specFlow`,
+  `specApproved`), Terms (spec flow): a second way to approve a spec. Leonid: «Режим 2 мне удобен сейчас. Режим 1
+  нужен для разработки командой … вместо булиана» — one person keeps spec, plan and code in one branch, and a
+  team keeps the merge. Before, the driver could only work from the base branch in `gates.json`.
 
 - 2026-11-20 — Frozen tests (0.4.5, from review): the skip marks are one list in code, `SKIP_MARKS`, from which
   both the frozen-tests count and cheat-guard's seed patterns are built; the Term points to it instead of copying

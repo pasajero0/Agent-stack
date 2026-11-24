@@ -13,6 +13,8 @@ export const quickMode: ModeSteps = {
   handlers: {},
 
   start(input) {
+    // AC-90: in spec flow branch a quick run stays on the current branch.
+    if (input.cfg.specFlow === "branch") return { next: "base-check", tasks: [newTask("Q1")], newBranch: null, stagePrefill: null };
     const name = `quick/${slugify(input.description)}`;
     if (branchExists(input.projectDir, name)) {
       throw new RunError(

@@ -64,12 +64,12 @@ export function specPrompt(
   return [
     "# Role: spec",
     "",
-    "The driver has created the branch and asked the grill questions. You must not commit, branch, push, write code or write a plan.",
+    "The driver has set up the branch and asked the grill questions. You must not commit, branch, push, write code or write a plan.",
     "",
     "Task: write a full spec; the branch exists; do not commit, branch or push.",
     "",
     // By title, never by number: a step added to the skill must not shift which one is skipped (hotfix 0.4.4).
-    "Skip the step **Hand over** of the skill: the driver commits the spec and stops for the human's merge. Do not ask about committing, merging or handing over.",
+    "Skip the step **Hand over** of the skill: the driver commits the spec and stops for the human's approval. Do not ask about committing, merging or handing over.",
     "",
     "The driver checks your `## Terms` with `trace --terms` after you: a word the project shares goes into the glossary in this change, and a word for this spec only is marked `(local)`.",
     "",
@@ -90,9 +90,9 @@ export function planPrompt(projectDir: string, p: { stage: string; title: string
   const lines = [
     "# Role: plan",
     "",
-    "The driver has merged the spec and created the branch. You must not run verify, commit or implement, and you change no files.",
+    "The human has approved the spec and the branch exists. You must not run verify, commit or implement, and you change no files.",
     "",
-    "The spec is merged and the branch exists: skip the precondition and step 1; do not run verify, commit or implement.",
+    "The spec is approved and the branch exists: skip the precondition and step 1; do not run verify, commit or implement.",
     "",
     "Do not write tasks.json: return the tasks in your output (`tasks`); the program writes the file.",
   ];
@@ -134,6 +134,8 @@ export function implementPrompt(
     "",
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),
+    "",
+    "Create and change files only with the Write and Edit tools, never with Bash (cat > … <<EOF, python3 -, sed -i, tee): such Bash commands are refused and waste turns.",
     "",
     "End with a report of what you did."
   );

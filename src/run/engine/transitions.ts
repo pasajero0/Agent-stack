@@ -10,6 +10,7 @@ export type StepKind =
   | "gate:answers"
   | "spec"
   | "gate:spec-merge"
+  | "gate:spec-approve"
   | "plan"
   | "gate:plan-approve"
   | "base-check"
@@ -45,6 +46,9 @@ export type EventType =
   | "answered" // gate:answers: size task/story and a valid stage id confirmed
   | "epic" // gate:answers: size epic confirmed, split.md written
   | "spec-done" // spec: SPEC.md in bounds and committed on spec/<stage>
+  | "spec-committed" // spec, flow branch: SPEC.md committed on the run's branch (AC-85, AC-87)
+  | "reapproved" // gate:spec-approve after a spec change: approved again (AC-88)
+  | "spec-changed" // the spec changed since its approval; the handler set returnTo (AC-88)
   | "merged" // gate:spec-merge: the spec is on the base ref, <stage>-<slug> created
   | "planned" // plan: a valid plan in bounds
   | "approve"; // gate:plan-approve: approved (its reject reuses "reject")
@@ -74,7 +78,7 @@ interface Row {
 }
 
 const TASK_STEPS: readonly StepKind[] = ["implement", "checks", "review", "commit"];
-const GATES: readonly StepKind[] = ["gate:answers", "gate:spec-merge", "gate:plan-approve", "gate:accept", "gate:limit"];
+const GATES: readonly StepKind[] = ["gate:answers", "gate:spec-merge", "gate:spec-approve", "gate:plan-approve", "gate:accept", "gate:limit"];
 /** Steps that make a Claude call, so the fuse can stop them. */
 const CALL_STEPS: readonly StepKind[] = ["clarify", "spec", "plan", "implement", "review"];
 
@@ -95,6 +99,12 @@ export const TABLE: readonly Row[] = [
   { from: ["gate:answers"], event: "epic", to: "finished", ac: "AC-9" },
   { from: ["spec"], event: "spec-done", to: "gate:spec-merge", ac: "AC-10" },
   { from: ["gate:spec-merge"], event: "merged", to: "plan", ac: "AC-11" },
+  // ---- task mode, spec flow branch (AC-85 to AC-88) ----
+  { from: ["spec"], event: "spec-committed", to: "gate:spec-approve", ac: "AC-87" },
+  { from: ["gate:spec-approve"], event: "approve", to: "plan", ac: "AC-87" },
+  { from: ["gate:spec-approve"], event: "reject", to: "spec", ac: "AC-87" },
+  { from: ["gate:spec-approve"], event: "reapproved", to: "<returnTo>", ac: "AC-88" },
+  { from: ["implement", "gate:plan-approve", "gate:accept"], event: "spec-changed", to: "gate:spec-approve", ac: "AC-88" },
   { from: ["plan"], event: "planned", to: "gate:plan-approve", ac: "AC-12, AC-13" },
   { from: ["gate:plan-approve"], event: "approve", to: "base-check", ac: "AC-14" },
   { from: ["gate:plan-approve"], event: "reject", to: "plan", ac: "AC-14" },
@@ -112,6 +122,7 @@ const FIXED: readonly FixedStep[] = [
   "gate:answers",
   "spec",
   "gate:spec-merge",
+  "gate:spec-approve",
   "plan",
   "gate:plan-approve",
   "base-check",

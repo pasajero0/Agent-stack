@@ -56,14 +56,19 @@ every code edit for the stage. So the spec must be good enough to build from wit
 7. **Review.** Run `.claude/bin/trace --terms <stage>` and fix what it names. Then run the `spec-reviewer` subagent on the file. Fix every blocker; argue or fix the rest.
    Repeat until it returns PASS (max 3 rounds — then list what is left under NEEDS HUMAN DECISION).
    Skipping the review is allowed only when the human says so; then say in the report that it was skipped.
-8. **Hand over.** Commit the spec (and its ADRs) on a branch `spec/<stage>` and tell the human it is ready:
-   - **with a remote:** they push, open the MR, review and merge. Never push yourself.
-   - **local only** (no `origin/<base>`): the human reviews the branch and merges it into the local base
-     branch (`git merge spec/<stage>`) — that merge is the approval. Once `origin/<base>` exists, spec-gate
-     reads only that, and a local merge no longer counts.
-   - **no commits yet:** the gate stays open until the first commit. Commit the scaffold to the base branch
-     first, then branch `spec/<stage>` from it — a first commit on `spec/<stage>` would leave no base branch
-     to merge into.
+8. **Hand over.** Read `specFlow` in `.claude/gates.json` (missing means `merge`).
+   - **`branch`:** commit the spec on the current branch and tell the human it is ready. The human's approval
+     in the chat replaces the merge; plan and code follow on the same branch. Never on the base branch.
+     By hand (no driver), spec-gate takes the stage from the branch name, so name the branch after the stage
+     (`<stage>-<name>`); a run of the driver gives the stage itself.
+   - **`merge`:** commit the spec (and its ADRs) on a branch `spec/<stage>` and tell the human it is ready:
+     - **with a remote:** they push, open the MR, review and merge. Never push yourself.
+     - **local only** (no `origin/<base>`): the human reviews the branch and merges it into the local base
+       branch (`git merge spec/<stage>`) — that merge is the approval. Once `origin/<base>` exists, spec-gate
+       reads only that, and a local merge no longer counts.
+     - **no commits yet:** the gate stays open until the first commit. Commit the scaffold to the base branch
+       first, then branch `spec/<stage>` from it — a first commit on `spec/<stage>` would leave no base branch
+       to merge into.
 
 ## Changing a merged spec
 

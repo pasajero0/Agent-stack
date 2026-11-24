@@ -2,16 +2,17 @@
  * gate:accept and gate:limit, and the texts the run prints. Spec: "Gate input", AC-21, AC-22, AC-28, AC-29,
  * AC-31, AC-32, AC-46, AC-56. Task-mode gates (T9) reuse `ask`, `recordGate` and `showDecisions`.
  */
-import { runCheck, type CheckRun } from "../checks.js";
+import { type CheckRun } from "../checks.js";
 import { RunError } from "../errors.js";
 import { diffStat, dirtyPaths, git, headSha } from "../git.js";
 import type { CardAnswer, GateRecord, RunFile } from "../types.js";
 import { timeFacts } from "./timing.js";
 import { A, cardText, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
 import { fuseText } from "./call.js";
-import { Interrupted, newTask, resumeHint, type Ctx, type StepHandler } from "./context.js";
+import { driverCheck, Interrupted, newTask, resumeHint, type Ctx, type StepHandler } from "./context.js";
 import { timedOutError } from "./task-core.js";
 import { parseNext, taskNext, type StepEvent } from "./transitions.js";
+import { specChanged, toSpecApprove } from "./spec-change.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
 
@@ -30,7 +31,7 @@ export async function ask(ctx: Ctx, prompt: string): Promise<string | null> {
   }
 }
 
-export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256" | "asked" | "reason"> = {}): void {
+export function recordGate(ctx: Ctx, gate: string, decision: string, comment: string | null = null, extra: Pick<GateRecord, "planSha256" | "asked" | "reason" | "head"> = {}): void {
   // AC-70: a gate records its decision before any file is written, so extra answers refuse it here.
   const left = ctx.answering ? (ctx.prompter.left?.() ?? []) : [];
   if (left.length > 0) {
@@ -65,6 +66,8 @@ export async function comment(ctx: Ctx, answer: string, prompt = "What should ch
 export function humanFeedback(run: RunFile): string | null {
   for (let i = run.gates.length - 1; i >= 0; i--) {
     const g = run.gates[i];
+    // AC-87: a spec-approve reject's comment goes to the spec role's next run.
+    if (g?.gate === "gate:spec-approve") return g.decision === "reject" && g.comment ? `FROM THE HUMAN: ${g.comment}` : null;
     if (g === undefined || g.gate !== "gate:limit") return null;
     if (g.decision === "raise") continue;
     // A test conflict's or tests-changed answer is implement's (AC-64, AC-66); an older record has no reason.
@@ -99,7 +102,7 @@ function commitText(c: string | null): string {
 async function finalCheck(ctx: Ctx): Promise<CheckRun | null> {
   const item = ctx.mode.finalCheck?.(ctx) ?? null;
   if (item === null) return null;
-  const r = await runCheck(item.cmd, ctx.projectDir, ctx.cfg.checkTimeoutMin * 60_000, ctx.signal);
+  const r = await driverCheck(ctx, item.cmd);
   if (r.aborted) throw new Interrupted();
   if (r.timedOut) throw timedOutError(ctx, "final check", r);
   return r;
@@ -193,12 +196,15 @@ export function fixComment(run: RunFile, id: string): string {
 }
 
 export const acceptGate: StepHandler = async (ctx) => {
+  // AC-88: the result is accepted only on the approved spec.
+  if (specChanged(ctx)) return toSpecApprove(ctx);
   await acceptShown(ctx);
   for (;;) {
     const a = await ask(ctx, "accept> ");
     if (a === null) return NO_INPUT;
     const s = a.trim();
     if (s === "a" || s === "r" || s.startsWith("r ")) {
+      if (specChanged(ctx)) return toSpecApprove(ctx);
       // AC-68: the human decides on what the card showed; a moved HEAD rebuilds it first.
       if (ctx.run.card?.source !== acceptSource(ctx.projectDir)) {
         await acceptShown(ctx);

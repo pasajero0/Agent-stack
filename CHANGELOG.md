@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.6 — spec flow and run stats
+
+- **Spec flow** (`gates.json → specFlow`): `"merge"` (the default, as before, for a team) or `"branch"` (one
+  person). In `branch` the spec, the plan and the code live in one branch: the driver stops at `gate:spec-approve`
+  (`a` / `r <comment>` / `c`), and that answer is the approval. A spec changed later must be committed with a new
+  `## Changes` entry; the driver then asks to approve it again and goes back to where it was. A run keeps the flow
+  it started with; an unknown name is refused. In `branch`, a run does not start on the base branch.
+- **`agent-stack run --stats [--json]`:** a read-only summary over every run of this repo. One line per run
+  (status, tasks passed on the first attempt, attempts per task, rejects at gates, limit stops, calls, work and
+  waiting time, cost), then the totals with call outcomes by role and permission denials. A broken run folder is
+  skipped and named. Spec: `docs/specs/stats1/SPEC.md`.
+- **run: the implement role writes files only with Write and Edit.** Its `cat > … <<EOF`, `python3 -` and `sed -i`
+  in Bash were refused and cost turns (10 refusals in one run, found by `run --stats`).
+- **Glossary:** a stage id names what the stage does (`stats1`), not a code that only a plan explains.
+
+### Upgrading from 0.4.5
+
+- Run `agent-stack update` for spec-gate, `gates-lib`, `trace` and the `/spec`, `/plan` and `/drive` skills.
+- `specFlow` is optional and not in the seed: without it nothing changes. To work in one branch, add
+  `"specFlow": "branch"` to `.claude/gates.json`.
+- Two `run` messages changed: two actions at once now print `Use one of --resume, --status, --cancel, --watch or
+  --stats.`, and `--json` alone prints `--json goes with --status or --stats.` A script that matched the old text
+  must change.
+
+
 ## 0.4.5 — one source of truth
 
 From an audit of rules written in several places (`.claude/tmp/sources/rules-audit-2026-11-20.md`): each rule now

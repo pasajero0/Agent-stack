@@ -4,6 +4,7 @@ import { DEFAULT_STAGE_PATTERN } from "../claude/gates.js";
 import { RunError } from "./errors.js";
 import type { Fuse, RunConfig } from "./types.js";
 import { commandName } from "./engine/command.js";
+import { DEFAULT_SPEC_FLOW, isSpecFlow, specFlowNames, type SpecFlow } from "./spec-flow.js";
 
 const DEFAULTS = {
   maxTurns: 60,
@@ -87,6 +88,14 @@ function obj(o: Obj, key: string, allowNull: boolean): Obj {
   return v;
 }
 
+/** `gates.json → specFlow` (AC-83): missing is `merge`; any other name refuses the run. */
+function specFlow(o: Obj): SpecFlow {
+  const v = o["specFlow"];
+  if (v === undefined) return DEFAULT_SPEC_FLOW;
+  if (isSpecFlow(v)) return v;
+  throw new RunError(`gates.json specFlow must be ${specFlowNames()}; got ${JSON.stringify(v)}. Fix .claude/gates.json.`, 1);
+}
+
 /** A repo-relative directory as the driver compares paths: no leading `./`, no trailing `/`. */
 const dirPath = (p: string): string => p.replace(/^(\.\/)+/, "").replace(/\/+$/, "");
 
@@ -117,10 +126,22 @@ export function loadRunConfig(projectDir: string): RunConfig {
     specsDir: dirPath(str(parsed, "specsDir", DEFAULTS.specsDir)),
     adrDir: dirPath(str(parsed, "adrDir", DEFAULTS.adrDir)),
     baseBranch: str(parsed, "baseBranch", DEFAULTS.baseBranch),
+    specFlow: specFlow(parsed),
     stagePattern: str(parsed, "stagePattern", DEFAULT_STAGE_PATTERN),
     // The same default as .claude/bin/trace: docs/GLOSSARY.md unless gates.json names one ("" for none).
     glossary: dirPath(str(parsed, "glossary", "docs/GLOSSARY.md")),
   };
+}
+
+/** `gates.json → specFlow` alone, for the check before every step (AC-84); a bad file or value is a RunError. */
+export function readSpecFlow(projectDir: string): SpecFlow {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(join(projectDir, ".claude", "gates.json"), "utf8"));
+  } catch (e) {
+    throw new RunError(`Cannot read .claude/gates.json: ${e instanceof Error ? e.message : String(e)}.`, 1);
+  }
+  return specFlow(isObj(parsed) ? parsed : {});
 }
 
 /** A language code (AC-76): `en`, `ru`, `pt-BR`, `es-419`. */

@@ -22,13 +22,14 @@ function lastLines(text: string): string {
 
 /**
  * Run `cmd` through `bash -c`; decide by exit code only. Empty command is skipped. A timeout or an abort of
- * `signal` kills the whole process group; an aborted check reports `aborted` (AC-51).
+ * `signal` kills the whole process group; an aborted check reports `aborted` (AC-51). `env` is added to the
+ * check's environment (driverCheck passes `AGENT_STACK_RUN` to the harness scripts, AC-89).
  */
-export function runCheck(cmd: string, cwd: string, timeoutMs: number, signal?: AbortSignal): Promise<CheckRun> {
+export function runCheck(cmd: string, cwd: string, timeoutMs: number, signal?: AbortSignal, env: Record<string, string> = {}): Promise<CheckRun> {
   if (cmd.trim() === "") return Promise.resolve({ cmd, exit: 0, skipped: true, tail: "" });
   if (signal?.aborted) return Promise.resolve({ cmd, exit: 130, skipped: false, tail: "interrupted", aborted: true });
   return new Promise((resolve) => {
-    const child = spawn("bash", ["-c", cmd], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("bash", ["-c", cmd], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...env } });
     let out = "";
     let stopped: "timeout" | "aborted" | null = null;
     const take = (chunk: Buffer): void => {

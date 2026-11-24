@@ -1,4 +1,5 @@
 /** Shared types of the pipeline driver (`agent-stack run`). Spec: docs/specs/v04/SPEC.md. */
+import type { SpecFlow } from "./spec-flow.js";
 
 export type Mode = "task" | "quick";
 
@@ -15,6 +16,7 @@ export type Next =
   | "gate:answers"
   | "spec"
   | "gate:spec-merge"
+  | "gate:spec-approve"
   | "plan"
   | "gate:plan-approve"
   | "base-check"
@@ -61,6 +63,8 @@ export interface GateRecord {
   asked?: string[];
   /** A gate:limit retry with a comment: the reason it answered, so a test conflict's answer stays implement's (AC-64). */
   reason?: LimitReason;
+  /** A spec-approve reject: HEAD then, so the spec commit of the re-run is told from the rejected one (AC-87). */
+  head?: string;
 }
 
 export interface AnswerRecord {
@@ -83,7 +87,7 @@ export interface CardPrompt {
   answers: CardAnswer[];
 }
 
-export type CardGate = "answers" | "spec-merge" | "plan-approve" | "limit" | "accept";
+export type CardGate = "answers" | "spec-merge" | "spec-approve" | "plan-approve" | "limit" | "accept";
 
 /** What a gate shows, built once and kept in the run file (AC-68, AC-69). */
 export interface GateCard {
@@ -113,6 +117,10 @@ export interface RunFile {
   id: string;
   description: string;
   mode: Mode;
+  /** Copied from gates.json at start; a run file without it reads as `merge` (AC-83, AC-84). */
+  specFlow: SpecFlow;
+  /** The git blob id of the spec the human approved at gate:spec-approve, or null (AC-87). */
+  specApproved: string | null;
   status: RunStatus;
   next: Next;
   returnTo: Next | null;
@@ -158,6 +166,8 @@ export interface RunConfig {
   specsDir: string;
   adrDir: string;
   baseBranch: string;
+  /** `gates.json → specFlow` (AC-83). */
+  specFlow: SpecFlow;
   stagePattern: string;
   /** The glossary file: the spec role may edit it, and `trace --terms` checks against it; "" for none (AC-8, AC-59). */
   glossary: string;

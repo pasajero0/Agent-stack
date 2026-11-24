@@ -129,3 +129,11 @@ at fixed gates. The stage order and the engine follow Purple Flow; the safety mo
     only the driver's own calls (`AGENT_STACK_RUN` naming a live run on the current branch) get the bypass.
   - Browser check (7.11) together with V9, later.
   - Worktree per run after 2.W1–2.W7.
+
+## Amendments
+
+- 2026-11-23 — **Spec approval has two flows** (`gates.json → specFlow`, driver spec AC-83 to AC-90). `merge`, the
+  default, keeps Q2: a human merges the spec MR. `branch`, for one person, keeps spec, plan and code in one
+  branch; the human's answer at gate:spec-approve is the approval, and a later spec change is approved again.
+  Why (Leonid): a team needs the merge; working alone, a second branch and a second PR for each spec only slow
+  the work down.

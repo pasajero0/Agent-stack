@@ -14,9 +14,9 @@ it here first.
   "done".
 - **The program decides "done".** Checks are run by the harness and judged by exit code; the model's report
   is an unverified claim. `.claude/bin/verify` is the only writer of `passes`.
-- **Spec leads the code.** No code for a stage before its spec is merged by a human; later spec changes are
-  committed before the code they explain.
-- **The human approves at fixed points.** Merging a spec, approving a plan, accepting a result. Push and
+- **Spec leads the code.** No code for a stage before a human approves its spec (how: the spec flow); later
+  spec changes are committed before the code they explain.
+- **The human approves at fixed points.** Approving a spec, approving a plan, accepting a result. Push and
   merge are always the human's.
 - **Cheapen mechanics, never judgment.** Use a cheaper model only where a program checks the result
   afterwards (implementation behind tests and `verify`). Where nothing checks after it — clarifying,
@@ -38,10 +38,11 @@ it here first.
 ## Pipeline
 
 - **Stage** — a unit of planned work with an id (`A0`, `PAY-12`, `v04`), one spec and one branch. The gates
-  read the stage from the branch name (`stagePattern`).
+  read the stage from the branch name (`stagePattern`). The id names what the stage does: a word, then a
+  number (`stats1`), not a code that only a plan explains (`M1`).
 - **Spec** — `docs/specs/<stage>/SPEC.md`: acceptance criteria in EARS, unhappy paths, edge cases, numeric
-  NFRs, how to verify. **Full** for visible behaviour, **light** (a checklist) for setup work. Approved when
-  a human merges it.
+  NFRs, how to verify. **Full** for visible behaviour, **light** (a checklist) for setup work. Approved by a
+  human; how depends on the spec flow.
 - **Local term** — a word a spec defines for itself only, marked `- **Word** (local): …` in its `## Terms`.
   `trace` checks every other Terms entry against this glossary.
 - **Acceptance criterion (AC)** — one checkable statement in a spec, with an id (`AC-3`); tests carry the
@@ -76,8 +77,12 @@ it here first.
   **refactor** (green before and after, tests untouched). There is no separate "big task" mode.
 - **Size** — task mode's own verdict on the work: **task** (full spec, one or two tasks), **story** (full spec,
   several tasks), **epic** (several stages; the run proposes a split and stops).
-- **Gate** — a point where the run waits for the human: answers, spec merge, plan approval, acceptance,
-  limit.
+- **Gate** — a point where the run waits for the human: answers, spec merge or spec approval, plan approval,
+  acceptance, limit.
+- **Spec flow** — `gates.json` → `specFlow`: how a human approves a spec. **merge** (the default, for a team):
+  the spec comes on its own branch and merging it into the base branch is the approval. **branch** (for one
+  person): spec, plan and code stay in the current branch, and the human's answer at gate:spec-approve is the
+  approval; the spec may change there later and is approved again. The allowed names are one list in code.
 - **Gate card** — what a gate shows, built once (rebuilt only when it goes stale) and kept in the run file: a title, the facts, what the human
   must decide, and the answers it takes. The terminal prints it short for a person; `--status --json` gives the
   same card to a program. One source, so the two never say different things.
@@ -113,6 +118,11 @@ it here first.
   Turns per call and attempts per task apply whatever the kind.
 - **Feedback** — what sends a run back to implement: the failing command and its output, review findings,
   the human's comment.
+- **Run stats** — `agent-stack run --stats`: a summary over every run folder of the repo, read only from the run
+  files, the call files and the lock. It measures how the driver works; it changes nothing.
+- **First-pass success** — the share of started tasks that were committed after one attempt (`attempts == 1`).
+  A fix task F*k* counts like any task.
+- **Iterations per task** — the mean `attempts` of the started tasks. 1.0 means every task passed the first time.
 
 ## Harness parts
 

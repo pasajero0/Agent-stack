@@ -122,6 +122,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `health` | project metrics: `[{"name": "complexity", "command": "… {files} …", "max": 0}]` — detected for ESLint and ruff |
 | `docsLayout` | where Markdown files belong; `health` lists a changed `.md` outside these globs (a hint, never a block). Root-level `*.md` always fits. Set for a monorepo (see below), empty otherwise |
 | `codeBy` | `"driver"`: only a live `agent-stack run` call may edit code; a chat runs the work with `/drive`. Default `"anyone"`. Optional, not in the seed |
+| `specFlow` | how a human approves a spec: `"merge"` (default, for a team: the spec branch is merged into the base branch) or `"branch"` (one person: spec, plan and code in the current branch; the driver's gate:spec-approve is the approval, a later spec change is approved again). Optional, not in the seed |
 | `language` | the operator chat's language: `{ "chat": "ru", "terms": "en" }`; both default to `en`. Optional, not in the seed |
 | `layers` | architecture boundaries, empty until an ADR sets them: `[{"name": "domain stays pure", "files": ["src/domain/*"], "forbid": ["infra/"], "adr": "docs/adr/0003-layers.md"}]` |
 
@@ -158,6 +159,7 @@ agent-stack run --resume [<run id>] [--answer <text>]… continue a waiting or i
 agent-stack run --status [<run id>] [--json]           print the run; change nothing
 agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
 agent-stack run --watch [<run id>]                     show the run live until it ends; change nothing
+agent-stack run --stats [--json]                       sum up every run of this repo; change nothing
 ```
 
 **Quick mode.** Creates `quick/<slug>` from HEAD, runs your test command on it (it must pass), then one
@@ -218,6 +220,10 @@ shows in Claude Code in a terminal; the VS Code extension does not show a custom
 `run --watch`. It is off by default, since a project status line would replace yours; turn it on in
 `.claude/settings.local.json`:
 `{ "statusLine": { "type": "command", "command": ".claude/bin/run-status" } }`.
+To see how the driver has worked over time, run `agent-stack run --stats`: one line per run (status, tasks passed
+on the first attempt, attempts per task, rejects at gates, limit stops, calls, work and waiting time, cost), then
+the totals with call outcomes by role and permission denials. `--json` gives the same numbers for a program.
+Spec: [docs/specs/stats1/SPEC.md](docs/specs/stats1/SPEC.md).
 Hints print the command as you started it (`agent-stack run …`, or `node <path>/cli.mjs run …`). A run starts
 only on a harness from 0.4.1 on; with an older one it says to run `update` first.
 
