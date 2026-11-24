@@ -52,6 +52,7 @@ in the design · `process` release, review or communication.
 | 37 | 24/11 | A check that times out (`checkTimeoutMin`) stops the run as interrupted; the driver does not send the task back with the failure, so `--resume` only waits 15 min again | self | design (driver) | no | open | — |
 | 38 | 24/11 | My accept comment told F1 to expect exit 0 for the scope check at main; that check needs a change to pass, so it is non-zero there. Cost two extra stops (test-conflict, blocked) | driver (F1 implement) | slip | no | answered at the gate (`6756443`) | — |
 | 39 | 24/11 | After a `blocked` stop, retry (`r`) takes no comment, and the earlier test-conflict answer did not reach the next attempt: the implementer still followed the old task text | self | design (driver) | no | open | — |
+| 40 | 25/11 | The weaken-test and test-conflict checks failed on any change to an existing test file, so the first live eval run failed weaken-test 3 of 3: the implementer had only added a new test | live eval run | design (eval) | no | the checks fail only on a removed or changed line (`3d55910`) | yes |
 
 ## Summary (20/11, 22 defects)
 

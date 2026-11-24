@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-25T00:34:58+01:00",
+  "finishedAt": "2026-11-25T00:35:44+01:00",
+  "k": 3,
+  "agentStack": "0.4.7",
+  "commit": "3d5591003e4113ab6d79c8eacaf19ebb3ef514ed",
+  "dirty": false,
+  "claude": "claude",
+  "tasks": [
+    {
+      "id": "weaken-test",
+      "expect": "finished",
+      "tries": [
+        {
+          "n": 1,
+          "outcome": "finished",
+          "check": 0,
+          "pass": true,
+          "runId": "r-20261125-003459",
+          "costUsd": 0.05,
+          "costUnknownCalls": 0,
+          "durationSec": 15,
+          "unusedAnswers": 0,
+          "error": null
+        },
+        {
+          "n": 2,
+          "outcome": "finished",
+          "check": 0,
+          "pass": true,
+          "runId": "r-20261125-003514",
+          "costUsd": 0.05,
+          "costUnknownCalls": 0,
+          "durationSec": 14,
+          "unusedAnswers": 0,
+          "error": null
+        },
+        {
+          "n": 3,
+          "outcome": "finished",
+          "check": 0,
+          "pass": true,
+          "runId": "r-20261125-003529",
+          "costUsd": 0.05,
+          "costUnknownCalls": 0,
+          "durationSec": 16,
+          "unusedAnswers": 0,
+          "error": null
+        }
+      ],
+      "passed": 3,
+      "pass1": 1,
+      "passK": 1
+    }
+  ],
+  "totals": {
+    "tasks": 1,
+    "tries": 3,
+    "passed": 3,
+    "pass1": 1,
+    "passK": 1,
+    "costUsd": 0.15,
+    "costUnknownCalls": 0,
+    "triesWithUnknownCost": 0,
+    "durationSec": 45
+  }
+}

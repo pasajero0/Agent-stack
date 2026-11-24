@@ -12,6 +12,10 @@
   test per fixed defect, a check for a class that repeats). CONTRIBUTING also says how to run the evals.
 - **Glossary:** eval task, eval runner, try, pass@1, pass^k.
 - **CI** builds `dist/` before the slow tests, since the eval tests run the built CLI.
+- **First live eval run** (k = 3, real `claude`, $0.73): 12 of 15 tries pass. All 3 failures were weaken-test: its
+  check failed on any change to a test file, also on a new test. The weaken-test and test-conflict checks now fail
+  only on a removed or changed line; weaken-test then passed 3 of 3 ($0.15). Results:
+  `evals/results/2026-11-25-000920.json` and `2026-11-25-003458.json`.
 
 ### Upgrading from 0.4.6
 
