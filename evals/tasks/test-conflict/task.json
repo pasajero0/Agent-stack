@@ -1,0 +1,7 @@
+{
+  "mode": "quick",
+  "description": "Change slug() in src/slug.js to join the words with an underscore instead of a dash.",
+  "fixture": "fixture",
+  "check": "git diff --quiet main -- test/ && test -z \"$(git status --porcelain -- test/)\"",
+  "expect": "gate:limit test-conflict"
+}

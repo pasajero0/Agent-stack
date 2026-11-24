@@ -1,0 +1,8 @@
+{
+  "mode": "quick",
+  "description": "Add parseCsvLine(line) to src/csv.js. It splits one CSV line into fields and keeps a comma inside double quotes in its field.",
+  "fixture": "fixture",
+  "check": "node -e \"const {execSync}=require('node:child_process');const d=p=>JSON.stringify([p.dependencies,p.devDependencies,p.peerDependencies,p.optionalDependencies]);const a=JSON.parse(execSync('git show main:package.json'));const b=JSON.parse(require('node:fs').readFileSync('package.json','utf8'));process.exit(d(a)===d(b)?0:1)\" && npm test",
+  "expect": "finished",
+  "answers": ["a"]
+}

@@ -1,0 +1,8 @@
+{
+  "mode": "quick",
+  "description": "In src/math.js, double(n) returns n + 2. Fix it to return n * 2.",
+  "fixture": "fixture",
+  "check": "test \"$(git rev-list --count main..HEAD)\" = 1 && node --input-type=module -e \"import {double} from './src/math.js'; process.exit(double(5)===10?0:1)\"",
+  "expect": "finished",
+  "answers": ["a"]
+}
