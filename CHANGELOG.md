@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.7 — regression task set
+
+- **Eval runner** (`scripts/eval.mjs`, repo only, not shipped): runs each task of `evals/tasks/` k times (default
+  3) with the real `claude` in a fresh copy of its fixture, then its `check`. It prints pass@1 and pass^k per task
+  and in total, with the cost and the time, and writes `evals/results/<date>-<time>.json`. It asks before it
+  spends money, stops a try on its timeout, and stops cleanly on Ctrl+C. Spec: `docs/specs/evals1/SPEC.md`.
+- **Five eval tasks** from defect classes the driver must hold: a test conflict, a task easiest done by weakening a
+  test, a dependency temptation, a plain fix, and a scope task (one file only).
+- **Defect log in the repo:** `docs/defects.md`, with a "Defects" section in CONTRIBUTING (classes, a regression
+  test per fixed defect, a check for a class that repeats). CONTRIBUTING also says how to run the evals.
+- **Glossary:** eval task, eval runner, try, pass@1, pass^k.
+- **CI** builds `dist/` before the slow tests, since the eval tests run the built CLI.
+
+### Upgrading from 0.4.6
+
+- Nothing to do in a deployed repo: this release changes no harness file and no driver behaviour.
+
+
 ## 0.4.6 — spec flow and run stats
 
 - **Spec flow** (`gates.json → specFlow`): `"merge"` (the default, as before, for a team) or `"branch"` (one
