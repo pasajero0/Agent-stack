@@ -159,6 +159,7 @@ agent-stack run --resume [<run id>] [--answer <text>]… continue a waiting or i
 agent-stack run --status [<run id>] [--json]           print the run; change nothing
 agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
 agent-stack run --watch [<run id>]                     show the run live until it ends; change nothing
+agent-stack run --stats [--json]                       sum up every run of this repo; change nothing
 ```
 
 **Quick mode.** Creates `quick/<slug>` from HEAD, runs your test command on it (it must pass), then one
@@ -219,6 +220,10 @@ shows in Claude Code in a terminal; the VS Code extension does not show a custom
 `run --watch`. It is off by default, since a project status line would replace yours; turn it on in
 `.claude/settings.local.json`:
 `{ "statusLine": { "type": "command", "command": ".claude/bin/run-status" } }`.
+To see how the driver has worked over time, run `agent-stack run --stats`: one line per run (status, tasks passed
+on the first attempt, attempts per task, rejects at gates, limit stops, calls, work and waiting time, cost), then
+the totals with call outcomes by role and permission denials. `--json` gives the same numbers for a program.
+Spec: [docs/specs/stats1/SPEC.md](docs/specs/stats1/SPEC.md).
 Hints print the command as you started it (`agent-stack run …`, or `node <path>/cli.mjs run …`). A run starts
 only on a harness from 0.4.1 on; with an older one it says to run `update` first.
 
