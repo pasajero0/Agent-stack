@@ -222,14 +222,86 @@ function childEnv() {
   return env;
 }
 
-/** One child: an argv array, no shell, its own process group, stdin ignored. */
-function runChild(cmd, args, cwd) {
+// Stopping a child (AC-14, AC-16). `current` is the child that runs; `currentDir` the temp copy of the try that runs.
+const DRIVER_GRACE_MS = 10_000;
+const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 };
+let current = null;
+let currentDir = null;
+let stopSignal = null;
+
+function groupAlive(pid) {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (e) {
+    return e?.code === "EPERM";
+  }
+}
+
+function killGroup(pid, sig) {
+  try {
+    process.kill(-pid, sig);
+  } catch {
+    // The group is gone already.
+  }
+}
+
+/**
+ * Stops a running child as AC-14 says: the driver gets SIGTERM, and SIGKILL to its group if the group is still
+ * alive after 10 s; any other child gets SIGKILL to its group. Resolves when the child closed and its group is gone.
+ */
+function stopChild(c) {
+  if (c.stopped === null) {
+    c.stopped = new Promise((done) => {
+      const pid = c.child.pid;
+      let timer = null;
+      const finish = () => {
+        if (timer !== null) clearTimeout(timer);
+        done();
+      };
+      if (c.kind === "driver") {
+        try {
+          c.child.kill("SIGTERM");
+        } catch {
+          // Already gone.
+        }
+        timer = setTimeout(() => {
+          timer = null;
+          killGroup(pid, "SIGKILL");
+          c.closed.then(finish);
+        }, DRIVER_GRACE_MS);
+        // The driver closed: done unless something of its group still runs; then the 10 s timer decides.
+        c.closed.then(() => {
+          if (!groupAlive(pid)) finish();
+        });
+      } else {
+        killGroup(pid, "SIGKILL");
+        c.closed.then(finish);
+      }
+    });
+  }
+  return c.stopped;
+}
+
+/**
+ * One child: an argv array, no shell, its own process group, stdin ignored. With `deadline` (ms since epoch) the
+ * child is stopped when it passes, and the result has `timedOut` true. After a signal it never resolves: the signal
+ * handler exits.
+ */
+function runChild(cmd, args, cwd, { kind = "other", deadline = null } = {}) {
+  if (stopSignal !== null) return new Promise(() => {});
+  if (deadline !== null && Date.now() >= deadline) return Promise.resolve({ code: null, stdout: "", stderr: "", timedOut: true });
   return new Promise((done) => {
-    const r = { code: null, stdout: "", stderr: "" };
+    const r = { code: null, stdout: "", stderr: "", timedOut: false };
     let ended = false;
+    let entry = null;
+    let timer = null;
     const end = () => {
-      if (!ended) done(r);
+      if (ended || stopSignal !== null) return;
       ended = true;
+      if (timer !== null) clearTimeout(timer);
+      if (current === entry) current = null;
+      done(r);
     };
     let child;
     try {
@@ -239,27 +311,57 @@ function runChild(cmd, args, cwd) {
       end();
       return;
     }
+    let closed;
+    const closedPromise = new Promise((c) => (closed = c));
     child.stdout.on("data", (d) => (r.stdout += d));
     child.stderr.on("data", (d) => (r.stderr += d));
     child.on("error", (e) => {
       r.stderr += String(e);
-      end();
+      closed();
+      if (!r.timedOut) end();
     });
     child.on("close", (code) => {
       r.code = code;
-      end();
+      closed();
+      if (!r.timedOut) end();
+    });
+    if (child.pid === undefined) return;
+    entry = { child, kind, closed: closedPromise, stopped: null };
+    current = entry;
+    if (deadline !== null) {
+      // setTimeout takes at most 2^31-1 ms.
+      timer = setTimeout(() => {
+        timer = null;
+        if (ended) return;
+        r.timedOut = true;
+        stopChild(entry).then(end);
+      }, Math.min(Math.max(deadline - Date.now(), 0), 2 ** 31 - 1));
+    }
+  });
+}
+
+/** AC-16: stop the child that runs, remove the temp copy of the try that runs (unless --keep), exit 128 + n. */
+for (const [sig, num] of Object.entries(SIGNALS)) {
+  process.on(sig, () => {
+    if (stopSignal !== null) return;
+    stopSignal = sig;
+    const c = current;
+    (c !== null ? stopChild(c) : Promise.resolve()).then(() => {
+      if (currentDir !== null && !opts.keep) rmSync(currentDir, { recursive: true, force: true });
+      process.exit(128 + num);
     });
   });
 }
 
-/** Makes the temp copy; `failed` names the prepare part that failed, else null. */
-async function prepare(taskDir, fixture) {
+/** Makes the temp copy; `failed` names the prepare part that failed, else null; `timedOut` when the try timeout passed. */
+async function prepare(taskDir, fixture, deadline) {
   let dir = null;
   try {
     dir = mkdtempSync(join(tmpdir(), "agent-stack-eval-"));
+    currentDir = dir;
     cpSync(join(taskDir, fixture), dir, { recursive: true });
   } catch {
-    return { dir, failed: "copy" };
+    return { dir, failed: "copy", timedOut: false };
   }
   const parts = [
     ["git", "git", ["init", "-q", "-b", "main"]],
@@ -271,9 +373,11 @@ async function prepare(taskDir, fixture) {
     ["commit", "git", ["commit", "-q", "--no-verify", "-m", "chore: eval fixture"]],
   ];
   for (const [part, cmd, args] of parts) {
-    if ((await runChild(cmd, args, dir)).code !== 0) return { dir, failed: part };
+    const r = await runChild(cmd, args, dir, { deadline });
+    if (r.timedOut) return { dir, failed: null, timedOut: true };
+    if (r.code !== 0) return { dir, failed: part, timedOut: false };
   }
-  return { dir, failed: null };
+  return { dir, failed: null, timedOut: false };
 }
 
 /** The error of a driver exit other than 0 or 3 (AC-12). */
@@ -327,28 +431,34 @@ function capError(text) {
 /** One try: prepare, start, read, check, score, clean. Returns the try record and the kept path. */
 async function oneTry(taskDir, task, n) {
   const answers = task.answers ?? [];
-  const prep = await prepare(taskDir, task.fixture);
+  // AC-14: the try timeout runs from the start of prepare to the end of the check.
+  const deadline = Date.now() + (opts.timeoutMin ?? 30) * 60_000;
+  const prep = await prepare(taskDir, task.fixture, deadline);
   let result;
-  if (prep.failed !== null) {
+  if (prep.failed !== null || prep.timedOut) {
     result = {
       n, outcome: "error", check: null, pass: false, runId: null, costUsd: 0, costUnknownCalls: 0,
-      durationSec: 0, unusedAnswers: 0, error: `prepare: ${prep.failed} failed`,
+      durationSec: 0, unusedAnswers: 0, error: prep.timedOut ? "timeout" : `prepare: ${prep.failed} failed`,
     };
   } else {
     const started = Date.now();
-    let driver = await runChild(process.execPath, [CLI, "run", "quick", task.description], prep.dir);
+    const driverRun = (args) => runChild(process.execPath, [CLI, "run", ...args], prep.dir, { kind: "driver", deadline });
+    let driver = await driverRun(["quick", task.description]);
     let o = readOutcome(prep.dir, driver);
     // AC-5: at a gate (exit 3) each --resume gets one answer, in order; a refused --resume (exit 1) ends the loop (AC-12).
     let next = 0;
-    while (driver.code === 3 && o.outcome.startsWith("gate:") && o.runId !== null && next < answers.length) {
-      driver = await runChild(process.execPath, [CLI, "run", "--resume", o.runId, "--answer", answers[next++]], prep.dir);
+    while (!driver.timedOut && driver.code === 3 && o.outcome.startsWith("gate:") && o.runId !== null && next < answers.length) {
+      driver = await driverRun(["--resume", o.runId, "--answer", answers[next++]]);
       o = readOutcome(prep.dir, driver);
     }
-    const check = (await runChild("/bin/sh", ["-c", task.check], prep.dir)).code;
+    const checked = driver.timedOut ? null : await runChild("/bin/sh", ["-c", task.check], prep.dir, { deadline });
+    const timedOut = checked === null || checked.timedOut;
+    const check = timedOut ? null : checked.code;
     result = {
-      n, outcome: o.outcome, check, pass: o.outcome === task.expect && check === 0, runId: o.runId,
-      costUsd: o.costUsd, costUnknownCalls: o.costUnknownCalls, durationSec: Math.round((Date.now() - started) / 1000),
-      unusedAnswers: answers.length - next, error: o.error === null ? null : capError(o.error),
+      n, outcome: timedOut ? "error" : o.outcome, check, pass: !timedOut && o.outcome === task.expect && check === 0,
+      runId: o.runId, costUsd: o.costUsd, costUnknownCalls: o.costUnknownCalls,
+      durationSec: Math.round((Date.now() - started) / 1000), unusedAnswers: answers.length - next,
+      error: timedOut ? "timeout" : o.error === null ? null : capError(o.error),
     };
   }
   let kept = null;
@@ -356,6 +466,7 @@ async function oneTry(taskDir, task, n) {
     if (opts.keep) kept = prep.dir;
     else rmSync(prep.dir, { recursive: true, force: true });
   }
+  currentDir = null;
   return { result, kept };
 }
 
