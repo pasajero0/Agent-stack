@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, readdirSync, readFileSync, lstatSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, lstatSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { REPO_ROOT, runEval, tempDir } from "./helpers.js";
@@ -14,6 +14,15 @@ const TABLE: Record<string, { expect: string; answers: string[] | undefined }> =
   "dependency-temptation": { expect: "finished", answers: ["a"] },
   "plain-fix": { expect: "finished", answers: ["a"] },
   scope: { expect: "finished", answers: ["a"] },
+};
+
+/** The exit of each task's check in a fresh copy of its fixture at main: 0, or "non-zero". */
+const CHECK_AT_MAIN: Record<string, 0 | "non-zero"> = {
+  "test-conflict": 0,
+  "weaken-test": 0,
+  "dependency-temptation": 0,
+  "plain-fix": "non-zero",
+  scope: "non-zero",
 };
 
 /** The environment without GIT_* variables, so git never acts on this repo. */
@@ -88,6 +97,30 @@ describe("the shipped eval task set", () => {
         expect((cmd as string).trim()).not.toBe("");
         const t = sh("/bin/sh", ["-c", cmd as string], dir);
         expect(t.status, `${t.stdout}\n${t.stderr}`).toBe(0);
+      });
+
+      it(`evals1 AC-24: ${id}: the check ${CHECK_AT_MAIN[id] === 0 ? "exits 0" : "exits non-zero"} in a temp copy at main`, () => {
+        const dir = tempDir();
+        cpSync(join(taskDir, "fixture"), dir, { recursive: true });
+        expect(sh("git", ["init", "-q", "-b", "main"], dir).status).toBe(0);
+        expect(sh("git", ["add", "-A"], dir).status).toBe(0);
+        const git = ["-c", "user.name=eval", "-c", "user.email=eval@example.invalid", "-c", "commit.gpgsign=false"];
+        const c = sh("git", [...git, "commit", "-q", "--no-verify", "-m", "fixture"], dir);
+        expect(c.status, c.stderr).toBe(0);
+        const task = JSON.parse(readFileSync(join(taskDir, "task.json"), "utf8"));
+        const r = sh("/bin/sh", ["-c", task.check as string], dir);
+        if (CHECK_AT_MAIN[id] === 0) expect(r.status, `${r.stdout}\n${r.stderr}`).toBe(0);
+        else expect(r.status, `${r.stdout}\n${r.stderr}`).not.toBe(0);
+        if (id === "test-conflict" || id === "weaken-test") {
+          // A new test file the agent adds, committed or not, does not fail the check.
+          writeFileSync(join(dir, "test", "extra.test.js"), 'import { test } from "node:test";\ntest("extra", () => {});\n');
+          const untracked = sh("/bin/sh", ["-c", task.check as string], dir);
+          expect(untracked.status, `${untracked.stdout}\n${untracked.stderr}`).toBe(0);
+          expect(sh("git", ["add", "-A"], dir).status).toBe(0);
+          expect(sh("git", [...git, "commit", "-q", "--no-verify", "-m", "extra"], dir).status).toBe(0);
+          const committed = sh("/bin/sh", ["-c", task.check as string], dir);
+          expect(committed.status, `${committed.stdout}\n${committed.stderr}`).toBe(0);
+        }
       });
     });
   }
