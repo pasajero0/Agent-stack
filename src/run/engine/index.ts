@@ -27,6 +27,8 @@ import {
 import type { Mode, RunConfig, RunFile } from "../types.js";
 import { findTask, type Ctx, type ModeSteps } from "./context.js";
 import { cancelledText, costText } from "./gates.js";
+import { collectStats } from "../stats/collect.js";
+import { statsJson, statsText } from "../stats/format.js";
 import { runLoop, type ExitCode } from "./loop.js";
 import { Progress } from "./progress.js";
 import { estimate, times } from "./timing.js";
@@ -350,6 +352,15 @@ export async function statusRun(o: EngineOptions & { id?: string; json?: boolean
   if (run.limitReason) out(`Limit: ${run.limitReason}, returns to ${run.returnTo ?? "-"}`);
   for (const t of run.tasks) out(`  ${t.id}: attempts ${t.attempts}, commit ${t.commit ?? "none"}`);
   out(`Usage: ${costText(run)}`);
+  return 0;
+}
+
+/** `run --stats [--json]` (stats1, AC-1, AC-7, AC-11): reads every run folder, changes nothing; always exit 0. */
+export async function statsRun(o: EngineOptions & { json?: boolean }): Promise<ExitCode> {
+  const out = outOf(o);
+  const stats = collectStats(o.projectDir, o.now ?? new Date());
+  if (o.json) out(JSON.stringify(statsJson(stats)));
+  else for (const line of statsText(stats)) out(line);
   return 0;
 }
 
