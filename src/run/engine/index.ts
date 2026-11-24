@@ -17,7 +17,6 @@ import {
   newRunId,
   pidAlive,
   readLock,
-  readRun,
   readRunStrict,
   releaseLock,
   runDir,
@@ -32,13 +31,13 @@ import { statsJson, statsText } from "../stats/format.js";
 import { runLoop, type ExitCode } from "./loop.js";
 import { Progress } from "./progress.js";
 import { estimate, times } from "./timing.js";
-import { watchView } from "./watch.js";
 import { quickMode } from "./steps-quick.js";
 import { taskMode } from "./steps-task.js";
 import { parseNext } from "./transitions.js";
 import { commandName, requireHarness } from "./command.js";
 
 export type { ExitCode } from "./loop.js";
+export { watchRun } from "./watch.js";
 
 const MODES: Record<Mode, ModeSteps | null> = { quick: quickMode, task: taskMode };
 
@@ -383,44 +382,4 @@ export function abortOnSignals(): { signal: AbortSignal; dispose: () => void } {
       process.off("SIGTERM", on);
     },
   };
-}
-
-/**
- * `run --watch` (AC-82): the run live, read only. At a terminal it redraws once a second until the run is
- * finished or cancelled, or the signal aborts (Ctrl-C); without one it prints the view once. Always exit 0.
- */
-export async function watchRun(o: EngineOptions & { id?: string; write?: (text: string) => void }): Promise<ExitCode> {
-  const dir = o.projectDir;
-  const out = outOf(o);
-  const id = o.id ?? readLock(dir)?.id;
-  if (!id) {
-    out(`No run holds the lock. Name one: ${commandName()} run --watch <run id>.`);
-    return 0;
-  }
-  const first = watchView(dir, id);
-  if (first === null) {
-    out(`Run ${id} does not exist.`);
-    return 0;
-  }
-  if (!(o.isTTY ?? Boolean(process.stdout.isTTY))) {
-    out(first);
-    return 0;
-  }
-  const write = o.write ?? ((text: string) => process.stdout.write(text));
-  const signal = o.signal ?? new AbortController().signal;
-  for (;;) {
-    const view = watchView(dir, id) ?? first;
-    // Clear the screen and draw from the top, so the view stays in one place.
-    write(`\u001b[2J\u001b[H${view}\n`);
-    const run = readRun(dir, id);
-    if (!run || run.status === "finished" || run.status === "cancelled" || signal.aborted) return 0;
-    await new Promise<void>((resolve) => {
-      const t = setTimeout(resolve, 1000);
-      signal.addEventListener("abort", () => {
-        clearTimeout(t);
-        resolve();
-      }, { once: true });
-    });
-    if (signal.aborted) return 0;
-  }
 }
