@@ -118,6 +118,11 @@ it here first.
   Turns per call and attempts per task apply whatever the kind.
 - **Feedback** — what sends a run back to implement: the failing command and its output, review findings,
   the human's comment.
+- **Run stats** — `agent-stack run --stats`: a summary over every run folder of the repo, read only from the run
+  files, the call files and the lock. It measures how the driver works; it changes nothing.
+- **First-pass success** — the share of started tasks that were committed after one attempt (`attempts == 1`).
+  A fix task F*k* counts like any task.
+- **Iterations per task** — the mean `attempts` of the started tasks. 1.0 means every task passed the first time.
 
 ## Harness parts
 
