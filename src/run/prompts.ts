@@ -135,6 +135,8 @@ export function implementPrompt(
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),
     "",
+    "Create and change files only with the Write and Edit tools, never with Bash (cat > … <<EOF, python3 -, sed -i, tee): such Bash commands are refused and waste turns.",
+    "",
     "End with a report of what you did."
   );
   return lines.join("\n");

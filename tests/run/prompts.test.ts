@@ -94,6 +94,14 @@ describe("role prompts", () => {
     expect(p).toMatch(/documentation only \(Markdown, comments, no behaviour\) needs no test; say so in the report/);
   });
 
+  it("Q1: implement tells the role to write files only with Write and Edit, never Bash", () => {
+    const p = flat(implementPrompt(IMPL, { taskId: "Q1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "", lint: "", verify: "" } }));
+    expect(p).toMatch(/Create and change files only with the Write and Edit tools, never with Bash/);
+    expect(p).toContain("cat > … <<EOF");
+    expect(p).toContain("sed -i");
+    expect(p).toMatch(/refused and waste turns/);
+  });
+
   it("v04 AC-4: clarify does not claim a branch exists", () => {
     const p = clarifyPrompt({ description: "d", used: [] });
     expect(p).toContain("The driver has created the run.");
