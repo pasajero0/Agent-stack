@@ -2,6 +2,7 @@
 // Eval runner: runs the regression tasks through the driver. Plain Node ESM, built-ins only. Never builds.
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -149,3 +150,34 @@ for (const id of picked) {
   problems.push(...validateTask(id, join(tasksDir, id)));
 }
 if (problems.length > 0) refuse(problems.join("\n"));
+
+// Estimate and start question.
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const tries = picked.length * opts.k;
+const estimate =
+  `${plural(picked.length, "task", "tasks")} × ${plural(opts.k, "try", "tries")} = ${plural(tries, "try", "tries")}, ` +
+  `about $${(tries * 0.1).toFixed(2)} with the real claude.`;
+
+function readAnswer() {
+  return new Promise((resolveAnswer) => {
+    const rl = createInterface({ input: process.stdin });
+    rl.once("line", (line) => {
+      resolveAnswer(line);
+      rl.close();
+    });
+    rl.once("close", () => resolveAnswer(""));
+  });
+}
+
+if (opts.yes) {
+  process.stdout.write(`${estimate}\n`);
+} else {
+  const isTerminal = Boolean(process.stdin.isTTY) || process.env.AGENT_STACK_EVAL_TTY === "1";
+  if (!isTerminal) {
+    process.stdout.write(`${estimate}\n`);
+    refuse("not started");
+  }
+  process.stdout.write(`${estimate} Start? [y/N]\n`);
+  const answer = (await readAnswer()).trim().toLowerCase();
+  if (answer !== "y" && answer !== "yes") refuse("not started");
+}
