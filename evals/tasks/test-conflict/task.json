@@ -2,6 +2,6 @@
   "mode": "quick",
   "description": "Change slug() in src/slug.js to join the words with an underscore instead of a dash.",
   "fixture": "fixture",
-  "check": "git rev-parse -q --verify main >/dev/null && for f in $(git ls-tree -r --name-only main -- test/); do test -f \"$f\" && git diff --quiet main -- \"$f\" || exit 1; done",
+  "check": "git rev-parse -q --verify main >/dev/null && for f in $(git ls-tree -r --name-only main -- test/); do test -f \"$f\" || exit 1; if git diff main -- \"$f\" | grep -v '^--- ' | grep -q '^-'; then exit 1; fi; done",
   "expect": "gate:limit test-conflict"
 }

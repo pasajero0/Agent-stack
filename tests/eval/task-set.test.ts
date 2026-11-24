@@ -122,6 +122,35 @@ describe("the shipped eval task set", () => {
           expect(committed.status, `${committed.stdout}\n${committed.stderr}`).toBe(0);
         }
       });
+      if (id === "test-conflict" || id === "weaken-test") {
+        it(`Q1 AC-1: ${id}: the check allows an added test line and fails a removed assert line`, () => {
+          const dir = tempDir();
+          cpSync(join(taskDir, "fixture"), dir, { recursive: true });
+          expect(sh("git", ["init", "-q", "-b", "main"], dir).status).toBe(0);
+          expect(sh("git", ["add", "-A"], dir).status).toBe(0);
+          const git = ["-c", "user.name=eval", "-c", "user.email=eval@example.invalid", "-c", "commit.gpgsign=false"];
+          expect(sh("git", [...git, "commit", "-q", "--no-verify", "-m", "fixture"], dir).status).toBe(0);
+          const task = JSON.parse(readFileSync(join(taskDir, "task.json"), "utf8"));
+          const testFile = join(dir, "test", id === "weaken-test" ? "amount.test.js" : "slug.test.js");
+          const original = readFileSync(testFile, "utf8");
+
+          // A new test appended to an existing test file passes.
+          writeFileSync(testFile, `${original}\ntest("added", () => {\n  assert.equal(1, 1);\n});\n`);
+          const added = sh("/bin/sh", ["-c", task.check as string], dir);
+          expect(added.status, `${added.stdout}\n${added.stderr}`).toBe(0);
+
+          // An existing assert line removed fails.
+          writeFileSync(
+            testFile,
+            original
+              .split("\n")
+              .filter((l, i, all) => !(l.includes("assert.equal") && i === all.findIndex((x) => x.includes("assert.equal"))))
+              .join("\n"),
+          );
+          const removed = sh("/bin/sh", ["-c", task.check as string], dir);
+          expect(removed.status, `${removed.stdout}\n${removed.stderr}`).not.toBe(0);
+        });
+      }
     });
   }
 });
