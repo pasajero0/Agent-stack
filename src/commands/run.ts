@@ -4,6 +4,7 @@ import {
   cancelRun,
   resumeRun,
   startRun,
+  statsRun,
   statusRun,
   watchRun,
   type ExitCode,
@@ -20,7 +21,9 @@ export interface RunOptions {
   stage?: string;
   /** `--answer`, repeatable: the input of the gate the run waits at (AC-70). */
   answer?: string[];
-  /** `--json` with `--status` (AC-69). */
+  /** `--stats`: counts over every run, read only (stats1). */
+  stats?: boolean;
+  /** `--json` with `--status` (AC-69) or `--stats` (stats1, AC-7). */
   json?: boolean;
 }
 
@@ -50,24 +53,30 @@ export async function runCommand(
   const projectDir = io.projectDir ?? process.cwd();
   const out = io.out ?? ((line: string) => console.log(line));
   const base = { projectDir, out };
-  const actions = [options.resume, options.status, options.cancel, options.watch].filter(given).length;
+  const stats = options.stats === true;
+  const actions = [options.resume, options.status, options.cancel, options.watch, stats].filter(given).length;
   if (actions > 1) {
-    out("Use one of --resume, --status, --cancel or --watch.");
+    out("Use one of --resume, --status, --cancel, --watch or --stats.");
+    return 1;
+  }
+  const answers = options.answer ?? [];
+  if (stats && (mode !== undefined || options.stage !== undefined || answers.length > 0)) {
+    out("--stats takes no run id, mode, --stage or --answer.");
     return 1;
   }
   if (actions === 1 && mode !== undefined) {
     out(`--resume, --status, --cancel and --watch take a run id, not a mode ("${mode}").`);
     return 1;
   }
-  const answers = options.answer ?? [];
   if (answers.length > 0 && !given(options.resume)) {
     out("--answer needs --resume: it answers the gate a waiting run stops at.");
     return 1;
   }
-  if (options.json === true && !given(options.status)) {
-    out("--json goes with --status.");
+  if (options.json === true && !given(options.status) && !stats) {
+    out("--json goes with --status or --stats.");
     return 1;
   }
+  if (stats) return statsRun({ ...base, json: options.json === true });
   if (given(options.status)) return statusRun({ ...base, id: idOf(options.status), json: options.json === true });
   if (given(options.cancel)) return cancelRun({ ...base, id: idOf(options.cancel) });
   if (given(options.watch)) return withSignals((signal) => watchRun({ ...base, signal, id: idOf(options.watch) }));

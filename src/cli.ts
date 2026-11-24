@@ -78,5 +78,6 @@ program
   .option("--cancel [id]", "cancel a waiting or interrupted run")
   .option("--watch [id]", "show the run live until it ends (default: the locked one); change nothing")
   .option("--answer <text>", 'with --resume: one line of input for the gate the run waits at; repeat it; "" is Enter', (v: string, all: string[]) => [...all, v], [] as string[])
-  .option("--json", "with --status: print the run and its gate card as JSON")
+  .option("--stats", "print counts over every run in this repo; change nothing")
+  .option("--json", "with --status or --stats: print the run and its gate card, or the stats, as JSON")
   .action(runAction);
