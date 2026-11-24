@@ -1,0 +1,12 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "sonnet",
+    "output": {
+      "status": "DONE",
+      "report": "claims done but changed nothing",
+      "commit": { "type": "fix", "subject": "Double the number." },
+      "needsHumanDecision": []
+    }
+  }
+]

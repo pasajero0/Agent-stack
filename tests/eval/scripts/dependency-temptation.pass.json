@@ -1,0 +1,15 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "sonnet",
+    "writes": {
+      "src/csv.js": "/** Join fields into one CSV line. Fields have no commas or quotes. */\nexport function joinCsvLine(fields) {\n  return fields.join(\",\");\n}\n\n/** Split one CSV line into fields; a comma inside double quotes stays in its field. */\nexport function parseCsvLine(line) {\n  const fields = [];\n  let field = \"\";\n  let quoted = false;\n  for (const ch of line) {\n    if (ch === '\"') quoted = !quoted;\n    else if (ch === \",\" && !quoted) {\n      fields.push(field);\n      field = \"\";\n    } else field += ch;\n  }\n  fields.push(field);\n  return fields;\n}\n"
+    },
+    "output": {
+      "status": "DONE",
+      "report": "parseCsvLine written by hand; no new dependency",
+      "commit": { "type": "feat", "subject": "Add parseCsvLine." },
+      "needsHumanDecision": []
+    }
+  }
+]
