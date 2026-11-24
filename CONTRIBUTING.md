@@ -62,6 +62,38 @@ Two groups (`vitest.config.ts`):
 unrelated tests fail. A new test file that spawns bash or git goes into the `SLOW` list. A shell test prints the
 tool's exit and output when it fails, so a CI failure says why.
 
+## Evals
+
+`evals/` holds a regression task set for the driver; it is not shipped. Each `evals/tasks/<id>/` has a
+`task.json` (a quick-mode description, the expected outcome, the gate answers, a `check` command) and a tiny
+`fixture/` repo. Spec: [docs/specs/evals1/SPEC.md](docs/specs/evals1/SPEC.md).
+
+```text
+pnpm build
+node scripts/eval.mjs [--k 3] [--task <id>]…
+```
+
+The runner copies each fixture to a temp folder, deploys the harness, runs `run quick` with the **real** `claude`
+k times, then runs the `check`. It prints pass@1 and pass^k per task and in total, with the cost, and writes
+`evals/results/<date>-<time>.json`; commit that file. A full run costs money (about $1.50 for 5 tasks × 3), so
+it asks first. Run it after a change to the prompts, the roles or the checks, and compare with the last results
+file. The tests (`tests/eval/`) use the fake `claude` only.
+
+## Defects
+
+Every defect gets one row in [docs/defects.md](docs/defects.md): what broke, who found it, its class, whether it
+escaped into a release, what closed it, and whether a test now guards it. Write the row when the defect is found,
+not when it is fixed.
+
+- **Classes:** `dup` (a rule written in several places drifted), `unverified` (an assumption about the platform or
+  the model, not checked live), `slip` (an execution error: a command, an order, a wording), `design` (a hole in
+  the design), `process` (release, review or communication).
+- **A fixed defect gets a regression test**, unless it is a slip with nothing to test; then the row says `—`.
+- **A class that repeats gets a check, not more text.** When the same class shows up again, add a test, a hook or
+  a driver check that catches it.
+- `agent-stack run --stats` counts runs, not defects: the log stays human-written. A defect it shows (for example
+  permission denials) still gets its row here.
+
 ## Pull requests
 
 - One PR per release branch, into `main`.
