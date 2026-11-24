@@ -11,7 +11,6 @@ const DASH = "—";
 const CONTROL = new RegExp("[\\u0000-\\u001f\\u007f-\\u009f]", "g");
 const clean = (s: string): string => s.replace(CONTROL, "?");
 
-const round2 = (x: number): number => Math.round(x * 100) / 100;
 const two = (x: number | null): string => (x === null ? DASH : x.toFixed(2));
 const mss = (sec: number | null): string => (sec === null ? DASH : clock(Math.round(sec)));
 

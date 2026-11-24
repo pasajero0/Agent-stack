@@ -6,7 +6,7 @@ import { listRuns, readRun } from "../store.js";
 import type { Next, RunFile } from "../types.js";
 import { parseNext, type StepKind } from "./transitions.js";
 
-const isGate = (step: Next): boolean => step.startsWith("gate:");
+export const isGate =(step: Next): boolean => step.startsWith("gate:");
 
 /** A step starts: a new entry, unless the last one is this step and still open (a gate waits across processes). */
 export function openStep(run: RunFile, step: Next, now: Date = new Date()): void {

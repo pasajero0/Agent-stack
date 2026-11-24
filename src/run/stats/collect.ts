@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { RunError } from "../errors.js";
 import { isRunId, pidAlive, readLock, readRunStrict, runDir } from "../store.js";
 import type { Role, RunFile } from "../types.js";
-import { CALL_KINDS, type RoleCalls, type RunCalls, readCalls } from "./calls.js";
+import { CALL_KINDS, emptyRole, type RoleCalls, type RunCalls, readCalls } from "./calls.js";
 import { countRun, type RunCount, sumCounts } from "./count.js";
 import { runTime, type RunTime, sumTimes, type TimeTotals } from "./time.js";
 
@@ -85,11 +85,7 @@ function sortWarnings(id: string, list: string[]): string[] {
 }
 
 function sumRole(list: RunCalls[], role: Role): RoleCalls {
-  const sum: RoleCalls = {
-    calls: 0,
-    outcomes: { ok: 0, schema: 0, "max-turns": 0, "exec-error": 0, budget: 0, infra: 0, killed: 0, unreadable: 0 },
-    denials: 0,
-  };
+  const sum = emptyRole();
   for (const c of list) {
     const r = c.roles[role];
     sum.calls += r.calls;

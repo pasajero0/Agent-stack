@@ -1,5 +1,5 @@
 /** Per-run time and cost for `run --stats` (spec stats1, AC-6, AC-16, AC-21, AC-24). */
-import { times } from "../engine/timing.js";
+import { isGate, times } from "../engine/timing.js";
 import type { RunFile } from "../types.js";
 
 export interface RunTime {
@@ -18,8 +18,6 @@ export interface TimeTotals {
   costUnknownCalls: number;
   runsWithoutTimes: number;
 }
-
-const isGate = (step: string): boolean => step.startsWith("gate:");
 
 /** `live`: the run's process is alive now. An open entry counts to `now` only by the AC-6 rule. */
 export function runTime(run: RunFile, live: boolean, now: Date): RunTime {

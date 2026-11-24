@@ -24,7 +24,7 @@ export interface RunCalls {
   warnings: string[];
 }
 
-const emptyRole = (): RoleCalls => ({
+export const emptyRole =(): RoleCalls => ({
   calls: 0,
   outcomes: { ok: 0, schema: 0, "max-turns": 0, "exec-error": 0, budget: 0, infra: 0, killed: 0, unreadable: 0 },
   denials: 0,
