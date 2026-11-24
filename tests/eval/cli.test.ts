@@ -7,7 +7,12 @@ import { EVAL_SCRIPT, REPO_ROOT, runEval, tempDir } from "./helpers.js";
 function tasksDirWithTask(): string {
   const dir = tempDir();
   mkdirSync(join(dir, "ok-1"));
-  writeFileSync(join(dir, "ok-1", "task.json"), "{}");
+  mkdirSync(join(dir, "ok-1", "fixture"));
+  writeFileSync(join(dir, "ok-1", "fixture", "README.md"), "fixture\n");
+  writeFileSync(
+    join(dir, "ok-1", "task.json"),
+    JSON.stringify({ mode: "quick", description: "A valid task", fixture: "fixture", check: "true", expect: "finished" }),
+  );
   return dir;
 }
 

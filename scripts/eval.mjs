@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Eval runner: runs the regression tasks through the driver. Plain Node ESM, built-ins only. Never builds.
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -54,3 +54,98 @@ for (const id of opts.tasks) {
   if (!existsSync(join(tasksDir, id, "task.json"))) refuse(`--task ${id}: no ${id}/task.json in ${tasksDir}`);
 }
 if (!existsSync(join(REPO_ROOT, "dist", "index.js"))) refuse("dist/ is missing: run pnpm build first");
+
+const EXPECT_REASONS = ["attempts", "blocked", "review-loop", "fuse", "decision", "test-conflict", "tests-changed"];
+const KNOWN_KEYS = ["mode", "description", "fixture", "check", "expect", "answers"];
+
+const isText = (v) => typeof v === "string" && v.trim() !== "";
+
+/** True when `dir` holds no symlink at any depth (the dir itself is checked by the caller). */
+function hasNoSymlink(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) return false;
+    if (entry.isDirectory() && !hasNoSymlink(join(dir, entry.name))) return false;
+  }
+  return true;
+}
+
+function fixtureOk(taskDir, fixture) {
+  if (!isText(fixture) || isAbsolute(fixture)) return false;
+  const parts = fixture.split(/[\\/]/);
+  if (parts.includes("..") || parts.every((p) => p === "" || p === ".")) return false;
+  try {
+    const path = join(taskDir, fixture);
+    if (lstatSync(path).isSymbolicLink()) return false;
+    const real = realpathSync(path);
+    const root = realpathSync(taskDir);
+    if (!statSync(real).isDirectory() || !real.startsWith(root + sep)) return false;
+    return hasNoSymlink(real);
+  } catch {
+    return false;
+  }
+}
+
+/** Every problem of one task.json, as lines. */
+function validateTask(id, taskDir) {
+  const at = `${id}/task.json`;
+  let data;
+  try {
+    data = JSON.parse(readFileSync(join(taskDir, "task.json"), "utf8"));
+  } catch {
+    return [`${at}: not JSON`];
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return [`${at}: not an object`];
+  const problems = [];
+  const rules = {
+    mode: [(v) => v === "quick", 'mode: must be "quick"'],
+    description: [(v) => isText(v) && !v.trim().startsWith("-") && !v.startsWith("-"), "description: must be a text that does not start with -"],
+    fixture: [(v) => fixtureOk(taskDir, v), `fixture: must be a folder inside ${id}/ with no symlinks`],
+    check: [isText, "check: must be a command"],
+    expect: [
+      (v) =>
+        typeof v === "string" &&
+        (["finished", "cancelled", "gate:accept"].includes(v) ||
+          (v.startsWith("gate:limit ") && EXPECT_REASONS.includes(v.slice("gate:limit ".length)))),
+      "expect: must be finished, cancelled, gate:accept or gate:limit <reason>",
+    ],
+  };
+  for (const field of Object.keys(rules)) {
+    if (!Object.hasOwn(data, field)) problems.push(`${at}: ${field}: missing`);
+    else if (!rules[field][0](data[field])) problems.push(`${at}: ${rules[field][1]}`);
+  }
+  if (Object.hasOwn(data, "answers") && !(Array.isArray(data.answers) && data.answers.every((a) => typeof a === "string"))) {
+    problems.push(`${at}: answers: must be a list of texts`);
+  }
+  for (const key of Object.keys(data)) {
+    if (!KNOWN_KEYS.includes(key)) problems.push(`${at}: unknown key ${key.replace(/[\u0000-\u001f\u007f-\u009f]/g, "?")}`);
+  }
+  return problems;
+}
+
+// Pick the eval tasks: folders holding a task.json (or only the --task ids), sorted by id.
+let picked = [];
+let folders = [];
+try {
+  folders = readdirSync(tasksDir, { withFileTypes: true });
+} catch {
+  folders = [];
+}
+if (opts.tasks.length > 0) {
+  picked = [...opts.tasks];
+} else {
+  for (const f of folders) {
+    if (f.isDirectory() && existsSync(join(tasksDir, f.name, "task.json"))) picked.push(f.name);
+  }
+}
+picked.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+if (picked.length === 0) refuse(`no eval tasks in ${tasksDir}`);
+
+const problems = [];
+for (const id of picked) {
+  if (!ID_PATTERN.test(id)) {
+    problems.push(`${tasksDir}/${id}: not a valid eval task id`);
+    continue;
+  }
+  problems.push(...validateTask(id, join(tasksDir, id)));
+}
+if (problems.length > 0) refuse(problems.join("\n"));
