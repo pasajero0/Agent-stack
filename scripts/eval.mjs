@@ -336,12 +336,19 @@ async function oneTry(taskDir, task, n) {
     };
   } else {
     const started = Date.now();
-    const o = readOutcome(prep.dir, await runChild(process.execPath, [CLI, "run", "quick", task.description], prep.dir));
+    let driver = await runChild(process.execPath, [CLI, "run", "quick", task.description], prep.dir);
+    let o = readOutcome(prep.dir, driver);
+    // AC-5: at a gate (exit 3) each --resume gets one answer, in order; a refused --resume (exit 1) ends the loop (AC-12).
+    let next = 0;
+    while (driver.code === 3 && o.outcome.startsWith("gate:") && o.runId !== null && next < answers.length) {
+      driver = await runChild(process.execPath, [CLI, "run", "--resume", o.runId, "--answer", answers[next++]], prep.dir);
+      o = readOutcome(prep.dir, driver);
+    }
     const check = (await runChild("/bin/sh", ["-c", task.check], prep.dir)).code;
     result = {
       n, outcome: o.outcome, check, pass: o.outcome === task.expect && check === 0, runId: o.runId,
       costUsd: o.costUsd, costUnknownCalls: o.costUnknownCalls, durationSec: Math.round((Date.now() - started) / 1000),
-      unusedAnswers: answers.length, error: o.error === null ? null : capError(o.error),
+      unusedAnswers: answers.length - next, error: o.error === null ? null : capError(o.error),
     };
   }
   let kept = null;
