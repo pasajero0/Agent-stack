@@ -54,19 +54,33 @@ No ADR. Leonid decided these in the grill (2026-11-26):
   `~/.config/gcloud`, `~/.azure`. Not `~/.config/gh`: on Linux the gh token is there, and the allowed `gh pr view`
   would break. The README names the list and says the Read tool is not covered (guard-file still handles it).
 
-Added by this spec (for the human to confirm):
+Leonid confirmed or changed these after the first version of this spec (2026-11-26):
 
-- **The registries per package manager** (Contract table "Detected domain list"). A Python or Rust install needs
-  two hosts, so the "registry" is two domains there. Hosts a tool reaches only sometimes (Go module zips on other
-  hosts, `uv` downloading Python builds from GitHub) are left to the user.
-- **The manifest records the generated sandbox lists** (`generatedSandbox`), as it records `generatedAllow` today.
-  Without it, a domain the user removed from `gates.json` would stay in `settings.json` as "the user's" forever
-  (AC-14).
-- **A removed secret folder comes back, with a line** (AC-18). The secret folders are the floor of the block; a user
-  re-opens a path with `sandbox.filesystem.allowRead`.
-- **`detect` only.** `generate` and `update` do not check for `bwrap` and `socat` (Out of scope).
+- **The registries per package manager** (Contract table "Detected domain list") — approved. A Python or Rust
+  install needs two hosts, so the "registry" is two domains there. Hosts a tool reaches only sometimes (Go module
+  zips on other hosts, `uv` downloading Python builds from GitHub) are left to the user.
+- **The manifest records the generated sandbox lists** (`generatedSandbox`), as it records `generatedAllow` today —
+  approved. Without it, a domain the user removed from `gates.json` would stay in `settings.json` as "the user's"
+  forever (AC-14), and `update` could not tell a removed secret folder from a new one (AC-18).
+- **A secret folder the user removed stays removed** (AC-18). The user wins, as for the switches. `update` adds
+  nothing and prints one warning per removed folder. A repo deployed by 0.4.8 or older (no `generatedSandbox`)
+  still gets every secret folder added.
+- **On Linux, `generate` and `update` warn when `bwrap` or `socat` is missing** (AC-26), because
+  `failIfUnavailable: true` then stops every Bash command. `detect` keeps its line (AC-9, AC-16).
+- **Native Windows:** one block for every platform; the README and CHANGELOG warn (AC-21, AC-22).
 - **The pre-build check comes first.** If a step of it fails, the builder stops and the spec changes before code
-  (How to verify).
+  (How to verify). Two results are decided in advance:
+  - if `pnpm add` fails only because the sandbox stops the write to the pnpm store outside the repo, the block gets
+    `filesystem.allowWrite` with the detected package manager's store or cache path only, and the README names it.
+    The builder still stops first: the spec gets a "## Changes" entry with the exact path per package manager;
+  - if Claude Code asks the user about a domain not in the list instead of refusing, that is not a stop. The README
+    then says "only the listed domains are reached without a question".
+
+Added by this spec:
+
+- **An absent place gets the harness value** (Model table). If the user's `settings.json` has no `denyRead`,
+  `filesystem` or `sandbox` key, `update` writes all nine secret folders with no line, as it writes an absent switch.
+  Only a folder missing from a `denyRead` list that is there counts as removed by the user.
 
 ## Terms
 
@@ -89,8 +103,12 @@ OS sandbox, sandbox block. Below is only what this spec makes precise.
   `sandbox.filesystem`, `sandbox.network`, `sandbox.filesystem.denyRead`, `sandbox.network.allowedDomains`.
 - **Weaker value** (local): a user's switch value that is not strictly equal (`!==`) to the harness value. A
   non-boolean value is weaker too.
+- **Removed secret folder** (local): a secret folder that is in the manifest's `generatedSandbox.denyRead` and not in
+  the user's `denyRead`, while that `denyRead` is an array in `settings.json`.
 - **Sandbox readiness** (local): what `detect` reports: whether the tools the OS sandbox needs are found. It does not
   start the sandbox.
+- **Missing sandbox tools** (local): on `linux`, the names of `bwrap` and `socat` that are not found on `PATH`
+  (`bwrap` first). On every other platform the list is empty.
 - **Safe text** (local): a string as `update` prints it: each U+0000 to U+001F, U+007F to U+009F, U+2028, U+2029,
   U+202A to U+202E and U+2066 to U+2069 replaced by `?`. For `JSON.stringify` output this changes only the ranges
   from U+007F on: `JSON.stringify` already writes U+0000 to U+001F as escape sequences (`\n`, `\u001b`, …).
@@ -112,15 +130,15 @@ merge: `sandbox`, `sandbox.filesystem`, `sandbox.network`, `sandbox.filesystem.d
 | `settings.json` | missing | the sandbox block with the domain source's list | AC-24 |
 | `settings.json` | valid JSON, no `sandbox` key | the sandbox block with the domain source's list | AC-4 |
 | `settings.json` | valid JSON with a `sandbox` key | the merge: the rows below | AC-6 |
-| a place of the block | absent (the key is not there) | the harness value at that place, no "replaced" line (AC-18's "restored" lines still apply) | AC-6 |
+| a place of the block | absent (the key is not there) | the harness value at that place (at `denyRead`: all nine secret folders), no line | AC-6 |
 | a place of the block | the harness writes an object or array there and the user's value is present and of another type | the harness value at that place, and the "replaced" warning | AC-13 |
 | a place of the block | the user's value is of the right type | merged as the rows below | AC-6 |
 | a switch | user value strictly equal to the harness value | the harness value; not reported | AC-6 |
 | a switch | user value is a weaker value | the user's value, reported in `customSettings`, and its warning | AC-7 |
 | a switch | absent | the harness value | AC-6 |
-| a list entry | a harness entry | kept, in harness order, first | AC-8 |
-| a secret folder | in the manifest's `generatedSandbox.denyRead`, and not in the user's `denyRead` (the user removed it: the entry, the `denyRead` key, `filesystem` or the whole `sandbox` key) | written at its harness place, and the "restored" line | AC-18 |
-| a secret folder | not in the user's `denyRead`, and not in `generatedSandbox.denyRead` (never deployed) | written at its harness place, no line | AC-18 |
+| a secret folder | a removed secret folder (the user's `denyRead` is an array without it, and `generatedSandbox.denyRead` has it) | not written, and the "readable" warning | AC-18 |
+| a secret folder | not in the user's `denyRead` array, and not in `generatedSandbox.denyRead` (never deployed, e.g. a 0.4.8 repo) | written at its harness place, no line | AC-18 |
+| a list entry | any other harness entry | kept, in harness order, first | AC-8 |
 | a list entry | an entry the harness wrote last time (`generatedSandbox`) and does not write now | dropped, not reported | AC-14 |
 | a list entry | any other user entry | added after the harness entries, reported in `customSettings` | AC-8 |
 | other key | the key `__proto__` at any place | skipped, not reported (as `keepUserSettings` does today) | AC-25 |
@@ -161,11 +179,14 @@ first in the order below, then the user's other keys in their order on disk. For
   },
 ```
 
-- `denyRead` is the secret folders, always in this order.
+- `denyRead` is the secret folders, always in this order. On `update`, a removed secret folder is left out
+  (AC-18); the others keep this order.
 - `allowedDomains`: `generate` writes the detected domain list; `update` writes the list of the domain source. A
   domain that appears twice in the domain source is written once, at its first place (JSON equality). A user entry
   that appears twice is kept and reported once.
-- The sandbox block never holds `excludedCommands`, `allowWrite`, `allowRead` or `deniedDomains` of its own.
+- The sandbox block never holds `excludedCommands`, `allowWrite`, `allowRead` or `deniedDomains` of its own. The
+  one possible exception is `filesystem.allowWrite` for the package manager store, decided in advance in Decisions;
+  it comes only through a "## Changes" entry after the pre-build check.
 
 **Detected domain list.** Registry domains of `packageManager` (`HarnessParams`), then the forge domains. No
 duplicates; order as in the tables.
@@ -190,8 +211,9 @@ it right before `routing`, with the detected domain list. An empty array is vali
 today, and the new file holds `sandbox`.
 
 **Manifest `.claude/.harness.json`.** A new field `generatedSandbox: { denyRead: string[], allowedDomains: string[] }`:
-the harness entries it wrote into `settings.json` this time: the secret folders and the domain source's list (after
-removing duplicates), never the user's kept entries. Each list is read on its own: a list that is missing
+`denyRead` is always all nine secret folders, removed ones included, so a removed secret folder stays removed on the
+next `update`. `allowedDomains` is the domain source's list that `update` wrote this time (after removing
+duplicates). Neither list holds the user's kept entries. Each list is read on its own: a list that is missing
 or not an array reads as empty; inside an array, non-string entries are dropped (as `generatedAllow` is read,
 `src/claude/update-plan.ts:207`). A `generatedSandbox` that is missing or not an object reads as two empty lists.
 
@@ -208,7 +230,13 @@ text of `JSON.stringify(value)`. `<entry>` and `<key>` are safe text.
 | `sandbox.allowUnsandboxedCommands` is a weaker value | `log.warn` | `sandbox.allowUnsandboxedCommands is <v> in .claude/settings.json: the model can run a command outside the sandbox` |
 | `sandbox.failIfUnavailable` is a weaker value | `log.warn` | `sandbox.failIfUnavailable is <v> in .claude/settings.json: Bash runs without the sandbox when the sandbox cannot start` |
 | a place of the block has a wrong type (AC-13), one line per place | `log.warn` | `replaced <path> in .claude/settings.json: it was not an object` or `… it was not a list` |
-| a secret folder the user removed from `denyRead` (AC-18), one line per folder | `log.warn` | `restored sandbox.filesystem.denyRead: <entry> — the secret folders are always denied; use sandbox.filesystem.allowRead to re-open one` |
+| a removed secret folder (AC-18), one line per folder, in the secret folders' order | `log.warn` | `<entry> is readable inside the sandbox: it is not in sandbox.filesystem.denyRead` |
+| the missing sandbox tools are not empty (AC-26) | `log.warn` | the "tools" line below |
+
+**The "tools" line** (AC-26), printed by `generate` and `update` alike, `<names>` as in the `detect` line below:
+`missing <names> on PATH: every Bash command fails, because sandbox.failIfUnavailable is true. Install bubblewrap and socat, then run agent-stack detect.`
+`generate` prints it right after `Generated N harness file(s).` and before the next steps. `update` prints it as the
+last sandbox line; it is the one sandbox line `update` prints also when `settings.json` is not valid JSON (AC-10).
 
 `<path>` is one of the five places. Kept entries go to `customSettings`, after today's top-level and `permissions.*`
 entries, in this order: switches (in the harness order), other keys of `sandbox`, of `sandbox.filesystem`, of
@@ -232,11 +260,16 @@ line that follows it (`src/commands/detect.ts:28-29`), printed with the same lay
 | `linux` | one or both not found | `  OS sandbox           ✖ missing <names> — Bash commands will fail; install bubblewrap and socat` |
 | any other | none | `  OS sandbox           ? not checked on <platform> — see Claude Code's sandbox docs` |
 
-`<names>` is `bwrap`, `socat` or `bwrap, socat`, in that order. `detect` exits 0 in every row. The check is a
-function in `src/claude/sandbox.ts`:
-`sandboxReadiness(platform: string, exists: (cmd: string) => Promise<boolean>): Promise<string>`, which returns the
-status part of the line (after the padded name); `detect` passes `process.platform` and
-`commandExists` (`src/utils/shell.ts:3`), so tests do not depend on the machine.
+`<names>` is the missing sandbox tools joined by `, `: `bwrap`, `socat` or `bwrap, socat`. `detect` exits 0 in every
+row. Two functions in `src/claude/sandbox.ts` hold the check:
+- `missingSandboxTools(platform: string, exists: (cmd: string) => Promise<boolean>): Promise<string[]>` returns the
+  missing sandbox tools; it calls `exists` only on `linux`;
+- `sandboxReadiness(platform: string, exists: (cmd: string) => Promise<boolean>): Promise<string>` returns the
+  status part of the `detect` line (after the padded name) and uses `missingSandboxTools`.
+
+`detect`, `generate` and `update` pass `process.platform` and `commandExists` (`src/utils/shell.ts:3`). `generateCommand`
+and `updateCommand` get an optional test seam for both, as `templatesDir` is one today, so tests do not depend on
+the machine.
 
 ## Constraints
 
@@ -257,9 +290,9 @@ status part of the line (after the padded name); `detect` passes `process.platfo
   (`isObject`, `Array.isArray`), and every key and string from under `sandbox` is printed as safe text. Today's lines
   for other keys stay as they are. Check: `pnpm typecheck`, AC-25, code review.
 - **When goals conflict:** the user's explicit setting > the harness default > silence. `update` never overwrites a
-  user's switch; it warns instead. The harness value replaces the user's in two cases only, each with a line: a
-  wrong-typed place (AC-13), and a secret folder the user removed from `denyRead` (AC-18). A secret folder that was
-  never deployed is added without a line: nothing of the user's is undone.
+  user's switch and never adds back a removed secret folder; it warns instead. The harness value replaces the user's
+  in one case only, with a line: a wrong-typed place (AC-13). A secret folder that was never deployed is added without
+  a line: nothing of the user's is undone.
 
 ## Acceptance criteria (EARS)
 
@@ -303,8 +336,8 @@ status part of the line (after the padded name); `detect` passes `process.platfo
 ### Unhappy path
 
 - **AC-10:** IF `settings.json` is not valid JSON, THEN `update` SHALL leave it as it was, print today's warning
-  (`.claude/settings.json is not valid JSON, so it was left as is. …`), print no sandbox line of the Contract (not
-  the "add" line, not the "bad list" warning), and keep the manifest's old `generatedSandbox` as it was read
+  (`.claude/settings.json is not valid JSON, so it was left as is. …`), print no sandbox line of the Contract except
+  the "tools" line of AC-26 (so not the "add" line, not the "bad list" warning), and keep the manifest's old `generatedSandbox` as it was read
   (partner of AC-4, AC-6).
 - **AC-11:** IF `gates.json` is a JSON object whose `sandbox` is not an object, or whose `sandbox.allowedDomains` is
   not an array of strings (a non-string entry included), THEN `update` SHALL use the detected domain list, print the
@@ -340,15 +373,24 @@ status part of the line (after the padded name); `detect` passes `process.platfo
 
 - **AC-17:** WHEN `update` runs twice in a row with no change in between, THE SYSTEM SHALL write `settings.json` and
   the manifest byte for byte the same the second time, and print the same sandbox lines as the first run, minus the
-  "replaced" and "restored" lines (nothing is left to replace or restore).
-- **AC-18:** WHEN a secret folder is not in the user's `denyRead` (an absent `denyRead`, `filesystem` or `sandbox`
-  counts as an empty list), THE SYSTEM SHALL write it at its harness place on `update`. WHEN the manifest's
-  `generatedSandbox.denyRead` has that folder (the user removed it), THE SYSTEM SHALL also print the "restored" line
-  for it; otherwise it SHALL print no "restored" line. Examples:
+  "replaced" lines (nothing is left to replace). The "readable" warnings print again on the second run.
+- **AC-18:** WHEN `update` meets a removed secret folder, THE SYSTEM SHALL leave it out of `denyRead`, keep it in
+  `generatedSandbox.denyRead`, and print its "readable" warning once. WHEN a secret folder is not in the user's
+  `denyRead` array and not in `generatedSandbox.denyRead`, THE SYSTEM SHALL write it at its harness place with no
+  line. WHEN the user's `denyRead`, `filesystem` or `sandbox` is absent, THE SYSTEM SHALL write all nine secret
+  folders with no line. Examples:
   - a 0.4.8 repo with `"sandbox": {"filesystem": {"denyRead": ["~/.foo"]}}` and no `generatedSandbox` → the nine
-    secret folders, then `~/.foo` (reported in `customSettings`), no "restored" line;
-  - a 0.5.0 repo whose user deleted `"~/.ssh"` from `denyRead` → `~/.ssh` back first, one "restored" line;
-  - a 0.5.0 repo whose user deleted the whole `sandbox` key → the full block, nine "restored" lines.
+    secret folders, then `~/.foo` (reported in `customSettings`), no "readable" line;
+  - a 0.5.0 repo whose user deleted `"~/.npmrc"` from `denyRead` → the other eight secret folders, no `~/.npmrc`,
+    and one line `~/.npmrc is readable inside the sandbox: it is not in sandbox.filesystem.denyRead`;
+  - a 0.5.0 repo whose user deleted the whole `sandbox` key → the full block, no "readable" line.
+- **AC-26:** WHERE the platform is `linux`, WHEN `generate` or `update` runs and the missing sandbox tools are not
+  empty, THE SYSTEM SHALL print the Contract's "tools" line once and go on as before (exit code unchanged). Example:
+  only `socat` is missing → `missing socat on PATH: every Bash command fails, …`. On `update --dry-run` the line
+  prints too.
+- **AC-27:** IF the platform is `linux` and both `bwrap` and `socat` are found, or the platform is not `linux`, THEN
+  `generate` and `update` SHALL print no "tools" line, and on a platform other than `linux` SHALL not call `exists`
+  (partner of AC-26).
 - **AC-19:** WHEN `update` runs with `--dry-run`, THE SYSTEM SHALL print every sandbox line it would print without
   it, and write nothing (`settings.json`, `gates.json` and the manifest stay byte for byte).
 - **AC-20:** WHEN the detected `packageManager` is `""` and the forge is `glab`, THE SYSTEM SHALL write
@@ -360,11 +402,12 @@ status part of the line (after the padded name); `detect` passes `process.platfo
     "OS sandbox (Bash only)" says:
     - it covers Bash and its child processes only. Read, Edit, Write, WebFetch, WebSearch, MCP servers and hooks run
       outside it;
-    - Bash reaches only the domains in `gates.json` → `sandbox.allowedDomains`; WebFetch is not limited by it;
+    - Bash reaches only the domains in `gates.json` → `sandbox.allowedDomains` in these words: "only the listed
+      domains are reached without a question" (true whether Claude Code refuses or asks about another domain);
+      WebFetch is not limited by it;
     - the secret folders (all nine named) are unreadable for Bash; the Read tool is not covered, guard-file still
       handles it; `~/.config/gh` stays readable on purpose; git over SSH fails inside the sandbox, because `~/.ssh`
-      is unreadable; a removed secret folder comes back on `update`, and `sandbox.filesystem.allowRead` re-opens a
-      path;
+      is unreadable; if you remove a secret folder from `denyRead`, `update` keeps it removed and warns on each run;
     - a `false` in user settings, `--settings` or managed settings wins over the project value. Loosening entries
       in the repo's settings files are ignored only when managed settings or `--settings` set
       `allowUnsandboxedCommands: false`. It shows the block `{"sandbox": {"enabled": true, "failIfUnavailable":
@@ -372,12 +415,13 @@ status part of the line (after the padded name); `detect` passes `process.platfo
       repo cannot loosen;
     - `sandbox.excludedCommands` runs a command outside the sandbox;
     - on Linux and WSL2 the sandbox needs `bwrap` and `socat`; without them Bash commands fail
-      (`failIfUnavailable`); `agent-stack detect` reports whether they are found, not whether the sandbox starts;
+      (`failIfUnavailable`); `generate` and `update` warn when one is missing; `agent-stack detect` reports whether
+      they are found, not whether the sandbox starts;
     - on native Windows the sandbox is not documented, so Bash commands most likely fail; use WSL2;
   - **Configuration** gains a row `sandbox` (`allowedDomains`: the domains Bash may reach; seeded from detection;
     `update` reads it).
   - The test checks: Limits holds `Blocklists for the tools`, `sed -i`, `heredoc`, `allowUnsandboxedCommands`,
-    `failIfUnavailable`, `--settings`, `managed`, the nine secret folders, `~/.config/gh`, `allowRead`, `bwrap`,
+    `failIfUnavailable`, `--settings`, `managed`, the nine secret folders, `~/.config/gh`, `bwrap`,
     `socat`, `guard-file`, `allowedDomains`, `excludedCommands`, `Windows`; the README has no match of
     `turn on Claude Code's \`/sandbox\`` and none (case-insensitive) of `cannot (escape|leave|get out of) the sandbox`.
 - **AC-22:** THE SYSTEM SHALL add a `0.5.0` entry to `CHANGELOG.md` above 0.4.8, with `### Upgrading from 0.4.8`,
@@ -388,7 +432,8 @@ status part of the line (after the padded name); `detect` passes `process.platfo
   - on Linux and WSL2 install `bwrap` and `socat` first, or Bash commands fail; on native Windows Bash commands most
     likely fail (use WSL2);
   - git over SSH in Bash fails (`~/.ssh` is unreadable); `git push` stays manual;
-  - a switch you set yourself is kept, with a warning.
+  - a switch you set yourself is kept, with a warning; a secret folder you removed from `denyRead` stays removed,
+    with a warning.
 
   The test checks the heading and each point by a key word: `update`, `allowedDomains`, `bwrap`, `socat`, `Windows`,
   `SSH`, `warning`.
@@ -399,14 +444,13 @@ status part of the line (after the padded name); `detect` passes `process.platfo
 
 - `detect` starts at most 2 more processes on Linux (one `PATH` lookup each for `bwrap` and `socat`) and 0 on other
   platforms.
-- `generate` and `update` make 0 network calls and start 0 more processes for the sandbox. `update` reads
-  `gates.json` at most once more than today.
+- `generate` and `update` make 0 network calls for the sandbox. They start at most 2 more processes on Linux (the
+  same two lookups) and 0 on other platforms. `update` reads `gates.json` at most once more than today.
 - The sandbox block adds at most 25 lines to the generated `settings.json` (`JSON.stringify(…, null, 2)`) for a
   domain list of 3 (the Contract example is exactly 25 lines).
 
 ## Out of scope
 
-- A `bwrap` / `socat` check in `generate` or `update`, and a hint after deploy (for the human to confirm).
 - Starting the sandbox in `detect` to prove it works (for example, AppArmor on Ubuntu 23.10+ can stop `bwrap` even
   when it is found). `detect` reports only what it found.
 - Writing to user settings (`~/.claude/settings.json`), managed settings or `settings.local.json`. A sandbox key the
@@ -418,7 +462,7 @@ status part of the line (after the padded name); `detect` passes `process.platfo
   `pip.conf` or `GOPROXY`, hosts a tool reaches only sometimes. The user adds them to `gates.json`.
 - A check that a domain in `gates.json` is a well-formed host name; Claude Code reads the list as it is.
 - Native Windows support: `detect` says "not checked", and the README and CHANGELOG warn that Bash commands most
-  likely fail there. The block is the same on every platform (for the human to confirm).
+  likely fail there. The block is the same on every platform.
 - Checking Claude Code's sandbox behaviour in automated tests (needs a real `claude`); How to verify does it by hand.
 - This repo's own `.claude/settings.json` (git-excluded); the maintainer runs `update` by hand.
 - The 0.5.0 release edits (version in `package.json`, CODEMAP): a separate release step.
@@ -428,8 +472,9 @@ status part of the line (after the padded name); `detect` passes `process.platfo
 **Pre-build check — by hand, before any code.** On macOS with a real `claude`, in a fresh pnpm repo with a GitHub
 remote, paste the Contract block into `.claude/settings.json` by hand, then start `claude` and ask it to run each
 command below. If a step does not give the expected result, stop: the builder writes no code, and the human changes
-this spec first. A permission prompt that offers to allow an unlisted domain also counts as a failure: the README
-would then wrongly say that Bash reaches only the listed domains.
+this spec first. Two results are decided in advance (Decisions): a prompt that asks about an unlisted domain is
+not a failure, and a `pnpm add` that fails only on the store write leads to a "## Changes" entry with
+`filesystem.allowWrite` for the store path.
 
 Before it: remove or rename any `sandbox` key in `~/.claude/settings.json` and in any managed settings file (both
 win over the project), and check that `ls ~/.ssh` works in a plain terminal (so "refused" below means the sandbox,
@@ -443,7 +488,7 @@ d=$(mktemp -d) && cd "$d" && git init -q -b main \
 # edit .claude/settings.json: add the Contract's "sandbox" block between "permissions" and "hooks"
 claude
 #   ls ~/.ssh                                    -> refused (denyRead; the `~` form works)
-#   curl -sI https://example.com                 -> refused, with no prompt to allow it
+#   curl -sI https://example.com                 -> refused, or Claude Code asks first (answer no: refused)
 #   then: "retry it without the sandbox"         -> still refused (project allowUnsandboxedCommands: false holds)
 #   curl -sI https://registry.npmjs.org          -> allowed
 #   pnpm add is-odd   (approve guard-bash's ask) -> works: the registry fetch and the pnpm store write
@@ -474,4 +519,7 @@ node <repo>/bin/cli.mjs detect | grep 'OS sandbox'
 
 ## Changes
 
-None (first version).
+- 2026-11-26 — AC-10, AC-17, AC-18, AC-21, AC-22 changed; AC-26, AC-27 added; NFRs, Contract and How to verify
+  changed. Why: Leonid's answers to the open decisions. A removed secret folder stays removed, with a warning. On
+  Linux, `generate` and `update` warn about missing `bwrap` or `socat`. The `allowWrite` store path and the domain
+  prompt are decided in advance. No ADR.

@@ -173,9 +173,9 @@ it here first.
   does not cover Read, Edit, Write, WebFetch, MCP servers or hooks.
 - **Sandbox block** — the `sandbox` object the harness writes into `.claude/settings.json`: the sandbox on, no retry
   outside it, the secret folders unreadable, network only to `gates.json` → `sandbox.allowedDomains`. `update`
-  merges it with the user's own `sandbox` keys: a switch the user set wins, with a warning when it is weaker. Two
-  exceptions, each announced: an object or list of the wrong type is replaced, and a secret folder the user removed
-  comes back.
+  merges it with the user's own `sandbox` keys: a switch the user set wins, with a warning when it is weaker, and a
+  secret folder the user removed stays removed, with a warning. One exception, announced: an object or list of the
+  wrong type is replaced.
 - **Interactive / autonomous** — `gates.json` → `mode`. Interactive asks the human; autonomous never asks,
   blocks instead, and records decisions under NEEDS HUMAN DECISION.
 - **Seed files** — files `init` writes once and `update` leaves alone: `CLAUDE.md`, `CODEMAP.md`,
