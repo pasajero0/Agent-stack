@@ -7,6 +7,18 @@ enforcement layer: deterministic hooks outside the model that gate a spec-driven
 before the spec is merged, no skipped tests, no "done" without evidence — plus the skills and subagents
 that drive that workflow. It is stack-agnostic: everything language-specific lives in one config file.
 
+- **Problem:** a coding agent writes code before the spec, weakens a test to make it pass, and says "done"
+  without evidence.
+- **For whom:** a developer who runs Claude Code on their own repository and wants a program, not the model, to
+  keep the order of work. The pipeline driver (`agent-stack run`) is a fixed pipeline of agent steps with
+  approval gates.
+- **What is checked:** regression evals (7 tasks: 5 on known agent failure modes — a weakened test, a test
+  conflict, an extra dependency, scope creep, a broken access check — and 2 plain ones; k = 3): 21/21 passed,
+  pass^k = 1, $1.24, run of 2026-11-25 —
+  [evals/results/2026-11-25-225105.json](evals/results/2026-11-25-225105.json).
+
+Read [Limits](#limits--read-before-trusting-it) before you trust it.
+
 ## Install
 
 ```bash
