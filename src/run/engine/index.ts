@@ -2,7 +2,7 @@
  * Engine entry points: start, resume, cancel, status. Spec: docs/specs/v04/SPEC.md, "CLI", AC-1, AC-23,
  * AC-28..30, AC-49..55. Modes plug in through `MODES`.
  */
-import { existsSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { DEFAULT_STAGE_PATTERN } from "../../claude/gates.js";
 import { loadRunConfig, readLanguage } from "../config.js";
 import { requireSameFlow } from "../spec-flow.js";
@@ -34,7 +34,7 @@ import { estimate, times } from "./timing.js";
 import { quickMode } from "./steps-quick.js";
 import { taskMode } from "./steps-task.js";
 import { parseNext } from "./transitions.js";
-import { readPlan, tasksPath } from "./plan-file.js";
+import { requirePlanOnResume } from "./plan-file.js";
 import { commandName, requireHarness } from "./command.js";
 
 export type { ExitCode } from "./loop.js";
@@ -224,21 +224,6 @@ function restoreRunBranch(dir: string, run: RunFile): void {
 
 /** Steps whose resume needs a clean tree (AC-49); spec and plan check their bounds when they start. */
 const CLEAN_ON_RESUME = new Set(["gate:spec-merge", "gate:spec-approve", "gate:plan-approve", "base-check"]);
-
-/** Task-mode steps that run before or at plan: on resume there is no approved plan to check (effort1 AC-15). */
-const BEFORE_PLAN = new Set(["clarify", "gate:answers", "spec", "gate:spec-approve", "gate:spec-merge", "plan"]);
-
-/**
- * effort1 AC-15: on resume of a task-mode run past plan, the stage's tasks.json (if there) must be a valid plan
- * by readPlan's rules, so a 0.4.7 plan exits 1 before the lock. At plan the file is a leftover: keepLeftover
- * deletes an invalid one and plans again.
- */
-function requirePlanOnResume(dir: string, cfg: RunConfig, run: RunFile): void {
-  if (run.mode !== "task" || run.stage === null || BEFORE_PLAN.has(run.next)) return;
-  if (run.next === "gate:limit" && run.returnTo !== null && BEFORE_PLAN.has(run.returnTo)) return;
-  if (!existsSync(tasksPath(dir, run.stage))) return;
-  readPlan(dir, cfg, run.stage, run.id);
-}
 
 const INTERRUPTED_FEEDBACK = "The previous session was interrupted; continue from `git status`.";
 

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { isObj } from "../config.js";
 import { RunError } from "../errors.js";
 import { criterionText } from "../prompts.js";
-import type { RunConfig } from "../types.js";
+import type { RunConfig, RunFile } from "../types.js";
 import { commandName } from "./command.js";
 import type { Complexity, Tier } from "./context.js";
 
@@ -157,6 +157,21 @@ export function readPlan(dir: string, cfg: RunConfig, stage: string, runId: stri
     throw new RunError(`${stageTmp(stage)}/tasks.json is no longer a valid plan: ${r}. ${end}`, 1);
   }
   return r;
+}
+
+/** Task-mode steps that run before or at plan: on resume there is no approved plan to check (effort1 AC-15). */
+const BEFORE_PLAN = new Set(["clarify", "gate:answers", "spec", "gate:spec-approve", "gate:spec-merge", "plan"]);
+
+/**
+ * effort1 AC-15: on resume of a task-mode run past plan, the stage's tasks.json (if there) must be a valid plan
+ * by readPlan's rules, so a 0.4.7 plan exits 1 before the lock. At plan the file is a leftover: keepLeftover
+ * deletes an invalid one and plans again.
+ */
+export function requirePlanOnResume(dir: string, cfg: RunConfig, run: RunFile): void {
+  if (run.mode !== "task" || run.stage === null || BEFORE_PLAN.has(run.next)) return;
+  if (run.next === "gate:limit" && run.returnTo !== null && BEFORE_PLAN.has(run.returnTo)) return;
+  if (!existsSync(tasksPath(dir, run.stage))) return;
+  readPlan(dir, cfg, run.stage, run.id);
 }
 
 /** The sha256 of a tasks.json text, kept in a plan-approve reject (AC-14). */
