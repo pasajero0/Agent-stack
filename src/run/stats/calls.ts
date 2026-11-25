@@ -85,6 +85,7 @@ export function readCalls(runDir: string, run: RunFile, live: boolean): RunCalls
     clarify: emptyRole(),
     spec: emptyRole(),
     plan: emptyRole(),
+    scout: emptyRole(),
     implement: emptyRole(),
     review: emptyRole(),
   };

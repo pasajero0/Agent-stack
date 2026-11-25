@@ -7,8 +7,9 @@
 // A response: { expectRole?, expectModel?, writes?: {path: content}, deletes?: string[], exec?: string,
 //               exit?: number, stdout?: string | object, sleepMs?: number, output?: unknown }
 // With expectRole set, the fake exits 9 unless the prompt's first non-empty line names the role and
-// `--model` fits it (opus for every role but implement; expectModel when given), and exits 9 when a role
-// other than implement gets `--effort` (effort1 AC-24). With expectEffort set, it exits 9 unless `--effort` equals it.
+// `--model` fits it (opus for every role but implement and scout; expectModel when given), and exits 9 when a role
+// other than implement or scout gets `--effort` (effort1 AC-24, scout1 AC-24). With expectEffort set, it exits 9
+// unless `--effort` equals it.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { execSync } from "node:child_process";
@@ -58,14 +59,16 @@ if (response.expectRole) {
   const role = String(response.expectRole);
   const model = flag("--model");
   const header = (prompt.split("\n").find((l) => l.trim() !== "") ?? "").toLowerCase();
-  const wantModel = response.expectModel ?? (role === "implement" ? null : "opus");
+  // implement and scout (scout1 AC-24) take their model from the routing, so every --model fits unless expectModel.
+  const routed = role === "implement" || role === "scout";
+  const wantModel = response.expectModel ?? (routed ? null : "opus");
   const modelOk = wantModel === null ? model !== null : model === wantModel;
   if (!modelOk || !header.includes(role.toLowerCase())) {
     process.stderr.write(`fake-claude: expected role ${role} (model ${wantModel ?? "any"}), got model ${model}, header "${header}"\n`);
     process.exit(9);
   }
-  // effort1 AC-24: only implement gets --effort.
-  if (role !== "implement" && argv.includes("--effort")) {
+  // effort1 AC-24, scout1 AC-24: only implement and scout get --effort.
+  if (!routed && argv.includes("--effort")) {
     process.stderr.write(`fake-claude: role ${role} must get no --effort\n`);
     process.exit(9);
   }

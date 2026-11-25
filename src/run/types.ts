@@ -9,7 +9,7 @@ export type RunStatus = "running" | "waiting" | "finished" | "cancelled";
 export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse" | "decision" | "test-conflict" | "tests-changed";
 
 /** Roles the driver calls Claude in. */
-export type Role = "clarify" | "spec" | "plan" | "implement" | "review";
+export type Role = "clarify" | "spec" | "plan" | "scout" | "implement" | "review";
 
 /** The step a run is at. `implement:<task>`, `checks:<task>`, `review:<task>`, `commit:<task>` carry a task id. */
 export type Next =

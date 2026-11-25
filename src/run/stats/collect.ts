@@ -101,6 +101,7 @@ function sumCalls(list: RunCalls[]): CallTotals {
       clarify: sumRole(list, "clarify"),
       spec: sumRole(list, "spec"),
       plan: sumRole(list, "plan"),
+      scout: sumRole(list, "scout"),
       implement: sumRole(list, "implement"),
       review: sumRole(list, "review"),
     },

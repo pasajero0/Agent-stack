@@ -72,6 +72,21 @@ export const roleSchemas: Record<Role, RoleSchema> = {
       needsHumanDecision: strArray,
     },
   },
+  // scout1: every item is checked (one bad item is a schema ending, AC-10); no maxItems, so a long list passes (AC-21).
+  scout: {
+    type: "object",
+    required: ["entries"],
+    properties: {
+      entries: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["path", "why"],
+          properties: { path: { type: "string" }, lines: { type: "string" }, why: { type: "string" } },
+        },
+      },
+    },
+  },
   implement: {
     type: "object",
     required: ["status", "report", "commit", "needsHumanDecision"],
@@ -236,6 +251,15 @@ function checkImplement(o: Obj): string | null {
   return null;
 }
 
+function checkEntry(e: unknown): boolean {
+  return isObj(e) && isStr(e.path) && isStr(e.why) && (e.lines === undefined || isStr(e.lines));
+}
+
+function checkScout(o: Obj): string | null {
+  if (!Array.isArray(o.entries) || !o.entries.every(checkEntry)) return "entries must be {path, lines?, why}[]";
+  return null;
+}
+
 function checkReview(o: Obj): string | null {
   if (!oneOf(o.spec, ["pass", "fail", "unclear"])) return "spec must be pass, fail or unclear";
   if (!oneOf(o.quality, ["pass", "fail"])) return "quality must be pass or fail";
@@ -259,6 +283,8 @@ export function validateOutput(role: Role, value: unknown): string | null {
       if (!isStr(value.summary)) return "summary must be a string";
       if (!Array.isArray(value.tasks)) return "tasks must be an array";
       return isStrArray(value.needsHumanDecision) ? null : "needsHumanDecision must be a string array";
+    case "scout":
+      return checkScout(value);
     case "implement":
       return checkImplement(value);
     case "review":

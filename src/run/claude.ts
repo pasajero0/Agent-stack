@@ -27,10 +27,14 @@ interface CallSpecBase {
   budgetUsd: number | null;
 }
 
-/** Keyed on role: `commands` is required for implement and absent for every other role. */
+/**
+ * Keyed on role: `commands` is required for implement and absent for every other role; `effort` (`--effort`,
+ * right after `--model`) goes only with implement and scout.
+ */
 export type CallSpec =
-  | (CallSpecBase & { role: "implement"; commands: CallCommands; /** `--effort`, right after `--model` (implement only). */ effort?: string })
-  | (CallSpecBase & { role: Exclude<Role, "implement">; commands?: never });
+  | (CallSpecBase & { role: "implement"; commands: CallCommands; effort?: string })
+  | (CallSpecBase & { role: "scout"; commands?: never; effort?: string })
+  | (CallSpecBase & { role: Exclude<Role, "implement" | "scout">; commands?: never; effort?: never });
 
 export interface CallIo {
   cwd: string;
@@ -96,6 +100,7 @@ const ROLE_TOOLS: Record<Role, { tools: string; mode: "default" | "acceptEdits" 
   spec: { tools: "Read,Glob,Grep,Write,Edit,Agent", mode: "acceptEdits" },
   // The driver writes tasks.json from the output (AC-12): Claude Code guards `.claude/` even under acceptEdits.
   plan: { tools: "Read,Glob,Grep", mode: "default" },
+  scout: { tools: "Read,Glob,Grep", mode: "default" },
   implement: { tools: "Read,Glob,Grep,Edit,Write,Bash", mode: "acceptEdits" },
   review: { tools: "Read,Glob,Grep", mode: "default" },
 };
@@ -146,7 +151,7 @@ export function buildArgs(spec: CallSpec, scope: CallScope): string[] {
     String(spec.maxTurns),
     "--model",
     spec.model,
-    ...(spec.role === "implement" && spec.effort !== undefined ? ["--effort", spec.effort] : []),
+    ...((spec.role === "implement" || spec.role === "scout") && spec.effort !== undefined ? ["--effort", spec.effort] : []),
     "--json-schema",
     JSON.stringify(spec.schema),
     "--tools",
