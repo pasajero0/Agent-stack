@@ -150,6 +150,13 @@
   function endsWithId(step, id) { return step.slice(-(id.length + 1)) === ':' + id; }
   function toggle(key) { open[key] = !open[key]; store('run-view.open', JSON.stringify(open)); render(window.RUN); }
   window.__toggle = toggle;
+  // Data never goes into inline JS: rows and findings carry data- attributes, read here.
+  document.getElementById('app').addEventListener('click', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest('[data-task],[data-finding]') : null;
+    if (!el) return;
+    if (el.dataset.finding) { window.__finding(el.dataset.finding); return; }
+    toggle('t:' + el.dataset.task);
+  });
   window.__qstep = function (n) { open.qstep = open.qstep === n ? '' : n; store('run-view.open', JSON.stringify(open)); render(window.RUN); };
   window.__theme = function (pick) { themePick = pick; store('run-view.theme', themePick); render(window.RUN); };
   window.__finding = function (id) { open['t:' + id] = true; store('run-view.open', JSON.stringify(open)); render(window.RUN);
@@ -210,7 +217,7 @@
     if (s.findings.length) {
       html.push('<div class="note bad">⚑ ' + esc(w.findings) + ': ' + s.findings.map(function (f) {
         var id = (/^([A-Z]+\d+)\b/.exec(f) || [])[1];
-        return id ? '<span class="finding" onclick="__finding(\'' + esc(id) + '\')">' + esc(f) + '</span>' : esc(f);
+        return id ? '<span class="finding" data-finding="' + esc(id) + '">' + esc(f) + '</span>' : esc(f);
       }).join(' · ') + '</div>');
     }
     if (s.tasks.length) {
@@ -325,7 +332,7 @@
       var costly = median > 0 && t.cost > 3 * median;
       var flags = (t.attempts > 1 ? '↻ ' : '') + (t.denials.length ? '⚠' + t.denials.length + ' ' : '') + (costly ? '$' : '');
       var isOpen = !!open['t:' + t.id];
-      html.push('<tr id="row-' + esc(t.id) + '" class="task ' + rc + '" onclick="__toggle(\'t:' + esc(t.id) + '\')">' +
+      html.push('<tr id="row-' + esc(t.id) + '" data-task="' + esc(t.id) + '" class="task ' + rc + '">' +
         '<td class="caret">' + (isOpen ? '▾' : '▸') + '</td><td class="mark">' + m + '</td><td class="mono">' + esc(t.id) + '</td>' +
         '<td class="title" title="' + esc(t.desc) + '">' + esc(title(t.desc)) + (active ? ' <span class="muted mono">· ' + esc(s.step.split(':')[0]) + '</span>' : '') + '</td>' +
         '<td class="mono">' + esc(t.model || '—') + '</td><td class="num mono">' + (rows.length ? mmss(sec) : '') + '</td>' +
