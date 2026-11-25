@@ -1,0 +1,18 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "sonnet",
+    "expectEffort": "medium",
+    "writes": {
+      "src/price.js": "/** The sum of the prices of the items, each price times its quantity. */\nexport function sumPrices(items) {\n  return items.reduce((sum, item) => sum + item.price * item.qty, 0);\n}\n",
+      "src/cart.js": "import { sumPrices } from \"./price.js\";\n\n/** The cart total, with the shipping cost added. */\nexport function cartTotal(items, shipping) {\n  return sumPrices(items) + shipping;\n}\n",
+      "src/invoice.js": "import { sumPrices } from \"./price.js\";\n\n/** One invoice line: the customer name and the amount due. */\nexport function invoiceLine(name, items) {\n  return `${name}: ${sumPrices(items)}`;\n}\n"
+    },
+    "output": {
+      "status": "DONE",
+      "report": "renamed totalPrice to sumPrices in price.js, cart.js and invoice.js",
+      "commit": { "type": "refactor", "subject": "Rename totalPrice to sumPrices." },
+      "needsHumanDecision": []
+    }
+  }
+]
