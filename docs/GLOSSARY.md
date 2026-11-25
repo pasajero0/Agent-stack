@@ -137,7 +137,8 @@ it here first.
 ## Evals
 
 - **Eval task** — one regression case for the driver: `evals/tasks/<id>/task.json` and a tiny fixture repo. It
-  names a mode, a description, the outcome the driver must reach and a check command. Not a *task* of a plan.
+  names a mode, a description, the outcome the driver must reach and a check command, and may name the routing
+  cell of its first implement call. Not a *task* of a plan.
 - **Eval runner** — `scripts/eval.mjs`: runs each eval task k times, each time in a fresh temp copy with the
   harness deployed, and writes a results file under `evals/results/`. It never changes this repo's code or runs.
 - **Try** — one run of one eval task by the eval runner, from a fresh temp copy to the check. Not an *attempt*:

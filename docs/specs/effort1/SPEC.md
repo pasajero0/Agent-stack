@@ -48,9 +48,9 @@ Leonid decided these in the grill (2026-11-25):
 From the task description:
 - No route in TypeScript code. The one source of the default routing block is the template the harness deploys.
   The `/plan` skill and the glossary only point to `gates.json → routing`.
-- Quick mode has no plan: Q1 uses the cell M·medium.
+- Quick mode has no plan: Q1 uses the cell M·medium, unless `--cell` names another cell (below).
 
-Added by this spec, for the human to confirm at gate:spec-approve:
+Leonid accepted these at the spec review (2026-11-25):
 - **Where the default lives:** `templates/claude/_routing.json`, a data file. A name starting with `_` is
   generator input and is not deployed (`src/claude/harness.ts:402`). `generate` and `update` both read it, so
   there is no second copy.
@@ -58,9 +58,17 @@ Added by this spec, for the human to confirm at gate:spec-approve:
   yes, or question 1 is no; else low. A task with no pattern to copy is never low.
 - **The limit gate's retry answers** name the retry route (`retry (a new attempt, opus · high)`), not "on Opus",
   because the human may change the retry route.
-- **The two new eval tasks run in quick mode**, the only mode the eval runner has (evals1). Both run on the cell
-  M·medium, and their checks assert that route. They measure whether M·medium copes with each extreme. Eval tasks in
-  task mode, which would test the plan's own cell, are out of scope.
+
+Leonid changed this one at the spec review (2026-11-25):
+- **The two new eval tasks test their own cells**, not M·medium. `run quick` gets a flag `--cell <tier>·<complexity>`
+  (e.g. `--cell L·low`): Q1 then uses that cell instead of M·medium. Without the flag quick mode stays on M·medium.
+  An eval `task.json` gets an optional `cell`; the eval runner passes it to `run quick` as `--cell`. `rename-many`
+  has cell L·low and expects sonnet · medium; `auth-boundary` has cell S·high and expects opus · high.
+
+Added by this spec to make that work (for the human to confirm):
+- **The run file keeps the cell** in a new optional field `cell`. A quick run that stops at a gate and resumes must
+  still use its cell, and `--resume` takes no `--cell`. This is the one exception to "no new run file field"
+  (Constraints). A run file without `cell` reads as `null`, as `estimateSec` does (v04 AC-81).
 
 ## Terms
 
@@ -73,7 +81,10 @@ task, attempt, driver, run, mode, role, gate, limit gate, eval task. Below is on
   `<model> · <effort>` in what the driver prints.
 - **Routing** — as in the glossary: the `routing` object in `.claude/gates.json`.
 - **Effort** — as in the glossary: the value of `claude --effort`.
-- **Cell** (local): one of the 9 entries `routing.<tier>.<complexity>`, e.g. `routing.L.low`.
+- **Cell** (local): one of the 9 entries `routing.<tier>.<complexity>`, e.g. `routing.L.low`. Named on the command
+  line and in an eval `task.json` as `<tier>·<complexity>`, e.g. `L·low`.
+- **Quick cell** (local): the cell Q1 uses: the one `run quick --cell` named, kept in the run file as `cell`, or
+  M·medium when there is none.
 - **Retry route** (local): `routing.retry`.
 - **Risky route** (local): `routing.risky`.
 - **Risky task** (local): a plan task whose `desc` or one of whose criterion texts holds a risk word (v04 Terms
@@ -95,9 +106,11 @@ The route of one implement call. The rows are checked in order; the first that f
 | any | `attempts` > 1, or a fix task `F<k>` | retry route | AC-3 |
 | plan task | a risky task | risky route | AC-4 |
 | plan task | any other | cell `routing.<tier>.<complexity>` | AC-2 |
+| Q1 (quick mode) | the run file's `cell` is set | that cell, e.g. `routing.L.low` | AC-28 |
 | Q1 (quick mode) | any other | cell `routing.M.medium` | AC-5 |
 
-The route is chosen again for every implement call. It is never stored in the run file.
+The route is chosen again for every implement call. It is never stored in the run file; only the quick cell's name
+is (AC-28).
 
 ## Contract
 
@@ -126,7 +139,8 @@ routing check prints one line per problem, in this order:
 3. unknown keys of `routing`, in the file's order;
 4. unknown keys of `S`, then of `M`, then of `L`, each in the file's order.
 
-`<got>` is `JSON.stringify` of the value. `<cmd>` is the command name, as in every other hint (v04 AC-73).
+`<got>` is `JSON.stringify` of the value, then each U+007F to U+009F printed as `?`. `<cmd>` is the command name,
+as in every other hint (v04 AC-73).
 
 | Problem | Line |
 | --- | --- |
@@ -139,7 +153,7 @@ routing check prints one line per problem, in this order:
 | an unknown key | `gates.json routing.<path> is not a routing key; remove it.` |
 
 `<path>` is the full path below `routing`, e.g. `L.medium` or `retry`. For an unknown key the key itself is printed
-as `JSON.stringify(key)`, e.g. `routing.S."extreme"`, so a key with control characters cannot fake a line. A missing tier, or one that is not an object,
+as `JSON.stringify(key)` with the same `?` rule, e.g. `routing.S."extreme"`, so a key with control characters cannot fake a line. A missing tier, or one that is not an object,
 gives its own line only, not three cell lines. The last line of the output is `Fix .claude/gates.json, then run
 again.` No message holds a route value, so the AC-22 grep of `src/` stays empty.
 
@@ -210,12 +224,46 @@ When update adds routing:
   extras) are as today;
 - a dry run prints `  ~ .claude/gates.json (routing block added)` in place of `  = .claude/gates.json (yours — kept)`.
 
+**`run quick --cell <tier>·<complexity>`.** A new option of `run`, help text
+`with run quick: the routing cell Q1 uses instead of M·medium, e.g. L·low`.
+- The allowed values are exactly the 9 strings `S·low`, `S·medium`, `S·high`, `M·low`, `M·medium`, `M·high`,
+  `L·low`, `L·medium`, `L·high` (`·` is U+00B7, no spaces, case as written).
+- The driver checks the flag with the other argument checks of `run` (`src/commands/run.ts`), before AC-1. As
+  there, the first problem that fits wins: it prints one line and exits 1, and nothing is written. The rows below are
+  in that order, and each sits at the place named:
+
+| Problem | Where among today's checks | Line |
+| --- | --- | --- |
+| `--cell` with `--resume`, `--status`, `--cancel`, `--watch` or `--stats` | right after the `--json` check, before any action runs | `--cell applies to run quick only.` |
+| `--cell` with mode `task` | right after the `--stage` check (so no mode and an unknown mode keep their lines) | `--cell applies to run quick only.` |
+| the value is not one of the 9 names | right after the row above | `--cell must be one of S·low, S·medium, S·high, M·low, M·medium, M·high, L·low, L·medium, L·high; got <got>.` |
+
+  `<got>` is `JSON.stringify` of the value, then each U+007F to U+009F printed as `?` (the `splitReason` rule), so
+  a value with control characters cannot fake a line. `--cell` with no value is refused by commander, as `--stage`
+  with no value is today.
+- The allowed values are the names of cells, not routes, so this list in `src/` does not break AC-22 or the first
+  Constraint.
+
+**Run file field `cell`.** `"cell": "L·low"`, or `null`. `run quick --cell` writes it when it creates the run
+file; every other run writes `null`. A run file without the key reads as `null`. A value that is not `null` and
+not one of the 9 names, or any non-null value in a task-mode run, makes the run file malformed (AC-31).
+
+**Eval `task.json → cell`** (evals1 Contract table gains a row):
+
+| Field | Rule | Message when it fails (evals1 AC-8) |
+| --- | --- | --- |
+| `cell` | optional; one of the 9 names above | `cell: must be one of S·low, S·medium, S·high, M·low, M·medium, M·high, L·low, L·medium, L·high` |
+
+With `cell`, the eval runner starts the try with `node <repo root>/bin/cli.mjs run quick --cell <cell>
+<description>` (argv, no shell, as evals1 says). Without it, the command is as today.
+
 ## Constraints
 
-- **Must not:** put a route, a model·effort pair or a cell value in TypeScript code. `generate` and `update` read
+- **Must not:** put a route (the `model·effort` value of a cell, `retry` or `risky`) in TypeScript code. The 9 cell
+  names (`L·low` …) of `--cell` are allowed in `src/`. `generate` and `update` read
   `templates/claude/_routing.json`. Check: the AC-22 test greps `src/` for `(opus|sonnet|haiku)·`.
-- **Must not:** add a dependency, a run file field or a new step. At most one new source file
-  (`src/run/routing.ts`). Check: review of `package.json` and `src/`; the run file `version` is unchanged.
+- **Must not:** add a dependency, a run file field other than `cell` (AC-28), or a new step. At most one new source
+  file (`src/run/routing.ts`). Check: review of `package.json` and `src/`; a run file of 0.4.7 still reads (AC-5).
 - **Must not:** change the argv of clarify, spec, plan or review. Check: the AC-13 test.
 - **Must keep:** every other key of an existing `gates.json`, with its value and order, when `update` adds routing.
   Check: the AC-16 test.
@@ -223,7 +271,8 @@ When update adds routing:
   them: v04 AC-12, AC-13, AC-16, AC-17, AC-31, AC-66, AC-68, AC-78, AC-79 (e.g.
   `tests/run/engine-task-plan.test.ts`, `tests/run/prompts.test.ts`, `tests/run/engine-quick.test.ts`,
   `tests/run/progress.test.ts`) and evals1 AC-18 and AC-24 (`tests/eval/fake-runs.test.ts` and
-  `tests/eval/task-set.test.ts`: their id lists and tables gain the 2 eval tasks). Test fixtures that write a `gates.json` gain the default routing.
+  `tests/eval/task-set.test.ts`: their id lists and tables gain the 2 eval tasks), evals1 AC-4 and AC-8 (the
+  `--cell` argv and the `cell` field). Test fixtures that write a `gates.json` gain the default routing.
   Check: `pnpm test`, `pnpm test:slow`.
 - **Must keep:** `.claude/bin/verify` and `trace` reading `tasks.json` as today; the two new fields are only
   extra keys for them. Check: `tests/hooks/` stays green.
@@ -243,13 +292,13 @@ When update adds routing:
   task `F<k>` in task or quick mode, THE SYSTEM SHALL use the retry route, whatever the tier, complexity or risk.
 - **AC-4:** WHEN implement starts the first attempt of a risky task, of any tier, THE SYSTEM SHALL use the risky
   route. With the default routing a risky L·low task runs on opus · high, not sonnet · medium.
-- **AC-5:** WHEN implement starts the first attempt of Q1 in quick mode, THE SYSTEM SHALL use the cell
-  `routing.M.medium`.
+- **AC-5:** WHEN implement starts the first attempt of Q1 in a quick run whose run file has `cell` null, or has no
+  `cell` key (a quick run started on 0.4.7 and resumed on 0.4.8), THE SYSTEM SHALL use the cell `routing.M.medium`.
 - **AC-6:** WHEN the plan role's output is checked (v04 AC-12), THE SYSTEM SHALL accept a task only with a
   `complexity` of low, medium or high, and an L task only with a non-empty `splitReason`. It SHALL write
   `complexity` to `tasks.json` for every task and `splitReason` for L tasks only.
 - **AC-7:** WHEN the driver calls `claude` for implement, THE SYSTEM SHALL pass `--model <model>` and, right after
-  it, `--effort <effort>` from the route of AC-2 to AC-5, and print the head line of the Contract.
+  it, `--effort <effort>` from the route of AC-2 to AC-5 and AC-28, and print the head line of the Contract.
 - **AC-8:** WHEN gate:plan-approve shows the plan, THE SYSTEM SHALL show each task as the Contract's card line: the
   tier, the complexity and the route of its first attempt after the risky route is applied, the `· risky` mark for a
   risky task, and `· not split: <splitReason>` for an L task.
@@ -262,6 +311,14 @@ When update adds routing:
 - **AC-11:** WHEN gate:limit offers a new attempt, THE SYSTEM SHALL name the retry route in the answer label, as the
   Contract says. These are the `r` answers of the reason tests-changed and of every reason that uses the `other`
   answers today (`src/run/engine/gates.ts:243`).
+- **AC-28:** WHEN `run quick --cell <tier>·<complexity>` starts a run with an allowed value, THE SYSTEM SHALL write
+  that value to the run file as `cell`. WHEN implement starts the first attempt of Q1 in a run whose `cell` is set,
+  THE SYSTEM SHALL use the cell `routing.<tier>.<complexity>` it names, also after `run --resume`. With the default
+  routing, `--cell S·high` runs Q1 on opus · high and `--cell L·low` on sonnet · medium. Later attempts and fix tasks
+  still use the retry route (AC-3).
+- **AC-29:** WHEN an eval `task.json` has a valid `cell`, THE SYSTEM SHALL start each try of it with
+  `run quick --cell <cell> <description>`, as the Contract says. Without `cell`, the eval runner SHALL run
+  `run quick <description>` as today (evals1 AC-4).
 
 ### Unhappy path
 
@@ -274,8 +331,8 @@ When update adds routing:
 - **AC-14:** IF a task of the plan role's output has no valid `complexity`, or an L task has no `splitReason`, one
   that is empty after trim, or one longer than 80 characters after trim, THEN THE SYSTEM SHALL treat the output as not a valid plan, with the Contract's message
   naming the task (undo and run plan once more, v04 AC-45) (partner of AC-6).
-- **AC-15:** IF a task-mode run resumes, its `next` is any step except clarify, spec, gate:spec-approve,
-  gate:spec-merge, plan, and gate:limit whose `returnTo` is plan, its stage's
+- **AC-15:** IF a task-mode run resumes, its `next` is any step except a step before plan (clarify, gate:answers, spec,
+  gate:spec-approve, gate:spec-merge), plan, and gate:limit whose `returnTo` is clarify, spec or plan, its stage's
   `tasks.json` exists, and that file lacks a valid `complexity` in a task (a plan written by 0.4.7), or an L task
   lacks a valid `splitReason`, THEN THE SYSTEM SHALL exit 1 before the lock, so the run file, `status` and `next`
   stay as they were (partner of AC-2, AC-8):
@@ -301,8 +358,8 @@ When update adds routing:
   was, print the Contract's warning for that case, and exit 0. WHEN `update` adds routing, every other key SHALL keep its value and its order
   (partner of AC-9).
 - **AC-17:** IF a task is a fix task or Q1, THEN THE SYSTEM SHALL not check `complexity` or `splitReason` for it:
-  they have no plan entry. A fix task SHALL never use a cell, and Q1 SHALL never use the risky route (partner of
-  AC-3, AC-5).
+  they have no plan entry. A fix task SHALL never use a cell, and Q1 SHALL never use the risky route, with or
+  without `--cell` (partner of AC-3, AC-5).
 - **AC-18:** IF a risky task is on an attempt after the first, THEN THE SYSTEM SHALL use the retry route, not the
   risky route: the retry route wins (partner of AC-4).
 - **AC-19:** IF `templates/claude/_routing.json` cannot be read or is not a valid routing by AC-1's rules, THEN
@@ -311,6 +368,15 @@ When update adds routing:
   AC-9, AC-10).
 - **AC-20:** IF the limit reason offers no new attempt (fuse, decision, test-conflict), THEN THE SYSTEM SHALL keep
   its answer labels as they are today (partner of AC-11).
+- **AC-30:** IF `--cell` has a value that is not one of the 9 names (e.g. `L.low`, `l·low`, `L·LOW`, `M·max`), or
+  goes with `run task`, `--resume`, `--status`, `--cancel`, `--watch` or `--stats`, THEN THE SYSTEM SHALL print the
+  Contract's line for that problem and exit 1 before AC-1: no run folder, no branch, no lock (partner of AC-28).
+- **AC-31:** IF the run file's `cell` is not `null` and not one of the 9 names, or is not `null` in a task-mode
+  run, THEN `run --resume` SHALL exit 1 with `run.json is malformed: cell` (`src/run/store.ts:76`), leave the run
+  file as it was, and never fall back to M·medium (partner of AC-28).
+- **AC-32:** IF an eval `task.json` has a `cell` that is not one of the 9 names, THEN the eval runner SHALL refuse
+  the set with code 1 before any try, with the Contract's message as evals1 AC-8 prints it:
+  `<id>/task.json: cell: must be one of …` (partner of AC-29).
 
 ### Edge cases
 
@@ -355,27 +421,35 @@ When update adds routing:
   `splitReason`, and the example.
 - **AC-24:** WHEN the fake claude (`tests/run/fake-claude.mjs`) gets a response with `expectEffort`, THE SYSTEM
   SHALL exit 9 unless `--effort` equals it. A response with `expectRole` other than implement SHALL exit 9 when
-  `--effort` is present. The engine tests use this to check AC-2 to AC-5, AC-7 and AC-13.
-- **AC-25:** THE SYSTEM SHALL ship two more eval tasks in `evals/tasks/`, in quick mode, with `pass` and `break`
-  fake scripts under `tests/eval/scripts/` as evals1 AC-18 says:
+  `--effort` is present. The engine tests use this to check AC-2 to AC-5, AC-7, AC-13 and AC-28.
+- **AC-25:** THE SYSTEM SHALL ship two more eval tasks in `evals/tasks/`, in quick mode, each with a `cell` chosen
+  to test that cell's route, and with `pass` and `break` fake scripts under `tests/eval/scripts/` as evals1 AC-18
+  says:
 
-  | id | Work (tier · complexity a plan would give) | `expect` | `answers` | `check` holds |
-  | --- | --- | --- | --- | --- |
-  | `rename-many` | rename one function that is defined in one file and called from two others; the fixture's tests do not name it (L · low: a mechanical rename across modules) | `finished` | `["a"]` | `git grep` finds the old name in no tracked file outside `.claude/`, the new one is defined, the tests pass, and the first implement call ran on sonnet · medium |
-  | `auth-boundary` | a one-line fix in an access check, with edge cases: a missing user, a user with no role (S · high) | `finished` | `["a"]` | a node script in `check` runs a table of at least 5 cases (owner, admin, other user, missing user, user with no role) and passes; under `src/` only the named file differs from `main`; the first implement call ran on sonnet · medium |
+  | id | Work | `cell` | `expect` | `answers` | `check` holds |
+  | --- | --- | --- | --- | --- | --- |
+  | `rename-many` | rename one function that is defined in one file and called from two others; the fixture's tests do not name it (a mechanical rename across modules) | `L·low` | `finished` | `["a"]` | `git grep` finds the old name in no tracked file outside `.claude/`, the new one is defined, the tests pass, and the first implement call ran on sonnet · medium |
+  | `auth-boundary` | a one-line fix in an access check, with edge cases: a missing user, a user with no role | `S·high` | `finished` | `["a"]` | a node script in `check` runs a table of at least 5 cases (owner, admin, other user, missing user, user with no role) and passes; under `src/` only the named file differs from `main`; the first implement call ran on opus · high |
 
-  - The `auth-boundary` table lives in `check`, not in the fixture's tests: base-check needs the fixture's tests
+  - With the default routing, L·low and M·medium are both sonnet · medium, so the `rename-many` route check alone
+    cannot tell that `--cell` worked. The `auth-boundary` check can (opus · high, not sonnet · medium), and the
+    AC-28 engine tests check every cell.
+
+  - The `auth-boundary` table lives inline in `check` (`node -e …`), not in a file of the temp copy that the
+    implementer could edit, and not in the fixture's tests: base-check needs the fixture's tests
     green at `main` (v04 AC-15). The fixture keeps its tests in `test/`, outside `src/`, so new test files of the
     implementer are allowed and do not break the "only the named file under `src/`" check.
-  - "The first implement call ran on sonnet · medium" means: the call file with the lowest number named
-    `*-implement.json` in the temp copy's run folder has `--model sonnet` and `--effort medium` in its `argv`.
-  - Each fixture keeps the evals1 AC-24 rules: at most 5 files, and `generate` writes a non-empty `commands.test`
-    that exits 0.
+  - "The first implement call ran on `<model>` · `<effort>`" means: the call file with the lowest number named
+    `*-implement.json` in the temp copy's run folder has `--model <model>` and `--effort <effort>` in its `argv`.
+  - Each fixture keeps the evals1 rules: at most 5 files (evals1 NFR), and `generate` writes a non-empty
+    `commands.test` that exits 0 (evals1 AC-24).
 - **AC-26:** THE SYSTEM SHALL add to `CHANGELOG.md` a 0.4.8 entry with `### Upgrading from 0.4.7`, which says:
   - run `agent-stack update`: it adds the routing block to `gates.json`;
   - a run started on 0.4.7 whose plan is written (at gate:plan-approve or later) stops with AC-15: add
     `complexity` (and `splitReason` for an L task) by hand, or cancel it; a run still at its plan step just runs plan again;
-  - the plan-approve card line and the implement head line changed (a script that matched them must change).
+  - the plan-approve card line and the implement head line changed (a script that matched them must change);
+  - new: `run quick --cell <tier>·<complexity>` picks the routing cell of Q1 (default M·medium), and an eval
+    `task.json` may set `cell`.
 
   `docs/defects.md` #41 SHALL be marked fixed in 0.4.8. The test checks both texts.
 - **AC-27:** THE SYSTEM SHALL edit the merged specs in place, each with a `## Changes` entry (date, what, why: effort1):
@@ -388,8 +462,15 @@ When update adds routing:
   - v04 Terms "Valid plan": each task also has a `complexity`, and an L task a `splitReason` (AC-6, AC-14);
   - v04 Contract: the implement argv line names `--effort`; the gate card example shows effort1's card line and
     the new `source`;
+  - v04 Contract, the CLI: `run` gains `--cell` (effort1 AC-28, AC-30); the run file gains `cell` (AC-28, AC-31);
   - evals1 AC-18 and AC-24: "the 5 eval tasks" becomes every eval task in `evals/tasks/`, the 5 of AC-24 plus the 2
-    of effort1 AC-25.
+    of effort1 AC-25;
+  - evals1 Contract `task.json` table, the `start` row of its state table, and AC-4: the optional `cell` and the
+    `--cell` argv (effort1 AC-29, AC-32);
+  - evals1 AC-8: "a missing required field (all but `answers`)" becomes "(all but `answers` and `cell`)";
+  - evals1 NFR: the full eval run is 7 eval tasks × 3 = 21 tries, about $2.10.
+
+  The glossary entry Eval task says that a `task.json` may also name a routing cell (done in this change).
 
   Check: `.claude/bin/trace v04` and `.claude/bin/trace evals1` pass.
 
@@ -405,7 +486,8 @@ When update adds routing:
 - A route, `--effort` or a new model for clarify, spec, plan or review.
 - Eval tasks in task mode, which would test the plan's own cell; the eval runner takes only `quick` (evals1).
 - `run --stats` by route or by effort.
-- A per-task route set by hand in `tasks.json`; a routing per mode.
+- A per-task route set by hand in `tasks.json`; a routing per mode; `--cell` for `run task` (its plan sets each
+  task's cell); a `--cell` value written with `.` or spaces in place of `·`.
 - Checking that the installed `claude` knows `--effort` (How to verify does it by hand once). A `claude` that
   refuses the flag fails the call as today (an infrastructure failure, v04 AC-36).
 - Moving an existing `routing` block to new defaults on `update`: once the key is there, it is the user's.
@@ -430,6 +512,8 @@ d=$(mktemp -d) && cd "$d" && git init -q -b main && git commit -q --allow-empty 
   && node <repo>/bin/cli.mjs generate >/dev/null \
   && jq '.routing.L.medium = "opus-high"' .claude/gates.json > g && mv g .claude/gates.json \
   && node <repo>/bin/cli.mjs run quick "x"; echo "exit $?"   # exit 1, names routing.L.medium
+# Manual: a bad --cell is refused before anything is written
+node <repo>/bin/cli.mjs run quick --cell L.low "x"; echo "exit $?"   # exit 1, lists the 9 cells
 ```
 
 ## Changes
