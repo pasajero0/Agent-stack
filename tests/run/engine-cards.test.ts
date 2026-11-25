@@ -24,7 +24,8 @@ describe("gate cards (AC-68, AC-69)", () => {
     await toPlanApprove(r, [plan()]);
     const card = r.run().card;
     expect(card?.gate).toBe("plan-approve");
-    expect(card?.source).toBe(sha256(readFileSync(join(r.dir, TASKS_PATH), "utf8")));
+    const routes = ["sonnet·low", "sonnet·medium", "opus·high", "sonnet·low", "sonnet·medium", "opus·high", "sonnet·medium", "opus·medium", "opus·high", "opus·high", "opus·high"];
+    expect(card?.source).toBe(sha256(`${readFileSync(join(r.dir, TASKS_PATH), "utf8")}\n${routes.join("\n")}`));
     expect(card?.facts).toContain(`full task text: ${TASKS_PATH}`);
     expect(card?.prompts[0]?.answers.map((a) => a.key)).toEqual(["a", "r", "c"]);
     const t = text(r);

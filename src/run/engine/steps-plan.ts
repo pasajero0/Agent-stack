@@ -141,8 +141,9 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
   const f = new Facts();
   for (const t of tasks) {
     const info = planTaskInfo(t, specMd);
-    const model = implementRoute(ctx.cfg.routing, info, { ...newTask(t.id), attempts: 1 }).model;
-    f.add(`${t.id}  ${t.tier} · ${model}${info.risky ? " · risky" : ""} · ${criteriaText(t.ac)}   ${t.desc}`);
+    const route = implementRoute(ctx.cfg.routing, info, { ...newTask(t.id), attempts: 1 });
+    const split = t.tier === "L" ? ` · not split: ${splitText(t.splitReason ?? "")}` : "";
+    f.add(`${t.id}  ${t.tier} · ${t.complexity} -> ${route.model} · ${route.effort}${info.risky ? " · risky" : ""}${split} · ${criteriaText(t.ac)}   ${t.desc}`);
     f.whole(`      verify: ${t.verify}`);
     // AC-77: Claude Code allows no command substitution by a rule, so --allowedTools never lets implement run it.
     if (/\$\(|`/.test(t.verify)) {
@@ -161,9 +162,21 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
     facts: f.list,
     keep: f.keep,
     prompts: [{ text: "approve the plan; each verify runs as written", default: null, answers: [A.approve, { ...A.reject, label: "reject (a comment follows; the plan is redone)" }, A.cancel] }],
-    source: sha256(text),
+    source: cardSource(ctx, text),
     hint: resumeHint(ctx.run.id),
   };
+}
+
+/** A splitReason on one line: each whitespace run is one space, other control chars are `?` (effort1 AC-8). */
+function splitText(s: string): string {
+  return s.replace(/\s+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "?");
+}
+
+/** The card's source: tasks.json and the 11 routes this process read, so a routing edit is a changed plan (effort1 AC-21). */
+function cardSource(ctx: Ctx, text: string): string {
+  const r = ctx.cfg.routing;
+  const routes = [r.S.low, r.S.medium, r.S.high, r.M.low, r.M.medium, r.M.high, r.L.low, r.L.medium, r.L.high, r.retry, r.risky];
+  return sha256(`${text}\n${routes.join("\n")}`);
 }
 
 /**
@@ -175,7 +188,7 @@ function planShown(ctx: Ctx, stage: string): PlanTask[] {
   const tasks = readPlan(ctx.projectDir, ctx.cfg, stage, ctx.run.id);
   const text = readFileSync(tasksPath(ctx.projectDir, stage), "utf8");
   const kept = ctx.run.card;
-  const changed = kept !== null && kept.gate === "plan-approve" && kept.source !== sha256(text);
+  const changed = kept !== null && kept.gate === "plan-approve" && kept.source !== cardSource(ctx, text);
   showCard(ctx, planCard(ctx, stage, tasks, text));
   if (changed && ctx.answering) throw new GateChanged(resumeHint(ctx.run.id));
   return tasks;
@@ -184,7 +197,7 @@ function planShown(ctx: Ctx, stage: string): PlanTask[] {
 /** The plan's sha256 now, after readPlan has checked the file is there (AC-68). */
 function planSource(ctx: Ctx, stage: string): string {
   readPlan(ctx.projectDir, ctx.cfg, stage, ctx.run.id);
-  return sha256(readFileSync(tasksPath(ctx.projectDir, stage), "utf8"));
+  return cardSource(ctx, readFileSync(tasksPath(ctx.projectDir, stage), "utf8"));
 }
 
 /** Approve, reject or cancel the plan (AC-12, AC-13, AC-14). */
