@@ -22,6 +22,8 @@ it here first.
   afterwards (implementation behind tests and `verify`). Where nothing checks after it — clarifying,
   specifying, planning, sizing, reviewing — use the strongest model. A missed defect in review costs more
   than the tokens saved (Superpowers measured 0 of 10 defects caught by reviewers on a small model).
+  A cheap helper whose output is only a hint to a strong role is allowed: the scout's map only says where
+  to read first, the driver checks that its paths exist, and the strong role still reads and judges.
 - **`ask` beats `deny` when a legitimate case exists.** In interactive mode a risky action asks the human;
   in autonomous mode, where nobody can answer, the same rule blocks.
 - **A hook catches mistakes; walls come from other layers.** Hooks are a blocklist. Real walls are
@@ -58,11 +60,11 @@ it here first.
 - **Complexity** — a task's low / medium / high: how hard its logic is, not how many files it touches. The plan
   sets it from four yes/no questions in the `/plan` skill.
 - **Effort** — the level Claude Code thinks at, `claude --effort`: low, medium, high, xhigh or max.
-- **Route** — the model and the effort of one implement call, written `model·effort` (`sonnet·low`). The driver
-  picks it from the routing: the retry route for a later attempt or a fix task, then the risky route, then the
-  cell of tier × complexity.
-- **Routing** — `.claude/gates.json → routing`: the route of each tier × complexity (9 cells), plus `retry` and
-  `risky`. Data, not code: the harness template is its one source, and the driver refuses a run when a value is
+- **Route** — the model and the effort of one implement or scout call, written `model·effort` (`sonnet·low`).
+  For implement the driver picks it from the routing: the retry route for a later attempt or a fix task, then the
+  risky route, then the cell of tier × complexity. The scout always uses `routing.scout`.
+- **Routing** — `.claude/gates.json → routing`: the route of each tier × complexity (9 cells), plus `retry`,
+  `risky` and `scout`. Data, not code: the harness template is its one source, and the driver refuses a run when a value is
   missing or wrong.
 - **Verify** — a task's command that fails before the task and passes after it; `.claude/bin/verify` runs
   it and records `passes`.
@@ -73,7 +75,7 @@ it here first.
 
 - **Driver** — `agent-stack run`: runs Claude Code headless one stage at a time, runs the checks itself,
   stops for the human at gates.
-- **Step** — one unit of the pipeline the driver executes: clarify, spec, plan, base-check, implement, checks,
+- **Step** — one unit of the pipeline the driver executes: scout, clarify, spec, plan, base-check, implement, checks,
   review, commit; a gate is a step that waits for the human. Not a *stage*: a stage is planned work with a
   spec.
 - **Run** — one execution of the pipeline for one piece of work; its state is the **run file**
@@ -83,7 +85,7 @@ it here first.
 - **Driver call** — a Claude process the driver started, with `AGENT_STACK_RUN=<run id>` in its environment;
   its hooks inherit that variable.
 - **Mode** — the path a run takes: **quick** (a small fix: implement → checks → review → accept), **task**
-  (clarify → spec → plan → implement → checks → review → accept), **bug** (a failing test first),
+  (scout → clarify → spec → plan → implement → checks → review → accept), **bug** (a failing test first),
   **refactor** (green before and after, tests untouched). There is no separate "big task" mode.
 - **Size** — task mode's own verdict on the work: **task** (full spec, one or two tasks), **story** (full spec,
   several tasks), **epic** (several stages; the run proposes a split and stops).
@@ -110,10 +112,14 @@ it here first.
     and left it alone. The human fixes the test or the spec, or answers; no attempt is counted.
   - **Tests changed** reason: the task deleted or weakened a test that was there before it, or changed a check
     config (CI, test or lint settings). The human allows the change or sends the task back.
-- **Role** — what one Claude call is asked to be: clarify, spec, plan, implement or review. Each role has
+- **Role** — what one Claude call is asked to be: scout, clarify, spec, plan, implement or review. Each role has
   its own tools, model and output schema. Its rules come from the project's skill or agent, never from a copy
-  in the driver. The role returns data, and the driver writes the files it owns,
-  such as `tasks.json` and the commits.
+  in the driver (scout and clarify have none: their few rules are in the driver's prompt). The role returns
+  data, and the driver writes the files it owns, such as `tasks.json`, `scout.md` and the commits.
+- **Scout** — the first step and role of a task run: one cheap read-only call (`routing.scout`) that lists the
+  files and line ranges that matter for the task, each with one line of why. The driver writes the list to the
+  run folder as `scout.md` and gives it to clarify, spec and plan as their starting map. The scout is never
+  re-run after a failed call: the run goes on without a map.
 - **Project-only call** — every call the driver makes loads only the project: its `.mcp.json`, project
   settings and CLAUDE.md. It loads nothing of the user's: no global CLAUDE.md, memory, plugins or account
   connectors. This keeps the user's private context out, and keeps the cost down (the account connectors
@@ -161,8 +167,9 @@ it here first.
   generated files, `tasks.json`).
 - **`gates.json`** — the project's settings for the gates. Yours: `update` never rewrites it, so new keys
   get defaults in code. One exception: `routing` has no default in code, so `update` adds the block when it is
-  missing, and leaves it alone once it is there.
+  missing, and adds a missing top-level key of it (such as `scout`). It never changes a value that is there.
 - **Interactive / autonomous** — `gates.json` → `mode`. Interactive asks the human; autonomous never asks,
   blocks instead, and records decisions under NEEDS HUMAN DECISION.
 - **Seed files** — files `init` writes once and `update` leaves alone: `CLAUDE.md`, `CODEMAP.md`,
-  `gates.json`, `settings.local.json`. One exception: `update` adds a missing `routing` block to `gates.json`.
+  `gates.json`, `settings.local.json`. One exception: `update` adds a missing `routing` block, or a missing top-level
+  key of it, to `gates.json`.
