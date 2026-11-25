@@ -50,5 +50,7 @@ The driver (`agent-stack run`) gives you the task, its criteria, the feedback of
 shell commands you may run. It runs the checks, the review and the commit itself.
 
 - Run only the commands the prompt lists; never run `.claude/bin/verify`.
+- Run only the task's verify and the tests of the files you changed (`pnpm vitest run <files>`), not the full
+  test command. The driver runs the full suite after you.
 - Answer in the caller's schema: `status` DONE, BLOCKED or TEST_CONFLICT (then `conflict` with the test, the
   criterion and the reason), a report of what you did, and a commit type and subject.

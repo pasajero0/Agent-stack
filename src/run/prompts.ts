@@ -161,7 +161,7 @@ export function implementPrompt(
   lines.push(
     "",
     p.commands.verify.trim() === "" ? "This task has no verify command." : `The task's verify: \`${p.commands.verify}\` (the driver runs it after you).`,
-    p.commands.test.trim() === "" ? "No test command is listed: do not try to run tests; say so in the report." : `The test command: \`${p.commands.test}\`.`,
+    p.commands.test.trim() === "" ? "No test command is listed: do not try to run tests; say so in the report." : `The test command: \`${p.commands.test}\`. The driver runs it in full after you. Run only the task's verify and the tests of the files you changed (\`pnpm vitest run <files>\`), not the full test command.`,
     "",
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),

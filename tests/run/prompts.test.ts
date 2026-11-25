@@ -236,6 +236,14 @@ describe("role prompts", () => {
     expect(p.slice(p.indexOf("Shell commands you may run"))).not.toContain("lint");
   });
 
+  it("Q1: implement says to run only the verify and the tests of changed files, and still names the test command", () => {
+    const p = implementPrompt(IMPL, { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "pnpm test", lint: "", verify: "" } });
+    expect(flat(p)).toMatch(/only the task's verify and the tests of the files you changed/);
+    expect(p).toContain("pnpm vitest run <files>");
+    expect(flat(p)).toMatch(/not the full test command/);
+    expect(p).toContain("The test command: `pnpm test`.");
+  });
+
   it("v04 AC-4: review labels the report UNVERIFIED CLAIMS FROM THE IMPLEMENTER", () => {
     const p = reviewPrompt(agentProject(), { taskId: "T1", taskDesc: "d", criteria: ["c"], diff: "+line", report: "all good", verify: "" });
     expect(p).toContain("UNVERIFIED CLAIMS FROM THE IMPLEMENTER");
