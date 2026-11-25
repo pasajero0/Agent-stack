@@ -3,5 +3,6 @@
   "M": { "low": "sonnet·low", "medium": "sonnet·medium", "high": "opus·high" },
   "L": { "low": "sonnet·medium", "medium": "opus·medium", "high": "opus·high" },
   "retry": "opus·high",
-  "risky": "opus·high"
+  "risky": "opus·high",
+  "scout": "haiku·low"
 }

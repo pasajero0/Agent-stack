@@ -14,6 +14,7 @@ const ROUTING: Routing = {
   L: { low: "sonnet·medium", medium: "opus·medium", high: "opus·high" },
   retry: "opus·high",
   risky: "opus·high",
+  scout: "haiku·low",
 };
 
 const label = (reason: string, routing: Routing, key = "r"): string | undefined =>

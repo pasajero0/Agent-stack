@@ -26,6 +26,7 @@ const ROUTING: Routing = {
   L: { low: "sonnet·xhigh", medium: "opus·medium", high: "opus·low" },
   retry: "opus·xhigh",
   risky: "opus·max",
+  scout: "haiku·low",
 };
 
 /** An implement response that checks the model and the effort of its call. */

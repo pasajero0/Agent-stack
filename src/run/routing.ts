@@ -29,7 +29,7 @@ export interface Route {
 }
 
 /** A routing that passed `checkRouting`: every value is a route string. */
-export type Routing = Record<Tier, Record<Complexity, string>> & { retry: string; risky: string };
+export type Routing = Record<Tier, Record<Complexity, string>> & { retry: string; risky: string; scout: string };
 
 const ROUTE_PATTERN = /^(opus|sonnet|haiku)·(low|medium|high|xhigh|max)$/;
 
@@ -89,11 +89,15 @@ export function checkRouting(value: unknown, cmd = "agent-stack"): string[] {
       if (p) lines.push(p);
     }
   }
-  for (const k of ["retry", "risky"]) {
+  for (const k of ["retry", "risky", "scout"]) {
+    if (k === "scout" && !has(value, k)) {
+      lines.push(`gates.json routing.scout is missing. Run ${cmd} update to add it (CHANGELOG: Upgrading from 0.4.7).`);
+      continue;
+    }
     const p = routeProblem(k, value, k);
     if (p) lines.push(p);
   }
-  const top = new Set<string>([...TIERS, "retry", "risky"]);
+  const top = new Set<string>([...TIERS, "retry", "risky", "scout"]);
   for (const k of Object.keys(value)) {
     if (!top.has(k)) lines.push(`gates.json routing.${show(k)} is not a routing key; remove it.`);
   }

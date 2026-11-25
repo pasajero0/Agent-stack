@@ -14,6 +14,7 @@ const CONTRACT = {
   L: { low: "sonnet·medium", medium: "opus·medium", high: "opus·high" },
   retry: "opus·high",
   risky: "opus·high",
+  scout: "haiku·low",
 };
 
 const SHIPPED = join(__dirname, "..", "..", "templates", "claude");

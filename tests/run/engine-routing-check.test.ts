@@ -25,6 +25,8 @@ const HINT = '"<model>·<effort>"';
 const badRoute = (path: string, got: string): string =>
   `gates.json routing.${path} must be ${HINT} (model opus, sonnet or haiku; effort low, medium, high, xhigh or max); got ${got}.`;
 
+const SCOUT_MISSING = "gates.json routing.scout is missing. Run agent-stack update to add it (CHANGELOG: Upgrading from 0.4.7).";
+
 const gatesFile = (r: Repo): string => join(r.dir, ".claude", "gates.json");
 
 /** Writes gates.json with `routing` set to `value`; `undefined` removes the key. */
@@ -134,6 +136,7 @@ describe("the routing check at run start and resume", () => {
       'gates.json routing.L must be an object with low, medium and high; got "big".',
       `gates.json routing.retry is missing. Add it as ${HINT}.`,
       badRoute("risky", '"gpt·high"'),
+      SCOUT_MISSING,
       'gates.json routing."zzz" is not a routing key; remove it.',
       'gates.json routing.S."odd" is not a routing key; remove it.',
       'gates.json routing.M."extra" is not a routing key; remove it.',

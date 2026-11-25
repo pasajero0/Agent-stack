@@ -23,6 +23,7 @@ const ROUTING: Routing = {
   L: { low: "sonnet·xhigh", medium: "opus·medium", high: "opus·low" },
   retry: "opus·xhigh",
   risky: "opus·max",
+  scout: "haiku·low",
 };
 
 const call = (model: string, effort: string, o: Parameters<typeof impl>[0] = {}): Json => ({ ...impl(o), expectModel: model, expectEffort: effort });
