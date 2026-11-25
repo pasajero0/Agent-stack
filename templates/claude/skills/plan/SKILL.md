@@ -1,5 +1,5 @@
 ---
-description: Break a merged stage spec into tasks in .claude/tmp/<stage>/tasks.json — every acceptance criterion covered, each task with a verify command and a model tier — on a stage branch. Use when the user says "/plan", "break it down", or right after a spec MR is merged.
+description: Break a merged stage spec into tasks in .claude/tmp/<stage>/tasks.json — every acceptance criterion covered, each task with a verify command, a tier and a complexity — on a stage branch. Use when the user says "/plan", "break it down", or right after a spec MR is merged.
 argument-hint: "<stage id, e.g. A0>"
 ---
 
@@ -33,7 +33,11 @@ argument-hint: "<stage id, e.g. A0>"
    { "stage": "$ARGUMENTS",
      "tasks": [
        { "id": "T1", "ac": ["AC-1", "AC-2"], "desc": "tests and code for AC-1, AC-2",
-         "tier": "S", "verify": "<command that fails now and passes when T1 is done>", "passes": false } ] }
+         "tier": "S", "complexity": "low",
+         "verify": "<command that fails now and passes when T1 is done>", "passes": false },
+       { "id": "T2", "ac": ["AC-3"], "desc": "rename the config loader in every module",
+         "tier": "L", "complexity": "low", "splitReason": "rename used by all modules",
+         "verify": "<command that fails now and passes when T2 is done>", "passes": false } ] }
    ```
 
    - **Every AC id appears in at least one task.** Every task lists its ACs.
@@ -55,25 +59,45 @@ argument-hint: "<stage id, e.g. A0>"
    - **A missing test file must be red.** A runner given a file list may skip a file that does not exist yet
      and pass. So a verify that names test files starts with `test -f <file> &&` for each one.
    - **One task = one reviewable step** (roughly one commit). Split anything bigger.
-3. **Assign a tier** to each task — it picks the implementer's model:
+3. **Assign a tier and a complexity** to each task (see `## Complexity`). Tier × complexity is the task's
+   cell; under the driver, `.claude/gates.json → routing` picks the implementer's model and effort for it:
 
-   | Tier | When | Implementer model |
-   | --- | --- | --- |
-   | S | mechanical, one file, pattern already in the codebase | `sonnet`, low effort |
-   | M | normal feature work across a few files | `sonnet` |
-   | L | new design, concurrency, data migration, security, money, auth | `opus` |
+   | Tier | When |
+   | --- | --- |
+   | S | mechanical, one file, pattern already in the codebase |
+   | M | normal feature work across a few files |
+   | L | new design, concurrency, data migration, security, money, auth |
 
-   Under the driver (`agent-stack run`), a retry runs on Opus. By hand, after two failed `verify` runs move
-   the task one tier up (`.claude/bin/verify` prints the hint).
+   Under the driver (`agent-stack run`), a retry runs on the retry route (`routing.retry`). If a task fails
+   `verify` twice: by hand, use the model of `routing.retry` (`.claude/bin/verify` prints the hint).
 4. **Run `.claude/bin/verify`** once: every task should fail now (red). A `verify` that already passes
    proves nothing — fix it, except a docs-only task's `true`, which is green by design. Under the driver, skip this step: the driver runs each task's verify before its
    first attempt and notes one that is already green.
-5. Show the plan to the human as a table (id, ACs, tier, verify) before implementing.
+5. Show the plan to the human as a table (id, ACs, tier, complexity, verify) before implementing.
+
+## Complexity
+
+Answer four yes/no questions for each task:
+
+1. Is there a pattern in the code to copy? (towards low)
+2. Is there more than one reasonable solution? (at least medium)
+3. Does the spec leave a decision open, or is the logic not obvious: edge cases, order, state? (at least medium)
+4. Does it touch security, money, data or concurrency? (high)
+
+The rule: high when question 4 is yes; else medium when question 2 or 3 is yes, or question 1 is no; else low.
+A task with no pattern to copy is never low.
+
+**Tier L and splitting.** Split an L task with logic into blocks when each block can leave the tree green
+(expand-contract: add the new beside the old, move the code block by block, remove the old). Keep one L task
+only when the change is atomic (a state in between does not build or pass) or purely mechanical (a rename across
+many files). Then the complexity comes from the logic, not the number of files: an atomic mechanical rename is
+L · low. Every L task has a `splitReason`: one line, at most 80 characters, on why it is not split.
 
 ## Then
 
 Under the driver (`agent-stack run`): stop here — the driver runs the tasks, checks and commits.
 
-By hand: implement one task at a time with the `implementer` subagent (model per tier) — its tests
+By hand: implement one task at a time with the `implementer` subagent, spawned with the model of the task's
+cell in `.claude/gates.json → routing` — its tests
 first, then the code — run `.claude/bin/verify <id>` after each, commit, next. Report with the contract
 from CLAUDE.md.

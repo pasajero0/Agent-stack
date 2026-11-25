@@ -170,12 +170,13 @@ describe("role prompts", () => {
     expect(p).toMatch(/skip the precondition and step 1/);
   });
 
-  it("v04 AC-17: the /plan skill says every task ends green, no test-only tasks, and a driver retry runs on Opus", () => {
+  it("v04 AC-17: the /plan skill says every task ends green, no test-only tasks, and a driver retry runs on the retry route", () => {
     const skill = readFileSync(new URL("../../templates/claude/skills/plan/SKILL.md", import.meta.url), "utf8");
     const flat = skill.replace(/\s+/g, " ");
     expect(flat).toMatch(/every task ends green/i);
     expect(flat).toMatch(/there are no test-only tasks/i);
-    expect(flat).toMatch(/under the driver \(`agent-stack run`\), a retry runs on Opus/i);
+    // effort1 AC-27 edits v04 AC-17: the retry runs on the retry route, not "on Opus".
+    expect(flat).toMatch(/under the driver \(`agent-stack run`\), a retry runs on the retry route/i);
   });
 
   it("v04 AC-65: the /plan skill says a verify must be able to fail, with the same patterns", () => {

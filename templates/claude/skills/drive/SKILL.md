@@ -39,13 +39,13 @@ Use `agent-stack` when `command -v agent-stack` finds it. Otherwise take the com
    Monitor command:** stopping the watch would stop the run.
    **Keep the human informed while it runs.** Follow that file with the Monitor tool (`tail -f`), filtered to the
    lines that start with `->` (a step's call starts) or `   ok in` / `   <kind> in` (it ends). Tell the human one
-   short line for each: "implement:T1 started (sonnet)", "done in 90s". Not each tool line: those are for the
+   short line for each: "implement:T1 started (sonnet · low)", "done in 90s". Not each tool line: those are for the
    status line and the log. Without a Monitor tool, say once that the run is going and how long a step usually
    takes. The status line (`.claude/bin/run-status`, see README) shows the step, its time and the cost. When a
    run starts, give the human the live view once: `<cmd> run --watch` in a terminal next to this chat.
 2. **At each stop** (exit 3), run `<cmd> run --status --json`. Show the `card` in the chat language:
    - one line: what happened (the title);
-   - the facts that matter for the decision, in plain words (for a plan: each task, its model and its verify);
+   - the facts that matter for the decision, in plain words (for a plan: each task, its route and its verify);
    - what is needed from the human, the answers it takes, and your recommendation with one reason.
    At gate:spec-merge the card has no answers. Show the spec short, so the human can decide without reading the
    file in a terminal: its purpose in one or two lines, each criterion in one line, the constraints, what is out

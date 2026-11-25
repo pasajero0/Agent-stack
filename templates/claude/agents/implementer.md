@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Use to implement exactly one task from the active stage's tasks.json (.claude/tmp/<stage>/tasks.json) — writes its failing tests first, then the code that makes its verify pass, and never weakens an existing test. Spawn with the model for the task's tier (S/M → sonnet, L → opus).
+description: Use to implement exactly one task from the active stage's tasks.json (.claude/tmp/<stage>/tasks.json) — writes its failing tests first, then the code that makes its verify pass, and never weakens an existing test. Under the driver, .claude/gates.json → routing picks its model and effort; by hand, spawn it with the model of the task's cell in routing.
 model: sonnet
 effort: medium
 tools: Read, Glob, Grep, Edit, Write, Bash
