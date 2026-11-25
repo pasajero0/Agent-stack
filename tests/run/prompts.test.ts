@@ -236,12 +236,19 @@ describe("role prompts", () => {
     expect(p.slice(p.indexOf("Shell commands you may run"))).not.toContain("lint");
   });
 
-  it("Q1: implement says to run only the verify and the tests of changed files, and still names the test command", () => {
+  it("F1: implement says to run the task's verify, not the full test command, and still names the test command", () => {
     const p = implementPrompt(IMPL, { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "pnpm test", lint: "", verify: "" } });
-    expect(flat(p)).toMatch(/only the task's verify and the tests of the files you changed/);
-    expect(p).toContain("pnpm vitest run <files>");
-    expect(flat(p)).toMatch(/not the full test command/);
+    expect(flat(p)).toMatch(/Run the task's verify \(it runs this task's tests; it is allowed exactly as written\)/);
+    expect(flat(p)).toMatch(/do not run the full test command, the driver runs it after you/);
+    expect(p).not.toContain("pnpm vitest");
     expect(p).toContain("The test command: `pnpm test`.");
+  });
+
+  it("F1: the implementer agent's 'Under the driver' says the same and does not suggest pnpm vitest", () => {
+    const agent = flat(readFileSync(join(IMPL, ".claude", "agents", "implementer.md"), "utf8"));
+    expect(agent).toMatch(/Run the task's verify \(it runs this task's tests; it is allowed exactly as written\)/);
+    expect(agent).toMatch(/do not run the full test command, the driver runs it after you/);
+    expect(agent).not.toContain("pnpm vitest");
   });
 
   it("v04 AC-4: review labels the report UNVERIFIED CLAIMS FROM THE IMPLEMENTER", () => {
