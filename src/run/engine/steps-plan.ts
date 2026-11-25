@@ -20,6 +20,7 @@ import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, task
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, withFeedback, type RoleMark } from "./role-bounds.js";
 import { implementRoute, lastCallOutput } from "./steps-implement.js";
 import { toLimit } from "./task-core.js";
+import { readMapLines, scoutMapPath } from "./steps-scout.js";
 import { proposalOf, stageOf } from "./steps-spec.js";
 import { transition, type StepEvent } from "./transitions.js";
 
@@ -94,7 +95,7 @@ const planStep: StepHandler = async (ctx) => {
   const file = tasksPath(dir, stage);
   if (keepLeftover(ctx, stage, specMd)) return { type: "planned" };
   const mark: RoleMark = { head: headSha(dir), branch: run.branch };
-  const base = planPrompt(dir, { stage, title: proposalOf(run).stage.title, comment: lastReject(run)?.comment ?? null });
+  const base = planPrompt(dir, { stage, title: proposalOf(run).stage.title, comment: lastReject(run)?.comment ?? null, map: readMapLines(scoutMapPath(ctx)) });
   const human = humanFeedback(run);
   let feedback: string | null = null;
   let last: string[] = [];

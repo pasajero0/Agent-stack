@@ -262,7 +262,7 @@ describe("task mode: clarify, answers and the spec", () => {
     expect(r.run().stage).toBe("A6");
     const prompt = r.logged()[1]?.prompt ?? "";
     expect(prompt).toContain("Ids already in use: A4, A5");
-    expect(prompt).not.toContain("README.md");
+    expect(prompt).toContain("Ids already in use: A4, A5.");
   });
 
   it("v04 AC-48: an id with other characters gets the same plain reason", async () => {

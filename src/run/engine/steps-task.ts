@@ -20,7 +20,7 @@ import { withFeedback } from "./role-bounds.js";
 import { lintItems, toLimit } from "./task-core.js";
 import { planHandlers, planTaskInfo } from "./steps-plan.js";
 import { proposalOf, specHandlers, stageOf } from "./steps-spec.js";
-import { scout } from "./steps-scout.js";
+import { readMapLines, scout, scoutMapPath } from "./steps-scout.js";
 import type { StepEvent } from "./transitions.js";
 import { commandName } from "./command.js";
 
@@ -73,7 +73,7 @@ function freeStageId(ctx: Ctx, used: string[]): string {
 }
 
 const clarify: StepHandler = async (ctx) => {
-  const base = clarifyPrompt({ description: ctx.run.description, used: usedStageIds(ctx) });
+  const base = clarifyPrompt({ description: ctx.run.description, used: usedStageIds(ctx), map: readMapLines(scoutMapPath(ctx)) });
   const r = await judgeCall(ctx, "clarify", (fb) => withFeedback(base, [fb]), parseClarify);
   if (r.kind === "fuse") return toLimit(ctx, "fuse", "clarify");
   ctx.run.proposal = r.value;

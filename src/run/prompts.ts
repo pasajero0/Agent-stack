@@ -54,7 +54,17 @@ export function scoutPrompt(p: { description: string }): string {
   ].join("\n");
 }
 
-export function clarifyPrompt(p: { description: string; used: string[] }): string {
+/** The map section (scout1 Contract "The map section", AC-5, AC-17): an empty line, the heading, the entry lines; none with no lines. */
+function mapSection(map: readonly string[] | undefined): string[] {
+  if (!map || map.length === 0) return [];
+  return [
+    "",
+    "Starting map (from the driver's scout, a cheap read-only call; it can miss places or be wrong). Read these places first; read a whole file only when the listed lines are not enough:",
+    ...map,
+  ];
+}
+
+export function clarifyPrompt(p: { description: string; used: string[]; map?: readonly string[] }): string {
   return [
     "# Role: clarify",
     "",
@@ -62,6 +72,7 @@ export function clarifyPrompt(p: { description: string; used: string[] }): strin
     "",
     "Task description:",
     p.description,
+    ...mapSection(p.map),
     "",
     "- Ask at most 5 questions, each with a recommended answer.",
     "- Size the work: task, story or epic.",
@@ -73,7 +84,7 @@ export function clarifyPrompt(p: { description: string; used: string[] }): strin
 
 export function specPrompt(
   projectDir: string,
-  p: { stage: string; title: string; description: string; answers: AnswerRecord[] }
+  p: { stage: string; title: string; description: string; answers: AnswerRecord[]; map?: readonly string[] }
 ): string {
   const skill = loadSkill(projectDir, "spec", `${p.stage} ${p.title}`);
   const answers = p.answers.map((a) => `Q: ${a.question}\nA: ${a.answer}`).join("\n\n");
@@ -94,6 +105,7 @@ export function specPrompt(
     "",
     "Answers (these are the grill):",
     answers || "(none)",
+    ...mapSection(p.map),
     "",
     "The /spec skill follows.",
     "",
@@ -101,7 +113,10 @@ export function specPrompt(
   ].join("\n");
 }
 
-export function planPrompt(projectDir: string, p: { stage: string; title: string; comment?: string | null }): string {
+export function planPrompt(
+  projectDir: string,
+  p: { stage: string; title: string; comment?: string | null; map?: readonly string[] }
+): string {
   const skill = loadSkill(projectDir, "plan", `${p.stage} ${p.title}`);
   const lines = [
     "# Role: plan",
@@ -113,7 +128,7 @@ export function planPrompt(projectDir: string, p: { stage: string; title: string
     "Do not write tasks.json: return the tasks in your output (`tasks`); the program writes the file.",
   ];
   if (p.comment) lines.push("", "The human rejected the previous plan. Their comment:", p.comment);
-  lines.push("", "The /plan skill follows.", "", skill);
+  lines.push(...mapSection(p.map), "", "The /plan skill follows.", "", skill);
   return lines.join("\n");
 }
 

@@ -21,6 +21,7 @@ import { requireRecordedChange, section, specBlob, specChanged } from "./spec-ch
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, under, withFeedback, type RoleMark } from "./role-bounds.js";
 import { toLimit } from "./task-core.js";
 import { commandName } from "./command.js";
+import { readMapLines, scoutMapPath } from "./steps-scout.js";
 
 /** The stored clarify output; a run file without a valid one cannot go on. */
 export function proposalOf(run: RunFile): ClarifyOutput {
@@ -102,7 +103,7 @@ const specStep: StepHandler = async (ctx) => {
   requireBranch(ctx, name);
   const mark: RoleMark = { head: headSha(dir), branch: name };
   const file = specPath(cfg, stage);
-  const base = specPrompt(dir, { stage, title, description: run.description, answers: run.answers });
+  const base = specPrompt(dir, { stage, title, description: run.description, answers: run.answers, map: readMapLines(scoutMapPath(ctx)) });
   const human = humanFeedback(run);
   let feedback: string | null = null;
   let last: string[] = [];
