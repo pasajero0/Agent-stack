@@ -172,7 +172,7 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
  */
 function planShown(ctx: Ctx, stage: string): PlanTask[] {
   // readPlan first: a plan removed while the gate waited is its clean refusal, not a crash.
-  const tasks = readPlan(ctx.projectDir, ctx.cfg, stage);
+  const tasks = readPlan(ctx.projectDir, ctx.cfg, stage, ctx.run.id);
   const text = readFileSync(tasksPath(ctx.projectDir, stage), "utf8");
   const kept = ctx.run.card;
   const changed = kept !== null && kept.gate === "plan-approve" && kept.source !== sha256(text);
@@ -183,7 +183,7 @@ function planShown(ctx: Ctx, stage: string): PlanTask[] {
 
 /** The plan's sha256 now, after readPlan has checked the file is there (AC-68). */
 function planSource(ctx: Ctx, stage: string): string {
-  readPlan(ctx.projectDir, ctx.cfg, stage);
+  readPlan(ctx.projectDir, ctx.cfg, stage, ctx.run.id);
   return sha256(readFileSync(tasksPath(ctx.projectDir, stage), "utf8"));
 }
 

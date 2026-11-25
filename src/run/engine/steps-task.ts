@@ -243,7 +243,7 @@ export const taskMode: ModeSteps = {
       return { id, desc, criteria: [], tier: "M", complexity: "medium", risky: false, fix: true, verify: "" };
     }
     const stage = stageOf(run);
-    const t = readPlan(ctx.projectDir, ctx.cfg, stage).find((x) => x.id === id);
+    const t = readPlan(ctx.projectDir, ctx.cfg, stage, run.id).find((x) => x.id === id);
     if (!t) throw new RunError(`Task ${id} is not in .claude/tmp/${stage}/tasks.json any more. Restore the plan, then ${resumeHint(run.id)}.`, 1);
     return planTaskInfo(t, readSpec(ctx.projectDir, ctx.cfg, stage));
   },
