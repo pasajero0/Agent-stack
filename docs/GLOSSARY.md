@@ -52,8 +52,18 @@ it here first.
 - **Plan** — `.claude/tmp/<stage>/tasks.json`, written by `/plan`: every criterion covered by a task, each
   task with a `verify` command and a tier. Written once; only `verify` changes it.
 - **Task** (in a plan) — one reviewable step, roughly one commit.
-- **Tier** — a task's S / M / L. Picks the implementer's model: S/M → Sonnet, L → Opus. L also covers risky
-  work at any size: security, auth, money, data migration, concurrency.
+- **Tier** — a task's S / M / L: how much work it is. With the complexity it picks the implementer's route;
+  `.claude/gates.json → routing` holds the mapping. An L task that is not split into blocks says why
+  (`splitReason`). Not the *size* of task mode (task, story, epic).
+- **Complexity** — a task's low / medium / high: how hard its logic is, not how many files it touches. The plan
+  sets it from four yes/no questions in the `/plan` skill.
+- **Effort** — the level Claude Code thinks at, `claude --effort`: low, medium, high, xhigh or max.
+- **Route** — the model and the effort of one implement call, written `model·effort` (`sonnet·low`). The driver
+  picks it from the routing: the retry route for a later attempt or a fix task, then the risky route, then the
+  cell of tier × complexity.
+- **Routing** — `.claude/gates.json → routing`: the route of each tier × complexity (9 cells), plus `retry` and
+  `risky`. Data, not code: the harness template is its one source, and the driver refuses a run when a value is
+  missing or wrong.
 - **Verify** — a task's command that fails before the task and passes after it; `.claude/bin/verify` runs
   it and records `passes`.
 - **Evidence** — the commands run and their real output, in the report's EVIDENCE section. "Done" without
@@ -91,9 +101,9 @@ it here first.
   driver's roles do. With `codeBy: "driver"` a hook holds this: code edits outside `openPaths` and outside a
   driver call are refused. It speaks `language.chat` (English by default) and keeps terms in `language.terms`.
 - **Attempt** — one pass of implement → checks → review for a task. Limited (task 3, quick 2); a later
-  attempt runs on Opus.
+  attempt runs on the retry route.
 - **Limit gate** — where a run stops when attempts run out, review findings stop shrinking, or the fuse
-  blows: one more attempt (on Opus), raise the fuse (only when the fuse blew), or cancel.
+  blows: one more attempt (on the retry route), raise the fuse (only when the fuse blew), or cancel.
   - **Decision** reason: the spec or plan role asked the human instead of doing its job. The human answers,
     and the role runs again with its questions and the answer. A blind re-run would only ask again.
   - **Test conflict** reason: the implementer found an existing test or verify that contradicts a criterion,
@@ -149,8 +159,9 @@ it here first.
   manager, ask before download-and-run or reading secrets), **guard-file** (harness files, lockfiles,
   generated files, `tasks.json`).
 - **`gates.json`** — the project's settings for the gates. Yours: `update` never rewrites it, so new keys
-  get defaults in code.
+  get defaults in code. One exception: `routing` has no default in code, so `update` adds the block when it is
+  missing, and leaves it alone once it is there.
 - **Interactive / autonomous** — `gates.json` → `mode`. Interactive asks the human; autonomous never asks,
   blocks instead, and records decisions under NEEDS HUMAN DECISION.
 - **Seed files** — files `init` writes once and `update` leaves alone: `CLAUDE.md`, `CODEMAP.md`,
-  `gates.json`, `settings.local.json`.
+  `gates.json`, `settings.local.json`. One exception: `update` adds a missing `routing` block to `gates.json`.
