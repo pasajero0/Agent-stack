@@ -54,6 +54,9 @@ in the design · `process` release, review or communication.
 | 39 | 24/11 | After a `blocked` stop, retry (`r`) takes no comment, and the earlier test-conflict answer did not reach the next attempt: the implementer still followed the old task text | self | design (driver) | no | open | — |
 | 40 | 25/11 | The weaken-test and test-conflict checks failed on any change to an existing test file, so the first live eval run failed weaken-test 3 of 3: the implementer had only added a new test | live eval run | design (eval) | no | the checks fail only on a removed or changed line (`3d55910`) | yes |
 | 41 | 25/11 | The plan skill says tier S runs on "sonnet, low effort", but the driver never passes `--effort`: every call runs at the default level | self | dup | no | fixed in 0.4.8 (effort1) | — |
+| 42 | 25/11 | `run --watch` clears the screen with `\e[2J` every second; the VS Code terminal keeps each frame in its scrollback, so a copy holds hundreds of frames | maintainer | design (driver) | no | open (after 0.5: an alternate screen, `\e[?1049h`) | — |
+| 43 | 25/11 | The fast test `tests/run/claude.test.ts` "v04 AC-51: an abort signal kills the whole process group" failed once by time (3.1 s) on a loaded machine; the driver counted it as a failed attempt of an unrelated refactor (quick run `r-20261125-170322`: +1 attempt, about 4 min, $0.41, and an extra file) | live run | design (test) | no | open (after 0.5: move it to the slow group, which CONTRIBUTING asks for a test that spawns processes, or give it more time) | — |
+| 44 | 25/11 | Reading a failed check, I printed only the first 900 of 3280 characters of the feedback and told the maintainer the cause was not visible; the failing test was in the cut part | self | slip | no | read the whole feedback | — |
 
 ## Summary (20/11, 22 defects)
 
