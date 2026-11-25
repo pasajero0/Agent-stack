@@ -2,7 +2,7 @@
 
 # agent-stack
 
-CLI that deploys a **Claude Code harness** onto a repository and manages MCP servers. The harness is an
+CLI that deploys a **Claude Code harness** onto a repository. The harness is an
 enforcement layer: deterministic hooks outside the model that gate a spec-driven workflow — no code
 before the spec is merged, no skipped tests, no "done" without evidence — plus the skills and subagents
 that drive that workflow. It is stack-agnostic: everything language-specific lives in one config file.
@@ -14,8 +14,8 @@ that drive that workflow. It is stack-agnostic: everything language-specific liv
   approval gates.
 - **What is checked:** regression evals (7 tasks: 5 on known agent failure modes — a weakened test, a test
   conflict, an extra dependency, scope creep, a broken access check — and 2 plain ones; k = 3): 21/21 passed,
-  pass^k = 1, $1.24, run of 2026-11-25 —
-  [evals/results/2026-11-25-225105.json](evals/results/2026-11-25-225105.json).
+  pass^k = 1, $1.29, on 0.4.8, run of 2026-11-25 —
+  [evals/results/2026-11-25-234220.json](evals/results/2026-11-25-234220.json).
 
 Read [Limits](#limits--read-before-trusting-it) before you trust it.
 
@@ -310,23 +310,32 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 
 ## Experimental parts
 
-In the first trial (lex-poc, 10 sessions) these never acted, or acted without helping. They stay for now;
-`agent-stack usage --save` records whether they are used, and a part that stays unused across several
-weekly summaries is removed in a later version.
+The first trial (lex-poc, 10 chat sessions, before the driver) showed parts that never acted, or acted without
+helping. Since 0.4 the pipeline driver calls several of them itself. The right column is from this repo: 13 driver
+runs, 20–25/11 (`agent-stack run --stats`: 4 clarify, 7 spec, 4 plan, 73 implement and 51 review calls), and the
+chat sessions of 18–25/11 (`agent-stack usage --days 7`). A part that stays unused across several weekly
+`usage --save` summaries is removed in a later version.
 
-| Part | What the trial showed |
-| --- | --- |
-| `/plan` → `tasks.json` → `bin/verify` → `evidence-gate` | no `tasks.json` written; `evidence-gate` ran 218 times, stopped nothing. Since 0.4 spec-gate waits for `tasks.json`, so the chain is no longer optional |
-| `task-analyzer`, `pattern-scout` subagents | never called |
-| `spec-reviewer` subagent | called once (~47k tokens), result discarded |
-| `/grill`, `/migration`, `/mr-description` skills | never called |
-| `/review`, `/reflect` commands, `stop-flag-reflect` hook | never called; the hook only raises a flag for `/reflect` |
-| `cheat-guard`, `arch-guard` hooks | never blocked (`arch-guard` has no `layers` until an ADR sets them) |
-| `post-edit-lint` hook | never reported (`lintMatch` empty; the IDE reports errors anyway) |
-| `bin/health` | never run in the project (its `misplacedDocs` report is new in this version, also experimental) |
+| Part | First trial (chat, before the driver) | Now (driver and chat, this repo) |
+| --- | --- | --- |
+| `/plan` → `tasks.json` → `bin/verify` | no `tasks.json` written | the plan step follows `/plan` and writes `tasks.json` (4 plans); the driver runs `bin/verify` after each task and once at the end (32 runs) |
+| `spec-reviewer` subagent | called once (~47k tokens), result discarded | the spec step follows `/spec`, which runs it: 20 runs |
+| `/grill` skill | never called | the clarify step asks the grill questions (at most 5); the skill file itself is not loaded |
+| `evidence-gate` hook | ran 218 times, stopped nothing | ran 580 times, output once — a candidate for removal |
+| `cheat-guard` hook | never blocked | blocked 6 times; the driver also checks skip marks and frozen tests itself, from the same `cheatPatterns` |
+| `arch-guard` hook | never blocked (no `layers` until an ADR sets them) | the same: this repo sets no `layers` |
+| `bin/health` | never run in the project | 32 runs, inside task verifies; its 400-line limit failed tasks in the `evals1` and `effort1` runs |
+| `post-edit-lint` hook | never reported (`lintMatch` empty) | still silent: this repo has no linter |
+| `task-analyzer`, `pattern-scout` subagents | never called | never called; the driver does not use them |
+| `/migration` skill | never called | never called |
+| `/mr-description` skill | never called | used once by hand, for the 0.4.8 pull request |
+| `/review`, `/reflect` commands, `stop-flag-reflect` hook | never called; the hook only raises a flag for `/reflect` | never called; the hook ran 580 times |
 
-Proven in use: `guard-bash`, `guard-file`, `spec-gate`, `session-start-context`, `bin/trace`, `/spec`, `/adr`,
-`implementer`, `test-writer`, `code-reviewer`, `researcher`. How to read the summaries:
+Proven in use: `guard-bash` (10 blocks in the last week), `guard-file` and `spec-gate` (proven in the first
+trial; no event in the last week), `session-start-context`,
+`bin/trace` (98 runs), `/spec`, `/adr`, `implementer` and `code-reviewer` (the driver's implement and review steps
+take their rules), `test-writer`, `researcher`. `usage` counts a driver call as a main session, not as a subagent,
+so it lists `implementer` as never acted. How to read the summaries:
 [docs/usage-analytics.md](docs/usage-analytics.md).
 
 ## After deploying

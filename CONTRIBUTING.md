@@ -79,6 +79,9 @@ k times, then runs the `check`. It prints pass@1 and pass^k per task and in tota
 it asks first. Run it after a change to the prompts, the roles or the checks, and compare with the last results
 file. The tests (`tests/eval/`) use the fake `claude` only.
 
+For a release, raise the version in `package.json` first, then run the evals: the results file records
+`agentStack` from `package.json` next to the commit, and the README quotes that file (defect #48).
+
 ## Defects
 
 Every defect gets one row in [docs/defects.md](docs/defects.md): what broke, who found it, its class, whether it
