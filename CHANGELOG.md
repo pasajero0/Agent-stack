@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.4.8 — effort by task size and a scout call
+
+- **Routing block in `gates.json`:** the driver now picks the model and the effort of each call from the tier and
+  the complexity of the task, instead of always using the default level. This fixes defect #41 (the plan skill
+  said tier S runs on "sonnet, low effort", but the driver never passed `--effort`).
+- **Plan complexity:** the plan step writes `complexity` for each task (and `splitReason` for an L task).
+- **`run quick --cell <tier>·<complexity>`** picks the routing cell; an eval `task.json` may set `cell`.
+- **Scout call:** a task run starts with a scout call (`routing.scout`, default haiku · low). It reads the
+  repository and writes `scout.md` to the run folder, a map of the places to read first. Clarify, spec and plan
+  get the map in their prompts. Spec: `docs/specs/scout1/SPEC.md`.
+- **`run --stats --json` is version 2**, with the role `scout` in `byRole` (six roles).
+- **Scout limits:** the scout call stops at 3 minutes or 20 turns, or at the shared step limits when they are
+  lower. Other roles keep the shared limits. A scout that hits a limit leaves no map, and the run goes on.
+- **Implement runs only the task's verify:** the implement prompt and the implementer agent now say so; the
+  driver runs the full test command after it. In the `scout1` run implementers ran the full `pnpm test` 37 times
+  (defect #47).
+- **README** starts with the problem, the audience and the eval result.
+- **Eval run** after this release's changes (k = 3, real `claude`): 21/21 passed, pass^k = 1, $1.24, 5:49, the
+  same as before them ($1.25). The evals use `run quick`, which has no scout, so they show that nothing broke;
+  the scout's effect on the spec step is not measured yet. Results: `evals/results/2026-11-25-225105.json`.
+- **Defect log:** #45–#47 (a stale `dist/` for the eval tests, the routing check on resume, full test runs in
+  implement).
+
+### Upgrading from 0.4.7
+
+- Run `agent-stack update`: it adds the routing block to `gates.json`. It also adds `routing.scout` when the
+  routing block is already there. Until then the driver refuses to start (effort1 AC-15).
+- `run --stats --json` is now `"version": 2`. If a script reads it, accept the role `scout` in `byRole`.
+- A run started on 0.4.7 whose plan is written (at `gate:plan-approve` or later) stops with AC-15. Add
+  `complexity` (and `splitReason` for an L task) to its tasks by hand, or cancel the run. A run still at its plan
+  step just runs plan again.
+- The plan-approve card line and the implement head line changed. If a script matched them, change the script.
+- New: `run quick --cell <tier>·<complexity>` picks the routing cell of Q1 (default M·medium). An eval
+  `task.json` may set `cell`.
+- `update` also refreshes `.claude/agents/implementer.md` (the line about the verify), unless you changed it.
+
 ## 0.4.7 — regression task set
 
 - **Eval runner** (`scripts/eval.mjs`, repo only, not shipped): runs each task of `evals/tasks/` k times (default

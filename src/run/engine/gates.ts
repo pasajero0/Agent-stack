@@ -5,7 +5,8 @@
 import { type CheckRun } from "../checks.js";
 import { RunError } from "../errors.js";
 import { diffStat, dirtyPaths, git, headSha } from "../git.js";
-import type { CardAnswer, GateRecord, RunFile } from "../types.js";
+import type { GateRecord, RunFile } from "../types.js";
+import { limitAnswers, limitPrompt } from "./limit-prompt.js";
 import { timeFacts } from "./timing.js";
 import { A, cardText, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
 import { fuseText } from "./call.js";
@@ -229,19 +230,7 @@ export const acceptGate: StepHandler = async (ctx) => {
   }
 };
 
-const LIMIT_ANSWERS: Record<string, { text: string; answers: CardAnswer[] }> = {
-  fuse: { text: "raise the fuse for this run (in its own unit, above what is used), or cancel", answers: [{ key: "f", follows: "number", label: "new limit" }, A.cancel] },
-  decision: { text: "answer the role's questions", answers: [{ key: "r", follows: "text", label: "retry with your answer (the role gets it)" }, A.cancel] },
-  "tests-changed": {
-    text: "allow these test changes, or send the task back",
-    answers: [{ key: "a", follows: null, label: "allow exactly these (the checks run next)" }, { key: "r", follows: "text", label: "retry with a comment (a new attempt, on Opus)" }, A.cancel],
-  },
-  "test-conflict": {
-    text: "fix the test or the spec by hand if needed, then answer the implementer",
-    answers: [{ key: "r", follows: "text", label: "retry with your answer for the implementer (no attempt is counted)" }, A.cancel],
-  },
-  other: { text: "retry or cancel", answers: [{ key: "r", follows: null, label: "retry (a new attempt, on Opus)" }, A.cancel] },
-};
+export { limitAnswers };
 
 /** The gate:limit card (AC-31, AC-35, AC-38, AC-57, AC-64, AC-66, AC-68). */
 function limitCard(ctx: Ctx): CardInput {
@@ -258,13 +247,13 @@ function limitCard(ctx: Ctx): CardInput {
   }
   f.whole(...decisionFacts(ctx));
   f.whole(`Usage: ${cost(run)}`);
-  const p = LIMIT_ANSWERS[reason] ?? LIMIT_ANSWERS["other"];
+  const p = limitPrompt(reason, ctx.cfg.routing);
   return {
     gate: "limit",
     title: `Stopped: ${reason}`,
     facts: f.list,
     keep: f.keep,
-    prompts: p ? [{ text: p.text, default: null, answers: p.answers }] : [],
+    prompts: [{ text: p.text, default: null, answers: p.answers }],
     hint: resumeHint(run.id),
   };
 }
@@ -331,7 +320,7 @@ export const limitGate: StepHandler = async (ctx) => {
       continue;
     }
     if (s === "r") {
-      // A retry is a new attempt, so it runs on Opus (AC-16, AC-31).
+      // A retry is a new attempt, so it runs on the retry route of the routing (AC-16, AC-31, effort1 AC-11).
       const task = run.returnTo ? parseNext(run.returnTo).task : null;
       const t = run.tasks.find((x) => x.id === task);
       if (t) t.attempts += 1;

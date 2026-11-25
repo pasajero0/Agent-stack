@@ -43,9 +43,11 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
 - **Epic:** the run proposes a split and stops.
 - **Models:**
   - judgment roles run on Opus;
-  - implementation follows the task tier;
-  - a risky task runs on Opus;
-  - a retry runs on Opus.
+  - implementation follows routing (effort1): the model and effort come from the route of the task's tier and
+    complexity;
+  - a risky task runs on the risky route;
+  - a retry runs on the retry route;
+  - the scout follows `routing.scout` (scout1).
 - **Size task:** a full spec with one or two tasks. The light spec stays for setup work.
 - **Branches and commits** are the driver's. It commits after each task; the model only edits files.
 - **Checks after a task:** its `verify` plus lint.
@@ -70,7 +72,7 @@ Shared words are defined in [docs/GLOSSARY.md](../../GLOSSARY.md): stage, spec, 
 driver, mode, size, gate, attempt, fuse, live run, driver call, test conflict, spec flow. Below is only what this spec makes precise; a
 word for this spec only is marked `(local)`.
 
-- **Step**: one unit of the pipeline that the driver executes. Steps are clarify, spec, plan, base-check,
+- **Step**: one unit of the pipeline that the driver executes. Steps are scout, clarify, spec, plan, base-check,
   implement, checks, review and commit. A gate is a step that waits for the human. A *stage* is the unit of
   work with a spec; never call a step a stage.
 - **Run id** (local): `r-<yyyymmdd>-<hhmmss>`.
@@ -78,6 +80,7 @@ word for this spec only is marked `(local)`.
   - the run file `run.json`;
   - one file per Claude call, `calls/<n>-<role>.json`, with its argv (without the prompt), exit code and raw
     result;
+  - `scout.md`, the scout's map, when the scout found a place (scout1);
   - `split.md` for an epic.
 - **Lock** (local): `.claude/tmp/runs/lock`. It is created atomically and holds the run id and the driver's pid.
 - **Live run**: status `running` and its lock pid is alive. A `running` run whose pid is dead is
@@ -86,6 +89,7 @@ word for this spec only is marked `(local)`.
   - a unique `id` that is not `Q1` and does not start with `F`;
   - a non-empty `ac` array;
   - a `tier` of S, M or L;
+  - a `complexity` of low, medium or high, and, for an L task, a non-empty `splitReason` (effort1 AC-6, AC-14);
   - a non-empty `verify` that can fail (AC-65);
   - `passes: false`.
 
@@ -160,7 +164,7 @@ Glosses for references kept outside git.
 ## Model and state transitions
 
 Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `cancelled`. `next` holds one of:
-- `clarify`, `gate:answers`, `spec`, `gate:spec-merge`, `gate:spec-approve`, `plan`, `gate:plan-approve`,
+- `scout`, `clarify`, `gate:answers`, `spec`, `gate:spec-merge`, `gate:spec-approve`, `plan`, `gate:plan-approve`,
   `base-check`;
 - `implement:<task>`, `checks:<task>`, `review:<task>`, `commit:<task>`;
 - `gate:accept`, `gate:limit`.
@@ -169,7 +173,8 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 
 | `next` | Event | New `next` | Criterion |
 | --- | --- | --- | --- |
-| — | `run task "<d>"` | clarify | AC-5 |
+| — | `run task "<d>"` | scout | AC-5 |
+| scout | the scout call ends (map or no map) | clarify | AC-5 |
 | clarify | valid output | gate:answers | AC-6 |
 | gate:answers | size task/story confirmed, stage id valid | spec (driver created `spec/<stage>`) | AC-7, AC-8 |
 | gate:answers | size epic confirmed | run finished, `split.md` | AC-9 |
@@ -189,7 +194,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 
 | `next` | Event | New `next` | Criterion |
 | --- | --- | --- | --- |
-| — | `run task "<d>"` on a branch that is not the base branch | clarify (the run stays on that branch) | AC-85 |
+| — | `run task "<d>"` on a branch that is not the base branch | scout (the run stays on that branch) | AC-85 |
 | gate:answers | size task/story confirmed, stage id valid | spec (no new branch) | AC-85 |
 | spec | SPEC.md written in bounds, terms checked | driver commits → gate:spec-approve | AC-87 |
 | gate:spec-approve | approve | plan (same branch) | AC-87 |
@@ -219,12 +224,12 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | checks | frozen tests weakened, a check config or a package manifest changed | gate:limit (tests changed) | AC-66 |
 | gate:limit (tests changed) | allow / retry with a comment | checks / implement (attempt + 1) | AC-66 |
 | any | fuse reached | gate:limit (fuse) | AC-35 |
-| any | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
+| any, except scout | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
 | spec / plan | output missing, out of bounds or (spec) terms failing twice | unchanged, exit 1 | AC-40, AC-44, AC-45, AC-59 |
 | spec / plan | output missing and `needsHumanDecision` not empty | gate:limit (decision) | AC-57 |
 | base-check | `test` exits non-zero | unchanged, exit 1 | AC-41 |
 | commit | commit refused | implement (attempt + 1) | AC-42 |
-| gate:limit | retry / raise fuse / cancel | `returnTo` (on Opus) / `returnTo` / cancelled | AC-31 |
+| gate:limit | retry / raise fuse / cancel | `returnTo` (on the retry route) / `returnTo` / cancelled | AC-31 |
 | gate:limit (decision, test conflict) | retry with a comment | `returnTo`, no attempt, same model | AC-57, AC-64 |
 
 ## Contract
@@ -233,7 +238,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 
 ```text
 agent-stack run task  [--stage <id>] "<description>"   start a task run
-agent-stack run quick "<description>"                  start a quick run
+agent-stack run quick [--cell <tier>·<complexity>] "<description>"   start a quick run
 agent-stack run --resume [<run id>] [--answer <text>]… continue a waiting or interrupted run (default: the locked one)
 agent-stack run --status [<run id>] [--json]           print the run; change nothing
 agent-stack run --cancel [<run id>]                    cancel a waiting or interrupted run
@@ -260,6 +265,9 @@ Exit codes:
 - **1**: a refusal or an error, also an `--answer` the gate does not take (AC-70). The message says what to do.
 
 `--stage <id>` fills in the stage id the gate proposes. The id is still validated (AC-7).
+
+`--cell <tier>·<complexity>` (e.g. `L·low`) goes with `run quick` only: Q1 then uses that routing cell instead of
+M·medium. The 9 values and the refusals are in effort1 (AC-28, AC-30).
 
 **Gate input**
 
@@ -331,9 +339,9 @@ terminal text stays English.
   "run": "r-20261119-232844",
   "stage": "A4",
   "title": "Plan A4: 2 tasks",
-  "facts": ["T1  S · sonnet · AC-1,3,5,6,7   Write tests/count.test.js first, then src/count.js", "      verify: …",
+  "facts": ["T1  S · low -> sonnet · low · AC-1,3,5,6,7   Write tests/count.test.js first, then src/count.js", "      verify: …",
             "full task text: .claude/tmp/A4/tasks.json"],
-  "source": "sha256 of tasks.json when the card was built",
+  "source": "sha256 of tasks.json and the 11 route values when the card was built",
   "prompts": [
     { "text": "approve the plan", "default": null,
       "answers": [ { "key": "a", "follows": null, "label": "approve" },
@@ -347,7 +355,7 @@ terminal text stays English.
 - `gate`: `answers` | `spec-merge` | `spec-approve` | `plan-approve` | `limit` | `accept`; `stage`: string or null.
 - `facts`: strings, in the order AC-68 prints them, never cut: the terminal print cuts, the data does not.
 - `keep`: the indexes of the facts the terminal never cuts (AC-68).
-- `source`: the sha256 of the inputs the gate decides on (gate:plan-approve: the sha256 of `tasks.json`; gate:spec-approve: the git blob id of the spec at HEAD; gate:accept: the HEAD commit id, plus a hash of the
+- `source`: the sha256 of the inputs the gate decides on (gate:plan-approve: the sha256 of `tasks.json` and the 11 route values of `routing` (effort1 AC-21); gate:spec-approve: the git blob id of the spec at HEAD; gate:accept: the HEAD commit id, plus a hash of the
   uncommitted changes when there are any);
   null for other gates.
 - `prompts`: one per line of input the gate reads, in order. gate:answers has one per question, then the size
@@ -378,6 +386,7 @@ terminal text stays English.
 | `proposal` | clarify output (questions, size, stage, split), or null |
 | `stage`, `size` | the confirmed values, or null |
 | `stagePrefill` | the `--stage` id that gate:answers proposes, or null |
+| `cell` | the routing cell of Q1 that `run quick --cell` named (`L·low`), or null; a run file without it reads as null (effort1 AC-28, AC-31) |
 | `branch` | the branch the run expects to be on |
 | `baseCommit` | sha, set when the run's work branch is created |
 | `tasks` | `{ id, taskBase, attempts, blockingCount, lastFeedback, checks: {cmd, exit, skipped}[], notes: string[], commit: sha \| "empty" \| null }[]` |
@@ -393,9 +402,10 @@ terminal text stays English.
 **How Claude Code is invoked**
 
 The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwise `claude`. Every call:
-- gets `-p --output-format stream-json --verbose --max-turns <maxTurns> --model <model> --json-schema <role
+- gets `-p --output-format stream-json --verbose --max-turns <maxTurns> --model <model> [--effort <effort>] --json-schema <role
   schema>`, plus
-  `--max-budget-usd <dollars left>` only with a dollar fuse;
+  `--max-budget-usd <dollars left>` only with a dollar fuse; `--effort <effort>` follows `--model` for implement
+  and scout only, both from the route (effort1 AC-7, scout1 AC-2); no other role gets `--effort`;
 - gets the role prompt on stdin;
 - gets `AGENT_STACK_RUN` in its environment;
 - loads only the project (AC-58):
@@ -410,10 +420,11 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 
 | Role | Model | `--tools` | `--permission-mode` | `--allowedTools` |
 | --- | --- | --- | --- | --- |
+| scout | the model of `routing.scout` (scout1) | Read,Glob,Grep | default | — |
 | clarify | opus | Read,Glob,Grep | default | — |
 | spec | opus | Read,Glob,Grep,Write,Edit,Agent | acceptEdits | — |
 | plan | opus | Read,Glob,Grep | default | — |
-| implement | AC-16 | Read,Glob,Grep,Edit,Write,Bash | acceptEdits | `Bash(<test command>:*)`, `Bash(<lint prefix>:*)`, `Bash(git status:*)`, `Bash(git diff:*)`, `Bash(git log:*)`, `Bash(git show:*)`, and `Bash(<this task's verify command, verbatim>)` (human-approved at gate:plan-approve; never `.claude/bin/verify`, which writes `passes`); an entry whose command is empty is left out |
+| implement | the route (AC-16, effort1) | Read,Glob,Grep,Edit,Write,Bash | acceptEdits | `Bash(<test command>:*)`, `Bash(<lint prefix>:*)`, `Bash(git status:*)`, `Bash(git diff:*)`, `Bash(git log:*)`, `Bash(git show:*)`, and `Bash(<this task's verify command, verbatim>)` (human-approved at gate:plan-approve; never `.claude/bin/verify`, which writes `passes`); an entry whose command is empty is left out |
 | review | opus | Read,Glob,Grep | default | — |
 
 **Role prompts** (AC-4) start with what the driver has already done, and what the role must not do.
@@ -423,6 +434,12 @@ from `/plan`, implement from the `implementer` agent, review from the `code-revi
 (what is done, what the role must not do) and the output it wants. It keeps no copy of a skill's or an agent's
 rules, so an improved agent reaches the driver too.
 
+- **scout** (scout1): "the driver has started a task run; you only read the repository and must not edit files,
+  run commands or do the task"; the description; list the places the next roles should read first (at most 30
+  entries, the most important first, each with a line of why; `path` relative to the root, `lines` optional).
+  The full prompt is in scout1 Contract, "The scout prompt".
+- The **clarify**, **spec** and **plan** prompts also hold the map section when the scout map has an entry
+  (scout1 AC-5).
 - **clarify**:
   - ask at most 5 questions, each with a recommended answer;
   - size the work;
@@ -467,6 +484,8 @@ rules, so an improved agent reaches the driver too.
 
 **Role outputs** come from the result's `structured_output`. Only the required fields are listed.
 
+- **scout** (scout1): `{ entries: {path, why, lines?}[] }`. The driver checks the entries and writes
+  `scout.md` itself (scout1 AC-12).
 - **clarify**:
   - `questions`: `{text, recommended}[]`, at most 5;
   - `size`: `task` \| `story` \| `epic`;
@@ -539,7 +558,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 
 ### Task mode
 
-- **AC-5:** WHEN `run task` starts on a clean tree, THE SYSTEM SHALL run clarify with the description.
+- **AC-5:** WHEN `run task` starts on a clean tree, THE SYSTEM SHALL run the scout first (scout1 AC-1), then
+  clarify with the description.
 - **AC-6:** WHEN clarify returns valid output, THE SYSTEM SHALL store it as `proposal` and stop at
   gate:answers with the input defined in the Contract.
 - **AC-7:** WHEN a stage id is confirmed, THE SYSTEM SHALL accept it only if all three hold:
@@ -572,18 +592,21 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 
   It SHALL then write the tasks to `.claude/tmp/<stage>/tasks.json` itself.
 
-  It SHALL then stop at gate:plan-approve and show each task: id, criteria, tier, the model it will run on,
-  and verify.
-- **AC-13:** WHEN a task's tier is S or M and its description or one of its criterion texts contains a risk
-  word, THE SYSTEM SHALL mark it "risky" at the gate and run it on Opus.
+  It SHALL then stop at gate:plan-approve and show each task: id, criteria, and verify, and the card line of
+  effort1 (AC-8): the tier, the complexity and the route it will run on. The `source` of the card holds the
+  routes (effort1 AC-21).
+- **AC-13:** WHEN a task's description or one of its criterion texts contains a risk word, THE SYSTEM SHALL mark
+  it "risky" at the gate. Its first attempt runs on the risky route; the route comes from effort1 (AC-2 to
+  AC-5).
 - **AC-14:** WHEN the human approves the plan, THE SYSTEM SHALL go to base-check. WHEN the human rejects it,
   THE SYSTEM SHALL delete the stage's `tasks.json` and `verify.log` and re-run plan with the comment.
 - **AC-15:** WHEN base-check runs, THE SYSTEM SHALL run the `test` command on the clean tree and go on to
   the first task only if it exits 0.
 - **AC-16:** WHEN implement starts for a task, THE SYSTEM SHALL record `taskBase` if this is its first
   attempt, and run a fresh session.
-  - The model SHALL be Opus for tier L, for a risky task, for a fix task, and for every attempt after the
-    first. Otherwise it SHALL be Sonnet.
+  - The model and the effort SHALL come from the route that effort1 chooses (AC-2 to AC-5): the retry route
+    for a fix task and for every attempt after the first, the risky route for a risky task, otherwise the cell
+    of its tier and complexity.
 - **AC-63:** WHEN a plan task's first attempt starts, THE SYSTEM SHALL run that task's verify once, before the
   implement call, through `.claude/bin/verify --dry <task>`. That is the same guard-bash check and the same
   environment as verify, and it records nothing: no `passes`, no `verify.log`. `tasks.json` is re-read from disk,
@@ -595,7 +618,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-17:** WHEN the plan role runs, THE SYSTEM SHALL embed the `/plan` skill (AC-4), which requires that every
   task end green: tests first inside a task, and no test-only tasks. The prompt SHALL NOT repeat the rule: the
   skill is its one source (One source of rules).
-  - Its "after two failed verify runs move one tier up" SHALL read "under the driver, a retry runs on Opus".
+  - Its "after two failed verify runs move one tier up" SHALL read "under the driver, a retry runs on the retry route" (effort1).
 - **AC-18:** WHILE `AGENT_STACK_RUN` names a live run whose `branch` is the current branch, evidence-gate
   SHALL not block. The driver decides the result.
 - **AC-19:** WHEN implement returns DONE, THE SYSTEM SHALL itself run `.claude/bin/verify <task>`, and the
@@ -680,7 +703,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   and re-run the interrupted step without counting a new attempt.
   - An interrupted implement SHALL get the feedback "continue from `git status`".
 - **AC-31:** WHEN gate:limit is answered with retry, raise or cancel, THE SYSTEM SHALL act as follows:
-  - retry and raise return to `returnTo`; a retry runs on Opus;
+  - retry and raise return to `returnTo`; a retry runs on the retry route;
   - cancel cancels the run.
 - **AC-32:** WHEN `humanDecisions` is not empty, THE SYSTEM SHALL show it at the next gate, then clear it.
   - The list collects `needsHumanDecision` and the `permission_denials` of every call whose result the
@@ -702,15 +725,17 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   further call (partner of AC-2). The fuse is reached when:
   - with `calls`, `calls` equals the limit;
   - with `usd`, `costUsd` reaches the limit, or a call ends with `error_max_budget_usd`.
+  - The scout step is a call step: this AC holds for it (scout1 AC-13).
 
   With `"off"` there is no fuse step.
   - The interrupted step counts no attempt, and its edits stay for the step after the fuse is raised.
 - **AC-36:** IF a call ends with no result JSON (and the driver did not kill it), or with `is_error` and
   `num_turns` 0, THEN THE SYSTEM SHALL
   keep `next`, count no attempt, print the error and exit with code 1. `--resume` retries the step (partner
-  of AC-16).
+  of AC-16). Except the scout: its call ends the step and the run goes on to clarify (scout1 AC-10).
 - **AC-37:** IF a role's `structured_output` does not match its schema, or the call ends with
-  `error_max_structured_output_retries`, THEN THE SYSTEM SHALL re-run the call once. On a second mismatch it SHALL keep `next` and exit with code 1 (partner of AC-6, AC-20).
+  `error_max_structured_output_retries`, THEN THE SYSTEM SHALL re-run the call once. On a second mismatch it SHALL keep `next` and exit with code 1 (partner of AC-6, AC-20). Except the scout: one attempt, no re-run, and the run goes on
+  without a map (scout1 AC-10).
 - **AC-38:** IF implement returns BLOCKED, THEN THE SYSTEM SHALL go to gate:limit, reason "blocked", with
   the report (partner of AC-16).
   - IF a call ends with `error_max_turns`, or with `error_during_execution` after more than 0 turns, or is
@@ -718,6 +743,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     feedback. It SHALL keep the edits for the next attempt.
   - The same endings in clarify, spec, plan or review SHALL re-run that role once with the reason as
     feedback, then exit with code 1. Those roles have no attempts.
+  - The same endings in the scout SHALL NOT re-run it: the run goes on to clarify with no map (scout1 AC-10).
 - **AC-39:** IF a task's blocking count is not lower than at its previous review, THEN THE SYSTEM SHALL go to
   gate:limit, reason "review loop" (partner of AC-34).
 - **AC-40:** IF the spec or plan role changes paths outside its bounds (AC-8, AC-12), changes the branch, or
@@ -747,7 +773,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   with code 1 and name the command and the limit (partner of AC-15, AC-19).
   - It SHALL count no attempt and keep `next` at that step, so `--resume` runs the checks again.
   - A hang is the environment's fault, for example a package manager waiting on the network. It is not a
-    reason to send the code back to implement on Opus.
+    reason to send the code back to implement on the retry route.
 - **AC-59:** IF `.claude/bin/trace --terms <stage>` exits 1 after the spec role, THEN THE SYSTEM SHALL treat its
   output as a bounds problem (AC-40): undo, re-run the role once with that output as feedback, then exit with
   code 1 (partner of AC-8). A missing `trace`, or any other exit code, is no check.
@@ -798,7 +824,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   - `a` allows exactly the changes listed, as the run file keeps them; the run goes on to the checks. A change that
     is not on the list stops again: one made while the gate waited, or a later edit of an allowed check config
     (its content hash differs). Gate:accept shows the allowed changes (AC-21).
-  - `r` retries implement with the list and the comment that follows; this is a new attempt (on Opus). `c`
+  - `r` retries implement with the list and the comment that follows; this is a new attempt (on the retry route). `c`
     cancels.
   - With `testGlobs` empty, only the check configs are compared. A test renamed or merged is a change too; the
     human allows it. A test the human weakened by hand at another gate is a change too.
@@ -870,7 +896,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     changes the layout, not the content.
   - gate:answers: one fact per question with its recommended answer, then the size and the stage id; the
     prompts follow the card one by one (AC-48).
-  - gate:plan-approve: each task is two lines: `<id>  <tier> · <model>[ · risky] · <criteria>   <description>`,
+  - gate:plan-approve: each task is two lines: the card line of effort1 (AC-8),
+    `<id>  <tier> · <complexity> -> <model> · <effort>[ · risky][ · not split: <splitReason>] · <criteria>   <description>`,
     then `      verify: <verify>`. `<criteria>` is the ids joined by `,` with the `AC-` prefix written once
     (`AC-1,3,5`). The last fact is `full task text: <path of tasks.json>`. A verify command is never cut, since
     the human approves it as written.
@@ -977,9 +1004,11 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   (AC-3), not the whole stream.
   - IF a stream line is not JSON, or no `result` event comes, THEN THE SYSTEM SHALL skip the line, and treat the
     call as AC-36 treats a call with no result JSON.
+  - The head line of an implement call is effort1's (AC-7): `-> implement:T1 · implement · opus · high · call 3/40 ...`.
 - **AC-79:** WHEN a step starts, a tool starts (AC-78) or a step ends, THE SYSTEM SHALL write
   `<run folder>/now.json`: `{ "step": <next>, "since": <ISO time the step started>, "last": <the last line
   printed> }`, by temp file and rename, and append the line with its time to `<run folder>/progress.log`.
+  The head line of an implement call is effort1's (AC-7), so `last` and `progress.log` hold the model and effort.
 - **AC-80:** THE SYSTEM SHALL ship `.claude/bin/run-status` (bash 3.2 and jq) that prints one line for Claude
   Code's status line: `run <id> · <step> · <m:ss in the step> · $<cost> · <last>` while a run holds the lock and
   is live; `run <id> · waiting at <gate>` while it waits; nothing when no run holds the lock. It reads the lock,
@@ -1133,6 +1162,21 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-25 — AC-5, AC-35, AC-36, AC-37, AC-38, state table (the rows that start a task run, AC-85's row, "any
+  infrastructure failure"), run file `next` values, Terms "Step" and "Run folder", Decisions "Models", Contract
+  ("How Claude Code is invoked": role table, `--effort`; Role prompts; Role outputs): scout1. Why: a task run now
+  starts with a cheap scout call that writes `scout.md` for clarify, spec and plan. The scout follows
+  `routing.scout` and gets `--effort`. Its failure never stops the run, so AC-36 to AC-38 and the "any" row
+  except it.
+
+- 2026-11-25 — AC-12, AC-13, AC-16, AC-17, AC-31, AC-60, AC-66, AC-68, AC-78, AC-79, state table (gate:limit),
+  Decisions "Models", Terms "Valid plan", Contract (CLI `--cell`, run file `cell`, implement argv `--effort`,
+  gate card example and `source`): effort1. Why: the implement model and effort now come from routing (effort1
+  AC-2 to AC-8), not from a fixed Opus or Sonnet. The route is the cell of the task's tier and complexity; a risky
+  task uses the risky route and a retry the retry route, so "on Opus" became "on the retry route". Each plan task
+  also has a `complexity`, and an L task a `splitReason` (effort1 AC-6, AC-14). `run quick --cell` and the run
+  file `cell` let an eval task test one cell (effort1 AC-28 to AC-31).
 
 - 2026-11-23 — AC-83–AC-90 (new), Contract (`gates.json → specFlow`, gate `spec-approve`, run file `specFlow`,
   `specApproved`), Terms (spec flow): a second way to approve a spec. Leonid: «Режим 2 мне удобен сейчас. Режим 1

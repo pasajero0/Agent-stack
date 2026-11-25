@@ -9,6 +9,7 @@ import { readLock } from "../../src/run/store.js";
 import { impl, makeFakeExecutable, repo, review, sh, text } from "./engine-fixture.js";
 import {
   clarify,
+  scout,
   mergeSpec,
   plan,
   spec,
@@ -29,20 +30,21 @@ afterEach(() => cleanupProjects());
 describe("task mode: clarify, answers and the spec", () => {
   it("v04 AC-5: run task starts with clarify on Opus and creates no branch before the answers", async () => {
     const r = repo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     const code = await startRun({ ...r.opts(), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
     const run = r.run();
     expect(run.next).toBe("gate:answers");
     expect(run.createdBranches).toEqual([]);
     expect(sh(r.dir, "branch", "--show-current")).toBe("main");
-    const argv = r.logged()[0]?.argv ?? [];
+    // scout1 AC-1: the scout call comes first; clarify is the second call.
+    const argv = r.logged()[1]?.argv ?? [];
     expect(argv[argv.indexOf("--model") + 1]).toBe("opus");
   });
 
   it("v04 AC-6: clarify output is stored as proposal and gate:answers shows the questions, size and stage", async () => {
     const r = repo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     const run = r.run();
     expect(run.proposal).toMatchObject({ size: "task", stage: { id: STAGE } });
@@ -52,7 +54,7 @@ describe("task mode: clarify, answers and the spec", () => {
 
   it("v04 AC-6: each question's prompt says that Enter takes the recommended answer", async () => {
     const r = repo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     const asked: string[] = [];
     const p = { ask: async (q: string) => (asked.push(q), null), close: () => {} };
     expect(await startRun({ ...r.opts(), prompter: p, mode: "task", description: TASK_DESC })).toBe(3);
@@ -74,30 +76,31 @@ describe("task mode: clarify, answers and the spec", () => {
     it("v04 AC-59: an unlisted term undoes the spec and re-runs the role with trace's output", async () => {
       const r = glossaryRepo();
       r.script([
+        scout(),
         clarify(),
         spec({ writes: { [SPEC_PATH]: withTerms("- **Greeting** — shared.\n- **Wave** — new word.\n") } }),
         spec({ writes: { [SPEC_PATH]: withTerms("- **Greeting** — shared.\n- **Wave** (local): this spec only.\n") } }),
       ]);
       expect(await start(r), text(r)).toBe(3);
       expect(r.run().next).toBe("gate:spec-merge");
-      expect(r.logged().length).toBe(3);
-      expect(r.logged()[2]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*terms not in docs\/GLOSSARY\.md: Wave/);
+      expect(r.logged().length).toBe(4);
+      expect(r.logged()[3]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*terms not in docs\/GLOSSARY\.md: Wave/);
       expect(sh(r.dir, "show", `${SPEC_BRANCH}:${SPEC_PATH}`)).toContain("**Wave** (local)");
     });
 
     it("v04 AC-8: a glossary edit by the spec role is in bounds and committed with the spec", async () => {
       const r = glossaryRepo();
       const glossary = "# Glossary\n\n- **Greeting** — what the file says.\n- **Wave** — a farewell.\n";
-      r.script([clarify(), spec({ writes: { [SPEC_PATH]: withTerms("- **Wave** — shared now.\n"), "docs/GLOSSARY.md": glossary } })]);
+      r.script([scout(), clarify(), spec({ writes: { [SPEC_PATH]: withTerms("- **Wave** — shared now.\n"), "docs/GLOSSARY.md": glossary } })]);
       expect(await start(r), text(r)).toBe(3);
-      expect(r.logged().length).toBe(2);
+      expect(r.logged().length).toBe(3);
       expect(sh(r.dir, "show", "--stat", "--format=", SPEC_BRANCH)).toContain("docs/GLOSSARY.md");
     });
 
     it("v04 AC-59: unlisted terms twice exit 1 at spec", async () => {
       const r = glossaryRepo();
       const bad = spec({ writes: { [SPEC_PATH]: withTerms("- **Wave** — new word.\n") } });
-      r.script([clarify(), bad, bad]);
+      r.script([scout(), clarify(), bad, bad]);
       expect(await start(r)).toBe(1);
       expect(r.run().next).toBe("spec");
       expect(text(r)).toContain("Wave");
@@ -107,7 +110,7 @@ describe("task mode: clarify, answers and the spec", () => {
   it("v04 AC-8: the confirmed answers create spec/<stage> from the base ref and the spec is committed as docs(<stage>): spec — <title>", async () => {
     const r = repo();
     const main = sh(r.dir, "rev-parse", "main");
-    r.script([clarify(), spec()]);
+    r.script([scout(), clarify(), spec()]);
     const code = await startRun({ ...r.opts({ gate: ["README.md please", "story", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
     const run = r.run();
@@ -155,7 +158,7 @@ describe("task mode: clarify, answers and the spec", () => {
       { id: "B3", goal: 'Add the "printer"' },
       { id: "B4", goal: "Say it's $HOME\nand `done`" },
     ];
-    r.script([clarify({ size: "epic", split })]);
+    r.script([scout(), clarify({ size: "epic", split })]);
     const code = await startRun({ ...r.opts({ gate: ["", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(0);
     const run = r.run();
@@ -167,7 +170,7 @@ describe("task mode: clarify, answers and the spec", () => {
     expect(text(r)).toContain("agent-stack run task --stage B2 'Add the parser'");
     expect(text(r)).toContain(`agent-stack run task --stage B3 'Add the "printer"'`);
     expect(text(r)).toContain("agent-stack run task --stage B4 'Say it'\\''s $HOME and `done`'");
-    expect(r.logged().length).toBe(1);
+    expect(r.logged().length).toBe(2);
     expect(sh(r.dir, "branch", "--list")).toBe("* main");
     expect(readLock(r.dir)).toBeNull();
   });
@@ -178,7 +181,7 @@ describe("task mode: clarify, answers and the spec", () => {
     git(r.dir, "add", "-A");
     git(r.dir, "commit", "-q", "-m", "docs: old spec");
     git(r.dir, "branch", "spec/B2");
-    r.script([clarify(), spec({ stage: "B3" })]);
+    r.script([scout(), clarify(), spec({ stage: "B3" })]);
     // The proposal B1 is taken, so B3 is offered (B2 is a branch); "greeting" and B2 fail; Enter takes B3.
     const code = await startRun({ ...r.opts({ gate: ["", "", "greeting", "B2", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
@@ -197,18 +200,18 @@ describe("task mode: clarify, answers and the spec", () => {
 
   it("v04 AC-48: a proposal that fails AC-7 is not the default; Enter takes the offered free id", async () => {
     const r = repo();
-    r.script([clarify({ id: "greet" }), spec({ stage: "A1" })]);
+    r.script([scout(), clarify({ id: "greet" }), spec({ stage: "A1" })]);
     const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
     expect(text(r)).toContain("Stage id greet cannot be used: it must be letters then digits, like A1");
     expect(text(r)).toContain("Stage id [A1]");
     expect(r.run().stage).toBe("A1");
-    expect(r.logged()[0]?.prompt).toContain("Ids already in use: none");
+    expect(r.logged()[1]?.prompt).toContain("Ids already in use: none");
   });
 
   it("v04 AC-48: a typo after a valid proposal goes back to the proposal, not to the typo", async () => {
     const r = repo();
-    r.script([clarify(), spec()]);
+    r.script([scout(), clarify(), spec()]);
     const code = await startRun({ ...r.opts({ gate: ["", "", "b-1", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
     expect(text(r).match(/Stage id \[B1\]/g)?.length).toBe(2);
@@ -224,7 +227,7 @@ describe("task mode: clarify, answers and the spec", () => {
   it("v04 AC-7: --stage pre-fills the stage id, and it is still validated", async () => {
     const r = repo();
     git(r.dir, "branch", "spec/C7");
-    r.script([clarify(), spec({ stage: "C8" })]);
+    r.script([scout(), clarify(), spec({ stage: "C8" })]);
     const code = await startRun({ ...r.opts({ gate: ["", "", "C8"] }), mode: "task", description: TASK_DESC, stage: "C7" });
     expect(code, text(r)).toBe(3);
     expect(text(r)).toContain("Stage id C7 cannot be used");
@@ -237,7 +240,7 @@ describe("task mode: clarify, answers and the spec", () => {
 
   it("v04 AC-7: a free --stage value is the default, and Enter takes it", async () => {
     const r = repo();
-    r.script([clarify(), spec({ stage: "C7" })]);
+    r.script([scout(), clarify(), spec({ stage: "C7" })]);
     const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC, stage: "C7" });
     expect(code, text(r)).toBe(3);
     expect(text(r)).toContain("Stage id [C7]");
@@ -251,27 +254,27 @@ describe("task mode: clarify, answers and the spec", () => {
     write(r.dir, "docs/specs/README.md", "# specs\n");
     git(r.dir, "add", "-A");
     git(r.dir, "commit", "-q", "-m", "docs: specs readme");
-    r.script([clarify({ id: "A5" }), spec({ stage: "A6" })]);
+    r.script([scout(), clarify({ id: "A5" }), spec({ stage: "A6" })]);
     const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
     expect(text(r)).toContain("Stage id A5 cannot be used");
     expect(text(r)).toContain("Stage id [A6]");
     expect(r.run().stage).toBe("A6");
-    const prompt = r.logged()[0]?.prompt ?? "";
+    const prompt = r.logged()[1]?.prompt ?? "";
     expect(prompt).toContain("Ids already in use: A4, A5");
-    expect(prompt).not.toContain("README.md");
+    expect(prompt).toContain("Ids already in use: A4, A5.");
   });
 
   it("v04 AC-48: an id with other characters gets the same plain reason", async () => {
     const r = repo();
-    r.script([clarify(), spec()]);
+    r.script([scout(), clarify(), spec()]);
     expect(await startRun({ ...r.opts({ gate: ["", "", "A1 b", ""] }), mode: "task", description: TASK_DESC })).toBe(3);
     expect(text(r)).toContain("Stage id A1 b cannot be used: it must be letters then digits, like A1");
   });
 
   it("v04 AC-7: --stage is kept apart from the confirmed stage, so an epic run leaves stage null", async () => {
     const r = repo();
-    r.script([clarify({ size: "epic", split: [{ id: "B2", goal: "Add the parser" }] })]);
+    r.script([scout(), clarify({ size: "epic", split: [{ id: "B2", goal: "Add the parser" }] })]);
     expect(await startRun({ ...r.opts({ gate: ["", ""] }), mode: "task", description: TASK_DESC, stage: "C7" })).toBe(0);
     const run = r.run();
     expect(run.size).toBe("epic");
@@ -286,7 +289,7 @@ describe("task mode: clarify, answers and the spec", () => {
       { id: "B3; touch pwned", goal: "Add the printer" },
       { id: ".B4", goal: "Add the docs" },
     ];
-    r.script([clarify({ size: "epic", split })]);
+    r.script([scout(), clarify({ size: "epic", split })]);
     expect(await startRun({ ...r.opts({ gate: ["", ""] }), mode: "task", description: TASK_DESC })).toBe(0);
     const t = text(r);
     expect(t).toContain("agent-stack run task --stage B2 'Add the parser'");
@@ -301,7 +304,7 @@ describe("task mode: clarify, answers and the spec", () => {
 
   it("v04 AC-28: c at gate:answers cancels the run before any branch exists", async () => {
     const r = repo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     expect(await startRun({ ...r.opts({ gate: ["c"] }), mode: "task", description: TASK_DESC })).toBe(0);
     expect(r.run().status).toBe("cancelled");
     expect(sh(r.dir, "branch", "--list")).toBe("* main");
@@ -309,29 +312,29 @@ describe("task mode: clarify, answers and the spec", () => {
 
   it("v04 AC-40: a spec role that writes outside its bounds is undone and re-run once with that feedback", async () => {
     const r = repo();
-    r.script([clarify(), spec({ writes: { [SPEC_PATH]: specMd(), "src/code.ts": "x\n" } }), spec()]);
+    r.script([scout(), clarify(), spec({ writes: { [SPEC_PATH]: specMd(), "src/code.ts": "x\n" } }), spec()]);
     const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
     expect(existsSync(join(r.dir, "src/code.ts"))).toBe(false);
     expect(sh(r.dir, "show", "--name-only", "--format=", SPEC_BRANCH)).toBe(SPEC_PATH);
-    expect(r.logged().length).toBe(3);
-    expect(r.logged()[2]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*src\/code\.ts/);
+    expect(r.logged().length).toBe(4);
+    expect(r.logged()[3]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*src\/code\.ts/);
   });
 
   it("v04 AC-8: specsDir and adrDir written with a trailing / (or a leading ./) still bound the spec role", async () => {
     const r = repo({ extra: { specsDir: "docs/specs/", adrDir: "./docs/adr/" } });
-    r.script([clarify(), spec({ writes: { [SPEC_PATH]: specMd(), "docs/adr/0001-greeting.md": "# ADR\n" } })]);
+    r.script([scout(), clarify(), spec({ writes: { [SPEC_PATH]: specMd(), "docs/adr/0001-greeting.md": "# ADR\n" } })]);
     const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(3);
     expect(r.run().next).toBe("gate:spec-merge");
     expect(sh(r.dir, "show", "--name-only", "--format=", SPEC_BRANCH)).toBe(`docs/adr/0001-greeting.md\n${SPEC_PATH}`);
-    expect(r.logged().length).toBe(2);
+    expect(r.logged().length).toBe(3);
   });
 
   it("v04 AC-40: a spec role that commits is reset and re-run; a second violation exits 1 with next kept", async () => {
     const r = repo();
     const commits = "git add docs && git commit -q -m sneaky";
-    r.script([clarify(), { ...spec(), exec: commits }, { ...spec(), exec: commits }]);
+    r.script([scout(), clarify(), { ...spec(), exec: commits }, { ...spec(), exec: commits }]);
     const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(1);
     const run = r.run();
@@ -342,17 +345,17 @@ describe("task mode: clarify, answers and the spec", () => {
 
   it("v04 AC-44: a spec role that leaves no SPEC.md is re-run once, then the run exits 1 at spec", async () => {
     const r = repo();
-    r.script([clarify(), spec({ writes: { "docs/specs/B1/notes.md": "x\n" } }), spec({ writes: {} })]);
+    r.script([scout(), clarify(), spec({ writes: { "docs/specs/B1/notes.md": "x\n" } }), spec({ writes: {} })]);
     const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
     expect(code, text(r)).toBe(1);
     expect(r.run().next).toBe("spec");
     expect(text(r)).toContain(SPEC_PATH);
-    expect(r.logged().length).toBe(3);
+    expect(r.logged().length).toBe(4);
   });
 
   it("v04 AC-49: a dirty tree right before spec/<stage> is created is refused with the changes listed", async () => {
     const r = repo();
-    r.script([clarify(), spec()]);
+    r.script([scout(), clarify(), spec()]);
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     write(r.dir, "stray.txt", "x");
     expect(await resumeRun({ ...r.opts({ gate: ["", "", ""] }) })).toBe(1);
@@ -476,7 +479,7 @@ describe("task mode: the whole path", () => {
       { cmd: "true './hello.txt'", exit: 0, skipped: false },
     ]);
     expect(t2?.checks.map((c) => c.cmd)).toEqual([".claude/bin/verify T2", "true './bye.txt'"]);
-    expect(r.logged().length).toBe(7);
+    expect(r.logged().length).toBe(8);
     expect(t1?.commit).toBe(sh(r.dir, "rev-parse", `${WORK_BRANCH}~1`));
   });
 

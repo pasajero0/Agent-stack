@@ -38,7 +38,33 @@ export function loadAgent(projectDir: string, name: string, need?: { re: RegExp;
   return body;
 }
 
-export function clarifyPrompt(p: { description: string; used: string[] }): string {
+/** The scout prompt (scout1 Contract, AC-3): the rules live here, as clarify's do; there is no scout skill. */
+export function scoutPrompt(p: { description: string }): string {
+  return [
+    "# Role: scout",
+    "",
+    "The driver has started a task run. You only read the repository: you must not edit files, run commands, or do the task.",
+    "",
+    "Task description:",
+    p.description,
+    "",
+    "- List the places that the next roles (clarify, then spec, then plan) should read first for this task: specs, the code the task changes, its tests, and the docs that define its words.",
+    "- At most 30 entries, the most important first. Each entry has one line of why.",
+    '- `path` is relative to the repository root. Give `lines` as "<first>-<last>" (or one number) when only part of a file matters; leave it out for a whole file or a folder.',
+  ].join("\n");
+}
+
+/** The map section (scout1 Contract "The map section", AC-5, AC-17): an empty line, the heading, the entry lines; none with no lines. */
+function mapSection(map: readonly string[] | undefined): string[] {
+  if (!map || map.length === 0) return [];
+  return [
+    "",
+    "Starting map (from the driver's scout, a cheap read-only call; it can miss places or be wrong). Read these places first; read a whole file only when the listed lines are not enough:",
+    ...map,
+  ];
+}
+
+export function clarifyPrompt(p: { description: string; used: string[]; map?: readonly string[] }): string {
   return [
     "# Role: clarify",
     "",
@@ -46,6 +72,7 @@ export function clarifyPrompt(p: { description: string; used: string[] }): strin
     "",
     "Task description:",
     p.description,
+    ...mapSection(p.map),
     "",
     "- Ask at most 5 questions, each with a recommended answer.",
     "- Size the work: task, story or epic.",
@@ -57,7 +84,7 @@ export function clarifyPrompt(p: { description: string; used: string[] }): strin
 
 export function specPrompt(
   projectDir: string,
-  p: { stage: string; title: string; description: string; answers: AnswerRecord[] }
+  p: { stage: string; title: string; description: string; answers: AnswerRecord[]; map?: readonly string[] }
 ): string {
   const skill = loadSkill(projectDir, "spec", `${p.stage} ${p.title}`);
   const answers = p.answers.map((a) => `Q: ${a.question}\nA: ${a.answer}`).join("\n\n");
@@ -78,6 +105,7 @@ export function specPrompt(
     "",
     "Answers (these are the grill):",
     answers || "(none)",
+    ...mapSection(p.map),
     "",
     "The /spec skill follows.",
     "",
@@ -85,7 +113,10 @@ export function specPrompt(
   ].join("\n");
 }
 
-export function planPrompt(projectDir: string, p: { stage: string; title: string; comment?: string | null }): string {
+export function planPrompt(
+  projectDir: string,
+  p: { stage: string; title: string; comment?: string | null; map?: readonly string[] }
+): string {
   const skill = loadSkill(projectDir, "plan", `${p.stage} ${p.title}`);
   const lines = [
     "# Role: plan",
@@ -97,7 +128,7 @@ export function planPrompt(projectDir: string, p: { stage: string; title: string
     "Do not write tasks.json: return the tasks in your output (`tasks`); the program writes the file.",
   ];
   if (p.comment) lines.push("", "The human rejected the previous plan. Their comment:", p.comment);
-  lines.push("", "The /plan skill follows.", "", skill);
+  lines.push(...mapSection(p.map), "", "The /plan skill follows.", "", skill);
   return lines.join("\n");
 }
 
@@ -130,7 +161,7 @@ export function implementPrompt(
   lines.push(
     "",
     p.commands.verify.trim() === "" ? "This task has no verify command." : `The task's verify: \`${p.commands.verify}\` (the driver runs it after you).`,
-    p.commands.test.trim() === "" ? "No test command is listed: do not try to run tests; say so in the report." : `The test command: \`${p.commands.test}\`.`,
+    p.commands.test.trim() === "" ? "No test command is listed: do not try to run tests; say so in the report." : `The test command: \`${p.commands.test}\`. Run the task's verify (it runs this task's tests; it is allowed exactly as written); do not run the full test command, the driver runs it after you.`,
     "",
     "Shell commands you may run (anything else is denied, so do not try it):",
     ...allowedCommandLines(p.commands),

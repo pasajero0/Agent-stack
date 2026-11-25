@@ -1,5 +1,6 @@
 /** Shared types of the pipeline driver (`agent-stack run`). Spec: docs/specs/v04/SPEC.md. */
 import type { SpecFlow } from "./spec-flow.js";
+import type { Routing } from "./routing.js";
 
 export type Mode = "task" | "quick";
 
@@ -8,10 +9,11 @@ export type RunStatus = "running" | "waiting" | "finished" | "cancelled";
 export type LimitReason = "attempts" | "blocked" | "review-loop" | "fuse" | "decision" | "test-conflict" | "tests-changed";
 
 /** Roles the driver calls Claude in. */
-export type Role = "clarify" | "spec" | "plan" | "implement" | "review";
+export type Role = "clarify" | "spec" | "plan" | "scout" | "implement" | "review";
 
 /** The step a run is at. `implement:<task>`, `checks:<task>`, `review:<task>`, `commit:<task>` carry a task id. */
 export type Next =
+  | "scout"
   | "clarify"
   | "gate:answers"
   | "spec"
@@ -150,6 +152,11 @@ export interface RunFile {
   steps: StepTime[];
   /** The estimated work time in seconds, or null (AC-81). */
   estimateSec: number | null;
+  /**
+   * `run quick --cell`: the routing cell Q1 uses instead of M·medium, or null (effort1 AC-28). Optional: a run file
+   * without the key (0.4.7) reads as null and stays without it.
+   */
+  cell?: string | null;
 }
 
 /** gates.json values the driver needs, with the `run` key's defaults filled in. */
@@ -171,4 +178,6 @@ export interface RunConfig {
   stagePattern: string;
   /** The glossary file: the spec role may edit it, and `trace --terms` checks against it; "" for none (AC-8, AC-59). */
   glossary: string;
+  /** `gates.json → routing`, checked when the run starts or resumes (effort1 AC-1). */
+  routing: Routing;
 }

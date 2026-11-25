@@ -41,7 +41,7 @@ Each stage of work goes through these steps; hooks enforce the ones marked 🔒.
    🔒 `.claude/bin/trace` links criteria and tests: a criterion without a test, or a test for a criterion
    the spec does not have (feature drift), keeps `STATUS: DONE` blocked (a light spec is not traced).
    🔒 cheat-guard blocks adding skipped tests or suppressed checks (`.skip`, `@ts-ignore`, `any`, …).
-5. **One task at a time** — the **implementer** subagent, model by tier; then `.claude/bin/verify <id>`.
+5. **One task at a time** — the **implementer** subagent (`.claude/gates.json → routing` picks its model); then `.claude/bin/verify <id>`.
    🔒 Only `verify` marks a task as passing.
 6. **Review** — the **code-reviewer** subagent against the spec, then the report below.
    🔒 evidence-gate blocks `STATUS: DONE` while a task fails, without EVIDENCE, while criteria and tests
@@ -83,13 +83,14 @@ context — so do trivial things directly and delegate when it buys a cheaper mo
 | Work | Subagent | Model |
 | --- | --- | --- |
 | fact lookups in the repo | researcher | haiku |
-| task tier S / M (from tasks.json) | implementer | sonnet |
-| task tier L, risky paths (auth, money, data migrations) | implementer | opus |
+| one task from tasks.json | implementer | from `.claude/gates.json → routing` |
 | tests from acceptance criteria | test-writer | sonnet |
 | spec review, code review, task analysis | spec-reviewer, code-reviewer, task-analyzer | opus |
 
-Every task ends green. By hand, a task that fails `verify` twice moves one tier up; under the driver
-(`agent-stack run`), a retry runs on Opus.
+The implementer's model and effort live in one place: `.claude/gates.json → routing`. Under the driver
+(`agent-stack run`), the routing picks them from the task's tier × complexity (its cell), and a retry uses
+`routing.retry`. By hand, spawn the implementer with the model of the task's cell; if a task fails `verify`
+twice, by hand, use the model of `routing.retry`. Every task ends green.
 
 ## Multi-step migrations
 

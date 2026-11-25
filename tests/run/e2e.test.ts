@@ -10,6 +10,7 @@ import { listRuns, readLock } from "../../src/run/store.js";
 import { impl, makeFakeExecutable, repo, sh, type Repo } from "./engine-fixture.js";
 import {
   clarify,
+  scout,
   mergeSpec,
   plan,
   spec,
@@ -82,7 +83,7 @@ describe("v04 end to end", () => {
     const r = repo();
     const origin = addBareRemote(r);
     const main = sh(r.dir, "rev-parse", "main");
-    r.script([clarify(), spec(), plan(), ...twoTasksDone()]);
+    r.script([scout(), clarify(), spec(), plan(), ...twoTasksDone()]);
     const started = Date.now();
 
     expect(await cli(r, ["", "", ""], "task", TASK_DESC), r.out.join("\n")).toBe(3);
@@ -119,19 +120,20 @@ describe("v04 end to end", () => {
     commitlintAccepts(headers.filter((h) => h !== "merge spec"));
 
     expect(sh(origin, "for-each-ref")).toBe("");
-    checkCalls(r, TASK_DESC, 7);
+    // scout1: the scout call comes first, so 8 call files.
+    checkCalls(r, TASK_DESC, 8);
     expect(elapsedMs).toBeLessThan(10_000);
     console.log(`task path wall time: ${elapsedMs} ms`);
   }, 120_000);
 
   it("v04 AC-2: --status changes nothing and every calls/ file holds the argv, not the prompt", async () => {
     const r = repo();
-    r.script([clarify(), spec()]);
+    r.script([scout(), clarify(), spec()]);
     expect(await cli(r, ["", "", ""], "task", TASK_DESC)).toBe(3);
     const before = readFileSync(join(r.dir, ".claude/tmp/runs", r.run().id, "run.json"), "utf8");
     expect(await cli(r, null, undefined, undefined, { status: true })).toBe(0);
     expect(readFileSync(join(r.dir, ".claude/tmp/runs", r.run().id, "run.json"), "utf8")).toBe(before);
-    checkCalls(r, TASK_DESC, 2);
+    checkCalls(r, TASK_DESC, 3);
     expect(await cli(r, null, undefined, undefined, { cancel: true })).toBe(0);
     expect(r.run().status).toBe("cancelled");
     expect(readLock(r.dir)).toBeNull();
@@ -139,7 +141,7 @@ describe("v04 end to end", () => {
 
   it("v04 AC-22: the accept gate with no terminal input waits with exit 3, and a later resume finishes the run", async () => {
     const r = repo();
-    r.script([clarify(), spec(), plan(), ...twoTasksDone()]);
+    r.script([scout(), clarify(), spec(), plan(), ...twoTasksDone()]);
     expect(await cli(r, ["", "", ""], "task", TASK_DESC)).toBe(3);
     mergeSpec(r);
     expect(await cli(r, ["a"], undefined, undefined, { resume: true })).toBe(3);

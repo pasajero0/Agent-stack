@@ -1,0 +1,9 @@
+{
+  "mode": "quick",
+  "cell": "S·high",
+  "description": "canEdit(user, doc) in src/access.js lets the wrong users edit. Fix the access check in that one line: only the document's owner or a user with role admin may edit. A missing user (null or undefined) and a user with no role who is not the owner may not edit.",
+  "fixture": "fixture",
+  "check": "test -z \"$( (git diff --name-only main -- src/; git ls-files --others --exclude-standard -- src/) | grep -v '^src/access.js$')\" && node --input-type=module -e \"import {canEdit} from './src/access.js';const d={ownerId:1};const t=[[{id:1,role:'user'},true],[{id:2,role:'admin'},true],[{id:3,role:'user'},false],[undefined,false],[null,false],[{id:4},false]];let ok=true;for(const [u,e] of t){let g;try{g=canEdit(u,d)}catch(x){g='throw'}ok=ok&&g===e}process.exit(ok?0:1)\" && node -e \"const fs=require('fs'),p=require('path');const r='.claude/tmp/runs';const f=fs.readdirSync(r).flatMap(x=>{const c=p.join(r,x,'calls');return fs.existsSync(c)?fs.readdirSync(c).filter(n=>/^[0-9]+-implement[.]json$/.test(n)).map(n=>[parseInt(n,10),p.join(c,n)]):[]}).sort((a,b)=>a[0]-b[0]);const a=f.length?JSON.parse(fs.readFileSync(f[0][1],'utf8')).argv:[];const v=k=>a[a.indexOf(k)+1];process.exit(v('--model')==='opus'&&v('--effort')==='high'?0:1)\"",
+  "expect": "finished",
+  "answers": ["a"]
+}

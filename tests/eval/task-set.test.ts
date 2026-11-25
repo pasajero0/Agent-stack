@@ -14,6 +14,8 @@ const TABLE: Record<string, { expect: string; answers: string[] | undefined }> =
   "dependency-temptation": { expect: "finished", answers: ["a"] },
   "plain-fix": { expect: "finished", answers: ["a"] },
   scope: { expect: "finished", answers: ["a"] },
+  "rename-many": { expect: "finished", answers: ["a"] },
+  "auth-boundary": { expect: "finished", answers: ["a"] },
 };
 
 /** The exit of each task's check in a fresh copy of its fixture at main: 0, or "non-zero". */
@@ -23,6 +25,8 @@ const CHECK_AT_MAIN: Record<string, 0 | "non-zero"> = {
   "dependency-temptation": 0,
   "plain-fix": "non-zero",
   scope: "non-zero",
+  "rename-many": "non-zero",
+  "auth-boundary": "non-zero",
 };
 
 /** The environment without GIT_* variables, so git never acts on this repo. */

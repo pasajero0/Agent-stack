@@ -6,7 +6,7 @@ import { resumeRun, startRun, statusRun } from "../../src/run/engine/index.js";
 import { sha256 } from "../../src/run/engine/card.js";
 import { makeFakeExecutable, repo, text, type Repo } from "./engine-fixture.js";
 import { runDir } from "../../src/run/store.js";
-import { clarify, mergeSpec, patchRun, plan, TASK_DESC, TASKS_PATH, toPlanApprove, toSpecMerge, twoTasksDone } from "./engine-task-fixture.js";
+import { clarify, mergeSpec, patchRun, plan, scout, TASK_DESC, TASKS_PATH, toPlanApprove, toSpecMerge, twoTasksDone } from "./engine-task-fixture.js";
 
 beforeAll(makeFakeExecutable);
 afterEach(() => cleanupProjects());
@@ -24,7 +24,8 @@ describe("gate cards (AC-68, AC-69)", () => {
     await toPlanApprove(r, [plan()]);
     const card = r.run().card;
     expect(card?.gate).toBe("plan-approve");
-    expect(card?.source).toBe(sha256(readFileSync(join(r.dir, TASKS_PATH), "utf8")));
+    const routes = ["sonnet·low", "sonnet·medium", "opus·high", "sonnet·low", "sonnet·medium", "opus·high", "sonnet·medium", "opus·medium", "opus·high", "opus·high", "opus·high"];
+    expect(card?.source).toBe(sha256(`${readFileSync(join(r.dir, TASKS_PATH), "utf8")}\n${routes.join("\n")}`));
     expect(card?.facts).toContain(`full task text: ${TASKS_PATH}`);
     expect(card?.prompts[0]?.answers.map((a) => a.key)).toEqual(["a", "r", "c"]);
     const t = text(r);
@@ -163,7 +164,7 @@ describe("--answer (AC-70)", () => {
 
   it("v04 AC-70: answers that run out before the gate decides apply nothing; the next resume starts at the first prompt", async () => {
     const r = repo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     // No terminal and no gate input: the run waits at gate:answers.
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     expect(await resumeRun({ ...r.opts(), answers: [""] })).toBe(3);
@@ -189,7 +190,7 @@ describe("--answer on the paths that write files (AC-68, AC-70)", () => {
 
   it("v04 AC-70: with size epic a stage-id answer is extra, and split.md is not written", async () => {
     const r = repo();
-    r.script([clarify({ size: "epic", split: [{ id: "C1", goal: "part one" }] })]);
+    r.script([scout(), clarify({ size: "epic", split: [{ id: "C1", goal: "part one" }] })]);
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     const questions = (r.run().card?.prompts.length ?? 0) - 2;
     const answers = [...Array.from({ length: questions }, () => ""), "epic", ""];
@@ -201,13 +202,13 @@ describe("--answer on the paths that write files (AC-68, AC-70)", () => {
 
   it("v04 AC-68: a gate:answers resume takes the stage id the card showed", async () => {
     const r = repo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     const card = r.run().card;
     if (!card) throw new Error("no card");
     const prompts = card.prompts.map((p, i) => (i === card.prompts.length - 1 ? { ...p, default: "C7" } : p));
     patchRun(r, { card: { ...card, prompts } });
-    r.script([clarify(), { expectRole: "spec", output: { needsHumanDecision: [] } }]);
+    r.script([scout(), clarify(), { expectRole: "spec", output: { needsHumanDecision: [] } }]);
     await resumeRun({ ...r.opts(), answers: prompts.map(() => "") });
     expect(r.run().stage).toBe("C7");
   });

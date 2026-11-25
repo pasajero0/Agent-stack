@@ -103,7 +103,7 @@ describe("run --stats command", () => {
     expect(text.out[1]).toContain("r-20261120-101500");
     const json = await call(undefined, { stats: true, json: true });
     expect(json.code).toBe(0);
-    expect(JSON.parse(json.out[0] ?? "").version).toBe(1);
+    expect(JSON.parse(json.out[0] ?? "").version).toBe(2);
   });
 
   it("stats1 AC-8: changes no file, takes no lock, starts no Claude, needs no harness", async () => {

@@ -34,6 +34,7 @@ import { estimate, times } from "./timing.js";
 import { quickMode } from "./steps-quick.js";
 import { taskMode } from "./steps-task.js";
 import { parseNext } from "./transitions.js";
+import { requirePlanOnResume } from "./plan-file.js";
 import { commandName, requireHarness } from "./command.js";
 
 export type { ExitCode } from "./loop.js";
@@ -128,7 +129,7 @@ function lockRefusal(dir: string): RunError {
   );
 }
 
-export function startRun(o: EngineOptions & { mode: Mode; description: string; stage?: string }): Promise<ExitCode> {
+export function startRun(o: EngineOptions & { mode: Mode; description: string; stage?: string; cell?: string }): Promise<ExitCode> {
   return guard(o, async () => {
     const dir = o.projectDir;
     const description = o.description.trim();
@@ -180,6 +181,8 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       estimateSec: null,
       calls: 0,
       fuse: cfg.fuse,
+      // effort1 AC-28: run quick --cell; every other run writes null. src/commands/run.ts checked the value.
+      cell: o.mode === "quick" ? (o.cell ?? null) : null,
     };
     // AC-81: a quick run is one task; a task run is estimated at gate:plan-approve, when its tasks are known.
     if (o.mode === "quick") run.estimateSec = estimate(dir, run, 1)?.sec ?? null;
@@ -252,6 +255,7 @@ export function resumeRun(o: EngineOptions & { id?: string }): Promise<ExitCode>
         throw new RunError(`Run ${id} works on branch ${run.branch}, but ${cur ?? "a detached HEAD"} is checked out. Run git switch ${run.branch}, then resume.`, 1);
       }
     }
+    requirePlanOnResume(dir, cfg, run);
     if (CLEAN_ON_RESUME.has(kind)) refuseDirty(dir, `to resume at ${run.next}`);
     const interrupted = run.status === "running";
     return drive(o, cfg, run, mode, (ctx) => {

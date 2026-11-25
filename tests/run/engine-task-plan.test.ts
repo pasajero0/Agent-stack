@@ -6,6 +6,7 @@ import { resumeRun, startRun } from "../../src/run/engine/index.js";
 import { impl, makeFakeExecutable, repo, review, sh, text } from "./engine-fixture.js";
 import {
   clarify,
+  scout,
   mergeSpec,
   plan,
   planTasks,
@@ -31,7 +32,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(run.next).toBe("gate:plan-approve");
     expect(run.status).toBe("waiting");
     const t = text(r);
-    expect(t).toMatch(/T1 {2}S · sonnet · AC-1/);
+    expect(t).toMatch(/T1 {2}S · low -> sonnet · low · AC-1/);
     expect(t).toContain("verify: test -f hello.txt");
     expect(t).toMatch(/T2.*AC-2/);
   });
@@ -50,7 +51,7 @@ describe("task mode: plan and gate:plan-approve", () => {
       review(),
     ]);
     const t = text(r);
-    expect(t).toMatch(/T1 {2}\w · opus · risky/);
+    expect(t).toMatch(/T1 {2}\w · \w+ -> opus · high · risky/);
     expect(t).not.toMatch(/T2.*risky/);
     const code = await resumeRun({ ...r.opts({ gate: ["a", "a"] }) });
     expect(code, text(r)).toBe(0);
@@ -72,16 +73,16 @@ describe("task mode: plan and gate:plan-approve", () => {
       "gate:plan-approve reject split T1 in two",
       "gate:plan-approve cancel",
     ]);
-    expect(r.logged().length).toBe(4);
-    expect(r.logged()[3]?.prompt).toContain("split T1 in two");
-    expect(r.logged()[2]?.prompt).not.toContain("split T1 in two");
+    expect(r.logged().length).toBe(5);
+    expect(r.logged()[4]?.prompt).toContain("split T1 in two");
+    expect(r.logged()[3]?.prompt).not.toContain("split T1 in two");
   });
 
   it("v04 AC-45: a plan that does not cover every criterion is deleted and re-run once with the error", async () => {
     const r = repo();
     await toPlanApprove(r, [plan({ tasks: [{ id: "T1", ac: ["AC-1"] }] }), plan()]);
     expect(r.run().next).toBe("gate:plan-approve");
-    expect(r.logged().length).toBe(4);
+    expect(r.logged().length).toBe(5);
     const tasks: unknown = JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"));
     expect(tasks).toMatchObject({ tasks: [{ id: "T1" }, { id: "T2" }] });
   });
@@ -94,7 +95,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     ];
     await toPlanApprove(r, [plan({ tasks: bad }), plan()]);
     expect(r.run().next).toBe("gate:plan-approve");
-    expect(r.logged()[3]?.prompt).toContain("task T1: verify cannot fail (|| true); remove it");
+    expect(r.logged()[4]?.prompt).toContain("task T1: verify cannot fail (|| true); remove it");
     const tasks: unknown = JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"));
     expect(tasks).toMatchObject({ tasks: [{ verify: "test -f hello.txt" }, { verify: "test -f bye.txt" }] });
   });
@@ -121,9 +122,9 @@ describe("task mode: plan and gate:plan-approve", () => {
     ];
     await toPlanApprove(r, [plan({ tasks: bad }), plan()]);
     expect(r.run().next).toBe("gate:plan-approve");
-    expect(r.logged().length).toBe(4);
-    expect(r.logged()[3]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*T1;touch pwned/);
-    expect(text(r)).toMatch(/^ {2}T1 {2}\w · \w+ · AC-1 /m);
+    expect(r.logged().length).toBe(5);
+    expect(r.logged()[4]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*T1;touch pwned/);
+    expect(text(r)).toMatch(/^ {2}T1 {2}\w · \w+ -> \w+ · \w+ · AC-1 /m);
   });
 
   it("v04 AC-40: a plan role that writes outside .claude/tmp/<stage>/ is undone and, the second time, exits 1", async () => {
@@ -136,7 +137,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(existsSync(join(r.dir, "src/x2.ts"))).toBe(false);
     expect(existsSync(join(r.dir, TASKS_PATH))).toBe(false);
     expect(text(r)).toContain("src/x2.ts");
-    expect(r.logged()[3]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*src\/x1\.ts/);
+    expect(r.logged()[4]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*src\/x1\.ts/);
     expect(r.run().next).toBe("plan");
     expect(sh(r.dir, "branch", "--show-current")).toBe(WORK_BRANCH);
   });
@@ -158,20 +159,20 @@ describe("task mode: plan and gate:plan-approve", () => {
     const r = repo();
     await toPlanApprove(r, [plan({ tasks: [{ id: "Fixture", ac: ["AC-1", "AC-2"] }] })]);
     expect(r.run().next).toBe("gate:plan-approve");
-    expect(r.logged().length).toBe(3);
-    expect(text(r)).toMatch(/^ {2}Fixture {2}\w · \w+ · AC-1,2 /m);
+    expect(r.logged().length).toBe(4);
+    expect(text(r)).toMatch(/^ {2}Fixture {2}\w · \w+ -> \w+ · \w+ · AC-1,2 /m);
   });
 
   it("v04 AC-45: a task id F<digits> clashes with the fix tasks and makes the plan invalid", async () => {
     const r = repo();
     await toPlanApprove(r, [plan({ tasks: [{ id: "F1", ac: ["AC-1", "AC-2"] }] }), plan()]);
-    expect(r.logged().length).toBe(4);
-    expect(r.logged()[3]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*F1/);
+    expect(r.logged().length).toBe(5);
+    expect(r.logged()[4]?.prompt).toMatch(/FROM THE PROGRAM[\s\S]*F1/);
   });
 
   it("v04 AC-32: needsHumanDecision from spec and plan is shown at the next gate, then cleared", async () => {
     const r = repo();
-    r.script([clarify(), spec({ needs: ["pick a greeting language"] }), plan({ needs: ["T2 may need a new dependency"] })]);
+    r.script([scout(), clarify(), spec({ needs: ["pick a greeting language"] }), plan({ needs: ["T2 may need a new dependency"] })]);
     expect(await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC })).toBe(3);
     expect(text(r)).toContain("pick a greeting language");
     mergeSpec(r);
@@ -189,7 +190,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(r.run().next).toBe("gate:plan-approve");
     const onDisk: unknown = JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"));
     expect(onDisk).toEqual({ stage: "B1", tasks: planTasks(TWO_TASKS) });
-    expect(r.logged()[2]?.prompt).toMatch(/do not write `?tasks\.json`?/i);
+    expect(r.logged()[3]?.prompt).toMatch(/do not write `?tasks\.json`?/i);
   });
 
   it("v04 AC-57: a plan role with no valid plan that asks for a decision stops at gate:limit, not a blind re-run", async () => {
@@ -199,7 +200,7 @@ describe("task mode: plan and gate:plan-approve", () => {
     expect(await resumeRun({ ...r.opts() }), text(r)).toBe(3);
     expect(r.run()).toMatchObject({ next: "gate:limit", returnTo: "plan", limitReason: "decision" });
     expect(text(r)).toContain("Approve writing tasks.json?");
-    expect(r.logged().length).toBe(3);
+    expect(r.logged().length).toBe(4);
     expect(existsSync(join(r.dir, TASKS_PATH))).toBe(false);
   });
 
@@ -209,8 +210,8 @@ describe("task mode: plan and gate:plan-approve", () => {
     mergeSpec(r);
     expect(await resumeRun({ ...r.opts({ gate: ["r", "return the tasks in the output"] }) }), text(r)).toBe(3);
     expect(r.run().next).toBe("gate:plan-approve");
-    expect(r.logged().length).toBe(4);
-    expect(r.logged()[3]?.prompt).toContain(
+    expect(r.logged().length).toBe(5);
+    expect(r.logged()[4]?.prompt).toContain(
       "FROM THE HUMAN: you asked: Approve writing tasks.json?; the answer: return the tasks in the output"
     );
     expect(r.run().gates.at(-1)).toMatchObject({
@@ -222,31 +223,31 @@ describe("task mode: plan and gate:plan-approve", () => {
   });
 
   it("v04 AC-57: the human's answer survives a fuse stop between the decision retry and the next plan call", async () => {
-    const r = repo({ run: { fuse: { calls: 3 } } });
+    const r = repo({ run: { fuse: { calls: 4 } } });
     await toSpecMerge(r, [plan({ tasks: [], needs: ["Which file?"] }), plan()]);
     mergeSpec(r);
-    expect(await resumeRun({ ...r.opts({ gate: ["r", "use hello.txt", "f 5"] }) }), text(r)).toBe(3);
+    expect(await resumeRun({ ...r.opts({ gate: ["r", "use hello.txt", "f 6"] }) }), text(r)).toBe(3);
     expect(r.run().next).toBe("gate:plan-approve");
-    expect(r.logged().length).toBe(4);
-    expect(r.logged()[3]?.prompt).toContain("FROM THE HUMAN: you asked: Which file?; the answer: use hello.txt");
+    expect(r.logged().length).toBe(5);
+    expect(r.logged()[4]?.prompt).toContain("FROM THE HUMAN: you asked: Which file?; the answer: use hello.txt");
   });
 
   it("v04 AC-57: a spec role with no SPEC.md that asks for a decision stops at gate:limit (decision)", async () => {
     const r = repo();
-    r.script([clarify(), spec({ writes: {}, needs: ["Which greeting language?"] })]);
+    r.script([scout(), clarify(), spec({ writes: {}, needs: ["Which greeting language?"] })]);
     expect(await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC })).toBe(3);
     expect(r.run()).toMatchObject({ next: "gate:limit", returnTo: "spec", limitReason: "decision" });
     expect(text(r)).toContain("Which greeting language?");
-    expect(r.logged().length).toBe(2);
+    expect(r.logged().length).toBe(3);
   });
 
   it("v04 AC-57: r at gate:limit (decision) re-runs the spec role with its question and the answer", async () => {
     const r = repo();
-    r.script([clarify(), spec({ writes: {}, needs: ["Which greeting language?"] }), spec()]);
+    r.script([scout(), clarify(), spec({ writes: {}, needs: ["Which greeting language?"] }), spec()]);
     expect(await startRun({ ...r.opts({ gate: ["", "", "", "r", "English"] }), mode: "task", description: TASK_DESC }), text(r)).toBe(3);
     expect(r.run().next).toBe("gate:spec-merge");
-    expect(r.logged().length).toBe(3);
-    expect(r.logged()[2]?.prompt).toContain("FROM THE HUMAN: you asked: Which greeting language?; the answer: English");
+    expect(r.logged().length).toBe(4);
+    expect(r.logged()[3]?.prompt).toContain("FROM THE HUMAN: you asked: Which greeting language?; the answer: English");
   });
 
   it("v04 AC-57: the human's decision answer does not leak into a plan re-run after a plan-approve reject", async () => {
@@ -255,9 +256,9 @@ describe("task mode: plan and gate:plan-approve", () => {
     mergeSpec(r);
     const gate = ["r", "use hello.txt", "r", "smaller tasks", "c"];
     expect(await resumeRun({ ...r.opts({ gate }) }), text(r)).toBe(0);
-    expect(r.logged().length).toBe(5);
-    expect(r.logged()[3]?.prompt).toContain("FROM THE HUMAN: you asked: Which file?; the answer: use hello.txt");
-    const last = r.logged()[4]?.prompt ?? "";
+    expect(r.logged().length).toBe(6);
+    expect(r.logged()[4]?.prompt).toContain("FROM THE HUMAN: you asked: Which file?; the answer: use hello.txt");
+    const last = r.logged()[5]?.prompt ?? "";
     expect(last).toContain("smaller tasks");
     expect(last).not.toContain("use hello.txt");
   });
@@ -275,8 +276,9 @@ describe("task mode: plan and gate:plan-approve", () => {
   });
 
   it("v04 AC-35: the calls fuse stops before the spec call at gate:limit; raising it returns to spec", async () => {
-    const r = repo({ run: { fuse: { calls: 1 } } });
-    r.script([clarify(), spec()]);
+    // scout1: the scout and clarify calls come before spec.
+    const r = repo({ run: { fuse: { calls: 2 } } });
+    r.script([scout(), clarify(), spec()]);
     expect(await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC })).toBe(3);
     let run = r.run();
     expect(run.next).toBe("gate:limit");
@@ -303,7 +305,7 @@ describe("task mode: base-check, tasks and gate:accept", () => {
     expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(1);
     expect(r.run().next).toBe("base-check");
     expect(text(r)).toContain("test -f base-ok.txt");
-    expect(r.logged().length).toBe(3);
+    expect(r.logged().length).toBe(4);
   });
 
   it("v04 AC-16: tier L runs on Opus, S on Sonnet, and a retry after a red verify on Opus", async () => {
@@ -367,7 +369,7 @@ describe("task mode: base-check, tasks and gate:accept", () => {
       expect(await resumeRun({ ...r.opts({ gate: ["a"] }) })).toBe(1);
       expect(r.run().next).toBe("implement:T1");
       expect(text(r)).toMatch(/timed out after .*checkTimeoutMin/);
-      expect(r.logged().length).toBe(3); // clarify, spec, plan: no implement call
+      expect(r.logged().length).toBe(4); // scout, clarify, spec, plan: no implement call
       // AC-60: no attempt counted, no base recorded; --dry wrote no log (AC-63).
       expect(r.run().tasks[0]).toMatchObject({ attempts: 0, taskBase: null });
       expect(existsSync(join(r.dir, ".claude/tmp/B1/verify.log"))).toBe(false);

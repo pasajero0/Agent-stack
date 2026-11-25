@@ -1,0 +1,9 @@
+{
+  "mode": "quick",
+  "cell": "L·low",
+  "description": "Rename the function totalPrice in src/price.js to sumPrices. Update every place that calls it.",
+  "fixture": "fixture",
+  "check": "! git grep -q -w totalPrice -- . ':!.claude' && git grep -q -E 'function sumPrices[(]' -- src/price.js && npm test && node -e \"const fs=require('fs'),p=require('path');const r='.claude/tmp/runs';const f=fs.readdirSync(r).flatMap(x=>{const c=p.join(r,x,'calls');return fs.existsSync(c)?fs.readdirSync(c).filter(n=>/^[0-9]+-implement[.]json$/.test(n)).map(n=>[parseInt(n,10),p.join(c,n)]):[]}).sort((a,b)=>a[0]-b[0]);const a=f.length?JSON.parse(fs.readFileSync(f[0][1],'utf8')).argv:[];const v=k=>a[a.indexOf(k)+1];process.exit(v('--model')==='sonnet'&&v('--effort')==='medium'?0:1)\"",
+  "expect": "finished",
+  "answers": ["a"]
+}

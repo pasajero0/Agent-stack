@@ -73,6 +73,7 @@ program
   .argument("[mode]", "quick or task")
   .argument("[description]", "what to build or fix")
   .option("--stage <id>", "stage id the task gate proposes (still validated)")
+  .option("--cell <cell>", "with run quick: the routing cell Q1 uses instead of M·medium, e.g. L·low")
   .option("--resume [id]", "continue a waiting or interrupted run (default: the locked one)")
   .option("--status [id]", "print the run; change nothing")
   .option("--cancel [id]", "cancel a waiting or interrupted run")

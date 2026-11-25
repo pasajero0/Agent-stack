@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { emitHarness } from "../claude/harness.js";
+import { emitHarness, RoutingTemplateError } from "../claude/harness.js";
 import { banner, log } from "../utils/logger.js";
 import { printNextSteps } from "./next-steps.js";
 
-export async function generateCommand(options: { force?: boolean } = {}): Promise<void> {
+/** `templatesDir` is a test seam: where the harness templates are read from. */
+export async function generateCommand(options: { force?: boolean; templatesDir?: string } = {}): Promise<void> {
   banner();
 
   const projectDir = process.cwd();
@@ -17,7 +18,14 @@ export async function generateCommand(options: { force?: boolean } = {}): Promis
   }
 
   log.step("Detecting project and generating the Claude harness...");
-  const files = await emitHarness(projectDir);
+  let files;
+  try {
+    files = await emitHarness(projectDir, options.templatesDir);
+  } catch (e) {
+    if (!(e instanceof RoutingTemplateError)) throw e;
+    log.error(e.message);
+    process.exit(1);
+  }
 
   console.log();
   log.success(`Generated ${files.length} harness file(s).`);

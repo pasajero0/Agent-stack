@@ -99,13 +99,13 @@ function byRole(roles: Record<Role, RoleCalls>): Record<string, Record<string, n
 
 const limits = (m: Record<string, number>): Record<string, number> => Object.fromEntries(STOP_REASONS.map((r) => [r, m[r] ?? 0]));
 
-/** The JSON object, version 1 (AC-7, AC-11). JSON escapes control characters itself (AC-22). */
+/** The JSON object, version 2(AC-7, AC-11). JSON escapes control characters itself (AC-22). */
 export function statsJson(s: Stats): Record<string, unknown> {
   const t = s.totals;
   const c = t.count;
   const noTimes = t.time.runsWithoutTimes === s.runs.length;
   return {
-    version: 1,
+    version: 2,
     runs: s.runs.map((r) => ({
       id: r.run.id,
       date: dateOf(r.run.id),

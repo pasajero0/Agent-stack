@@ -20,6 +20,7 @@ import { withFeedback } from "./role-bounds.js";
 import { lintItems, toLimit } from "./task-core.js";
 import { planHandlers, planTaskInfo } from "./steps-plan.js";
 import { proposalOf, specHandlers, stageOf } from "./steps-spec.js";
+import { readMapLines, scout, scoutMapPath } from "./steps-scout.js";
 import type { StepEvent } from "./transitions.js";
 import { commandName } from "./command.js";
 
@@ -72,7 +73,7 @@ function freeStageId(ctx: Ctx, used: string[]): string {
 }
 
 const clarify: StepHandler = async (ctx) => {
-  const base = clarifyPrompt({ description: ctx.run.description, used: usedStageIds(ctx) });
+  const base = clarifyPrompt({ description: ctx.run.description, used: usedStageIds(ctx), map: readMapLines(scoutMapPath(ctx)) });
   const r = await judgeCall(ctx, "clarify", (fb) => withFeedback(base, [fb]), parseClarify);
   if (r.kind === "fuse") return toLimit(ctx, "fuse", "clarify");
   ctx.run.proposal = r.value;
@@ -229,21 +230,24 @@ const answersGate: StepHandler = async (ctx) => {
 
 export const taskMode: ModeSteps = {
   maxAttempts: 3,
-  handlers: { clarify, "gate:answers": answersGate, ...specHandlers, ...planHandlers },
+  handlers: { scout, clarify, "gate:answers": answersGate, ...specHandlers, ...planHandlers },
 
-  /** AC-5: clarify first; no branch until the answers are confirmed. `--stage` pre-fills the stage id (AC-7). */
+  /**
+   * scout1 AC-1: the scout first, then clarify (AC-5); no branch until the answers are confirmed. `--stage`
+   * pre-fills the stage id (AC-7).
+   */
   start(input) {
-    return { next: "clarify", tasks: [], newBranch: null, stagePrefill: input.stage };
+    return { next: "scout", tasks: [], newBranch: null, stagePrefill: input.stage };
   },
 
   taskInfo(ctx, id) {
     const { run } = ctx;
     if (isFix(id)) {
       const desc = `Fix what the human asked for after rejecting the result of "${run.description}" (stage ${run.stage ?? "?"}): ${fixComment(run, id)}`;
-      return { id, desc, criteria: [], tier: "M", risky: false, fix: true, verify: "" };
+      return { id, desc, criteria: [], tier: "M", complexity: "medium", risky: false, fix: true, verify: "" };
     }
     const stage = stageOf(run);
-    const t = readPlan(ctx.projectDir, ctx.cfg, stage).find((x) => x.id === id);
+    const t = readPlan(ctx.projectDir, ctx.cfg, stage, run.id).find((x) => x.id === id);
     if (!t) throw new RunError(`Task ${id} is not in .claude/tmp/${stage}/tasks.json any more. Restore the plan, then ${resumeHint(run.id)}.`, 1);
     return planTaskInfo(t, readSpec(ctx.projectDir, ctx.cfg, stage));
   },

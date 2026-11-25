@@ -10,6 +10,9 @@ import {
   type ExitCode,
 } from "../run/engine/index.js";
 import { commandName } from "../run/engine/command.js";
+import { CELLS, show } from "../run/routing.js";
+
+const CELL_QUICK_ONLY = "--cell applies to run quick only.";
 
 export interface RunOptions {
   /** `true` for the flag alone, a run id when one is given. */
@@ -25,6 +28,8 @@ export interface RunOptions {
   stats?: boolean;
   /** `--json` with `--status` (AC-69) or `--stats` (stats1, AC-7). */
   json?: boolean;
+  /** `--cell`, with run quick only: the routing cell Q1 uses instead of M·medium (effort1 AC-28, AC-30). */
+  cell?: string;
 }
 
 export interface RunIo {
@@ -76,6 +81,11 @@ export async function runCommand(
     out("--json goes with --status or --stats.");
     return 1;
   }
+  const cell = options.cell;
+  if (cell !== undefined && actions > 0) {
+    out(CELL_QUICK_ONLY);
+    return 1;
+  }
   if (stats) return statsRun({ ...base, json: options.json === true });
   if (given(options.status)) return statusRun({ ...base, id: idOf(options.status), json: options.json === true });
   if (given(options.cancel)) return cancelRun({ ...base, id: idOf(options.cancel) });
@@ -93,8 +103,23 @@ export async function runCommand(
     out("--stage applies to run task only.");
     return 1;
   }
+  if (cell !== undefined && mode === "task") {
+    out(CELL_QUICK_ONLY);
+    return 1;
+  }
+  if (cell !== undefined && !CELLS.includes(cell)) {
+    out(`--cell must be one of ${CELLS.join(", ")}; got ${show(cell)}.`);
+    return 1;
+  }
   return withSignals((signal) =>
-    startRun({ ...base, signal, mode, description: description ?? "", ...(options.stage ? { stage: options.stage } : {}) })
+    startRun({
+      ...base,
+      signal,
+      mode,
+      description: description ?? "",
+      ...(options.stage ? { stage: options.stage } : {}),
+      ...(cell !== undefined ? { cell } : {}),
+    })
   );
 }
 

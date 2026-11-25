@@ -5,12 +5,16 @@ import {
   buildHarnessFiles,
   planUpdate,
   removeHarnessFiles,
+  RoutingTemplateError,
   writeHarnessFiles,
   type UpdatePlan,
 } from "../claude/harness.js";
 import { banner, log } from "../utils/logger.js";
 
-export async function updateCommand(options: { dryRun?: boolean; force?: boolean } = {}): Promise<void> {
+/** `templatesDir` is a test seam: where the harness templates are read from. */
+export async function updateCommand(
+  options: { dryRun?: boolean; force?: boolean; templatesDir?: string } = {}
+): Promise<void> {
   banner();
 
   const projectDir = process.cwd();
@@ -20,14 +24,31 @@ export async function updateCommand(options: { dryRun?: boolean; force?: boolean
   }
 
   const params = await detectHarnessParams(projectDir);
-  const plan = planUpdate(projectDir, buildHarnessFiles(params), { force: options.force });
+  let built;
+  try {
+    built = buildHarnessFiles(params, options.templatesDir);
+  } catch (e) {
+    if (!(e instanceof RoutingTemplateError)) throw e;
+    log.error(e.message);
+    process.exit(1);
+  }
+  const plan = planUpdate(projectDir, built, { force: options.force });
+  const keys = plan.routingKeysAdded;
 
   if (options.dryRun) {
     log.step("Harness update preview (dry run):");
     plan.created.forEach((p) => console.log(`  + ${p}`));
     plan.changed.forEach((p) => console.log(`  ~ ${p}`));
     plan.removed.forEach((p) => console.log(`  - ${p} (no longer part of the harness)`));
-    plan.kept.forEach((p) => console.log(`  = ${p} (yours — kept)`));
+    plan.kept.forEach((p) =>
+      console.log(
+        p === ".claude/gates.json" && plan.routingAdded
+          ? `  ~ ${p} (routing block added)`
+          : p === ".claude/gates.json" && keys.length
+            ? `  ~ ${p} (${keys.map((k) => `routing.${k}`).join(", ")} added)`
+            : `  = ${p} (yours — kept)`
+      )
+    );
     plan.edited.forEach((p) => console.log(`  = ${p} (you changed it — kept; --force overwrites)`));
     reportExtras(plan);
     console.log();
@@ -36,7 +57,7 @@ export async function updateCommand(options: { dryRun?: boolean; force?: boolean
   }
 
   log.step("Updating the Claude harness...");
-  await writeHarnessFiles(projectDir, plan.toWrite);
+  await writeHarnessFiles(projectDir, plan.gatesWithRouting ? [...plan.toWrite, plan.gatesWithRouting] : plan.toWrite);
   await removeHarnessFiles(projectDir, plan.removed);
 
   console.log();
@@ -45,7 +66,16 @@ export async function updateCommand(options: { dryRun?: boolean; force?: boolean
       `${plan.removed.length} removed, ${plan.unchanged} unchanged, ` +
       `${plan.kept.length + plan.edited.length} kept as yours.`
   );
-  log.dim("  .claude/rules/, .claude/tmp/ and your seed files (CLAUDE.md, gates.json…) were left untouched.");
+  if (plan.routingAdded) log.dim("  added the routing block to .claude/gates.json");
+  if (keys.length) log.dim(`  added ${keys.map((k) => `routing.${k}`).join(", ")} to .claude/gates.json`);
+  log.dim(
+    "  .claude/rules/, .claude/tmp/ and your seed files (CLAUDE.md, gates.json…) were left untouched" +
+      (plan.routingAdded
+        ? ", except the routing block added to gates.json."
+        : keys.length
+          ? ", except the routing keys added to gates.json."
+          : ".")
+  );
   plan.edited.forEach((p) => log.dim(`  kept ${p} — you changed it since it was deployed; --force overwrites`));
   reportExtras(plan);
 }
@@ -66,6 +96,7 @@ function reportExtras(plan: UpdatePlan): void {
         "files you change are kept."
     );
   }
+  if (plan.gatesWarning) log.warn(plan.gatesWarning);
   if (plan.settingsUnreadable) {
     log.warn(".claude/settings.json is not valid JSON, so it was left as is. Fix it, then run update again.");
   }

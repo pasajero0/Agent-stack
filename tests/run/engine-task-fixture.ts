@@ -30,6 +30,15 @@ export const specMd = (stage = STAGE): string =>
     "",
   ].join("\n");
 
+/**
+ * A scout call (scout1): every task run makes it first. The default entry is README.md, which every test repo
+ * holds, so the run writes a scout map and goes on to clarify.
+ */
+export const scout = (entries: Json[] = [{ path: "README.md", why: "the project readme" }]): Json => ({
+  expectRole: "scout",
+  output: { entries },
+});
+
 export const clarify = (o: { size?: "task" | "story" | "epic"; id?: string; split?: { id: string; goal: string }[] } = {}): Json => ({
   expectRole: "clarify",
   output: {
@@ -52,11 +61,28 @@ export interface PlanTask {
   tier?: "S" | "M" | "L";
   desc?: string;
   verify?: string;
+  complexity?: "low" | "medium" | "high";
+  splitReason?: string;
 }
 
-/** The tasks as the plan role returns them and as tasks.json holds them. */
+const COMPLEXITY = { S: "low", M: "medium", L: "high" } as const;
+
+/** The tasks as the plan role returns them: every task has a complexity, an L task a splitReason. */
 export const planTasks = (tasks: PlanTask[]): Json[] =>
-  tasks.map((t) => ({ id: t.id, ac: t.ac, tier: t.tier ?? "S", desc: t.desc ?? `do ${t.id}`, verify: t.verify ?? "true", passes: false }));
+  tasks.map((t) => {
+    const tier = t.tier ?? "S";
+    const splitReason = t.splitReason ?? (tier === "L" ? "one change, no seam" : undefined);
+    return {
+      id: t.id,
+      ac: t.ac,
+      tier,
+      complexity: t.complexity ?? COMPLEXITY[tier],
+      ...(splitReason !== undefined ? { splitReason } : {}),
+      desc: t.desc ?? `do ${t.id}`,
+      verify: t.verify ?? "true",
+      passes: false,
+    };
+  });
 
 export const tasksJson = (tasks: PlanTask[]): string => JSON.stringify({ stage: STAGE, tasks: planTasks(tasks) });
 
@@ -93,9 +119,9 @@ export const twoTasksDone = (): Json[] => [
   review(),
 ];
 
-/** Starts a task run that stops at gate:spec-merge (exit 3): clarify, answers (Enter × 3), spec. */
+/** Starts a task run that stops at gate:spec-merge (exit 3): scout, clarify, answers (Enter × 3), spec. */
 export async function toSpecMerge(r: Repo, extra: Json[] = []): Promise<void> {
-  r.script([clarify(), spec(), ...extra]);
+  r.script([scout(), clarify(), spec(), ...extra]);
   const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
   expect(code, text(r)).toBe(3);
 }

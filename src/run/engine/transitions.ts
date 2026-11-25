@@ -6,6 +6,7 @@ import type { Next, RunStatus } from "../types.js";
 
 /** `next` without its task id. */
 export type StepKind =
+  | "scout"
   | "clarify"
   | "gate:answers"
   | "spec"
@@ -42,6 +43,7 @@ export type EventType =
   | "resume" // gate:limit retry or raise
   | "no-input" // a gate without input: not in the table; the loop sets waiting and exits 3 (AC-29)
   // ---- task mode only ----
+  | "scouted" // scout: the scout map is written, or was already there (scout1 AC-4, AC-19)
   | "clarified" // clarify: valid output stored as proposal
   | "answered" // gate:answers: size task/story and a valid stage id confirmed
   | "epic" // gate:answers: size epic confirmed, split.md written
@@ -80,7 +82,7 @@ interface Row {
 const TASK_STEPS: readonly StepKind[] = ["implement", "checks", "review", "commit"];
 const GATES: readonly StepKind[] = ["gate:answers", "gate:spec-merge", "gate:spec-approve", "gate:plan-approve", "gate:accept", "gate:limit"];
 /** Steps that make a Claude call, so the fuse can stop them. */
-const CALL_STEPS: readonly StepKind[] = ["clarify", "spec", "plan", "implement", "review"];
+const CALL_STEPS: readonly StepKind[] = ["scout", "clarify", "spec", "plan", "implement", "review"];
 
 export const TABLE: readonly Row[] = [
   // ---- quick mode, and the task-mode rows shared with it ----
@@ -93,7 +95,8 @@ export const TABLE: readonly Row[] = [
   { from: ["commit"], event: "committed-last", to: "gate:accept", ac: "AC-21, AC-25" },
   { from: ["gate:accept"], event: "accept", to: "finished", ac: "AC-22" },
   { from: ["gate:accept"], event: "reject", to: "implement:<event>", ac: "AC-22" },
-  // ---- task mode only: clarify, gate:answers, spec, gate:spec-merge, plan, gate:plan-approve ----
+  // ---- task mode only: scout, clarify, gate:answers, spec, gate:spec-merge, plan, gate:plan-approve ----
+  { from: ["scout"], event: "scouted", to: "clarify", ac: "scout1 AC-4, AC-19" },
   { from: ["clarify"], event: "clarified", to: "gate:answers", ac: "AC-6" },
   { from: ["gate:answers"], event: "answered", to: "spec", ac: "AC-7, AC-8" },
   { from: ["gate:answers"], event: "epic", to: "finished", ac: "AC-9" },
@@ -118,6 +121,7 @@ export const TABLE: readonly Row[] = [
 ];
 
 const FIXED: readonly FixedStep[] = [
+  "scout",
   "clarify",
   "gate:answers",
   "spec",

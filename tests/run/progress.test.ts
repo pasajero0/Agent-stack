@@ -49,7 +49,7 @@ describe("a run can be seen (AC-78, AC-79)", () => {
     r.script([{ ...impl({ writes: { "README.md": "# demo\nfixed\n" } }), tools: [{ name: "Read", input: { file_path: "README.md" } }, { name: "Edit", input: { file_path: "README.md" } }] }]);
     expect(await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: "Fix the README line." })).toBe(0);
     const t = text(r);
-    expect(t).toMatch(/-> implement:Q1 · implement · sonnet · call 1\/40 \.\.\.\n {3}· Read README\.md\n {3}· Edit README\.md\n {3}ok in /);
+    expect(t).toMatch(/-> implement:Q1 · implement · sonnet · medium · call 1\/40 \.\.\.\n {3}· Read README\.md\n {3}· Edit README\.md\n {3}ok in /);
     const dir = runDir(r.dir, r.run().id);
     const now = JSON.parse(readFileSync(join(dir, "now.json"), "utf8")) as { step: string; since: string; last: string };
     expect(now.step).toBe("gate:accept");

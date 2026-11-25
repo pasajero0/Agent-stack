@@ -18,16 +18,17 @@ import { ask, comment, humanFeedback, NO_INPUT, recordGate } from "./gates.js";
 import { specChanged, toSpecApprove } from "./spec-change.js";
 import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, tasksPath, type PlanTask } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, withFeedback, type RoleMark } from "./role-bounds.js";
-import { implementModel, lastCallOutput } from "./steps-implement.js";
+import { implementRoute, lastCallOutput } from "./steps-implement.js";
 import { toLimit } from "./task-core.js";
+import { readMapLines, scoutMapPath } from "./steps-scout.js";
 import { proposalOf, stageOf } from "./steps-spec.js";
 import { transition, type StepEvent } from "./transitions.js";
 
-/** A plan task as implement, checks and review see it; risky only for tier S or M (AC-13). */
+/** A plan task as implement, checks and review see it; risky for every tier (effort1 AC-4). */
 export function planTaskInfo(t: PlanTask, specMd: string): TaskInfo {
   const criteria = criteriaOf(specMd, t.ac);
-  const risky = t.tier !== "L" && [t.desc, ...criteria].some(isRisky);
-  return { id: t.id, desc: t.desc, criteria, tier: t.tier, risky, fix: false, verify: t.verify };
+  const risky = [t.desc, ...criteria].some(isRisky);
+  return { id: t.id, desc: t.desc, criteria, tier: t.tier, complexity: t.complexity, risky, fix: false, verify: t.verify };
 }
 
 const lastPlanGate = (run: RunFile): GateRecord | undefined => [...run.gates].reverse().find((g) => g.gate === "gate:plan-approve");
@@ -65,7 +66,16 @@ function keepLeftover(ctx: Ctx, stage: string, specMd: string): boolean {
 /** Writes the checked plan as `tasks.json` (AC-12): the role has no write tool, since Claude Code guards `.claude/`. */
 function writePlan(file: string, stage: string, tasks: PlanTask[]): void {
   mkdirSync(dirname(file), { recursive: true });
-  const out = tasks.map((t) => ({ id: t.id, ac: t.ac, tier: t.tier, desc: t.desc, verify: t.verify, passes: false }));
+  const out = tasks.map((t) => ({
+    id: t.id,
+    ac: t.ac,
+    tier: t.tier,
+    complexity: t.complexity,
+    ...(t.splitReason !== undefined ? { splitReason: t.splitReason } : {}),
+    desc: t.desc,
+    verify: t.verify,
+    passes: false,
+  }));
   writeFileSync(file, JSON.stringify({ stage, tasks: out }, null, 2) + "\n");
 }
 
@@ -85,7 +95,7 @@ const planStep: StepHandler = async (ctx) => {
   const file = tasksPath(dir, stage);
   if (keepLeftover(ctx, stage, specMd)) return { type: "planned" };
   const mark: RoleMark = { head: headSha(dir), branch: run.branch };
-  const base = planPrompt(dir, { stage, title: proposalOf(run).stage.title, comment: lastReject(run)?.comment ?? null });
+  const base = planPrompt(dir, { stage, title: proposalOf(run).stage.title, comment: lastReject(run)?.comment ?? null, map: readMapLines(scoutMapPath(ctx)) });
   const human = humanFeedback(run);
   let feedback: string | null = null;
   let last: string[] = [];
@@ -132,8 +142,9 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
   const f = new Facts();
   for (const t of tasks) {
     const info = planTaskInfo(t, specMd);
-    const model = implementModel(info, { ...newTask(t.id), attempts: 1 });
-    f.add(`${t.id}  ${t.tier} · ${model}${info.risky ? " · risky" : ""} · ${criteriaText(t.ac)}   ${t.desc}`);
+    const route = implementRoute(ctx.cfg.routing, info, { ...newTask(t.id), attempts: 1 });
+    const split = t.tier === "L" ? ` · not split: ${splitText(t.splitReason ?? "")}` : "";
+    f.add(`${t.id}  ${t.tier} · ${t.complexity} -> ${route.model} · ${route.effort}${info.risky ? " · risky" : ""}${split} · ${criteriaText(t.ac)}   ${t.desc}`);
     f.whole(`      verify: ${t.verify}`);
     // AC-77: Claude Code allows no command substitution by a rule, so --allowedTools never lets implement run it.
     if (/\$\(|`/.test(t.verify)) {
@@ -152,9 +163,21 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
     facts: f.list,
     keep: f.keep,
     prompts: [{ text: "approve the plan; each verify runs as written", default: null, answers: [A.approve, { ...A.reject, label: "reject (a comment follows; the plan is redone)" }, A.cancel] }],
-    source: sha256(text),
+    source: cardSource(ctx, text),
     hint: resumeHint(ctx.run.id),
   };
+}
+
+/** A splitReason on one line: each whitespace run is one space, other control chars are `?` (effort1 AC-8). */
+function splitText(s: string): string {
+  return s.replace(/\s+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "?");
+}
+
+/** The card's source: tasks.json and the 11 routes this process read, so a routing edit is a changed plan (effort1 AC-21). */
+function cardSource(ctx: Ctx, text: string): string {
+  const r = ctx.cfg.routing;
+  const routes = [r.S.low, r.S.medium, r.S.high, r.M.low, r.M.medium, r.M.high, r.L.low, r.L.medium, r.L.high, r.retry, r.risky];
+  return sha256(`${text}\n${routes.join("\n")}`);
 }
 
 /**
@@ -163,10 +186,10 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
  */
 function planShown(ctx: Ctx, stage: string): PlanTask[] {
   // readPlan first: a plan removed while the gate waited is its clean refusal, not a crash.
-  const tasks = readPlan(ctx.projectDir, ctx.cfg, stage);
+  const tasks = readPlan(ctx.projectDir, ctx.cfg, stage, ctx.run.id);
   const text = readFileSync(tasksPath(ctx.projectDir, stage), "utf8");
   const kept = ctx.run.card;
-  const changed = kept !== null && kept.gate === "plan-approve" && kept.source !== sha256(text);
+  const changed = kept !== null && kept.gate === "plan-approve" && kept.source !== cardSource(ctx, text);
   showCard(ctx, planCard(ctx, stage, tasks, text));
   if (changed && ctx.answering) throw new GateChanged(resumeHint(ctx.run.id));
   return tasks;
@@ -174,8 +197,8 @@ function planShown(ctx: Ctx, stage: string): PlanTask[] {
 
 /** The plan's sha256 now, after readPlan has checked the file is there (AC-68). */
 function planSource(ctx: Ctx, stage: string): string {
-  readPlan(ctx.projectDir, ctx.cfg, stage);
-  return sha256(readFileSync(tasksPath(ctx.projectDir, stage), "utf8"));
+  readPlan(ctx.projectDir, ctx.cfg, stage, ctx.run.id);
+  return cardSource(ctx, readFileSync(tasksPath(ctx.projectDir, stage), "utf8"));
 }
 
 /** Approve, reject or cancel the plan (AC-12, AC-13, AC-14). */

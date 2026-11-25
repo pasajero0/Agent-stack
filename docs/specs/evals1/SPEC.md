@@ -101,7 +101,7 @@ next. The rows of one step are checked in order; the first that fits wins.
 | --- | --- | --- | --- |
 | prepare | temp copy made, harness deployed, first commit | start | AC-3 |
 | prepare | any part fails | outcome `error`, no check → score | AC-13 |
-| start | `run quick <description>` exits | read | AC-4 |
+| start | `run quick <description>` (with `--cell <cell>` when `task.json` has `cell`) exits | read | AC-4 |
 | read | the Outcome table gives `error` | outcome `error` → check | AC-12 |
 | read | the last driver exit was 3, the outcome is a gate, and an answer is left | answer | AC-5 |
 | read | any other outcome | that outcome → check | AC-4 |
@@ -160,6 +160,7 @@ Exit codes:
 | `check` | a string, not empty after trim; run as `/bin/sh -c <check>` in the temp copy | `check: must be a command` |
 | `expect` | `finished`, `cancelled`, `gate:accept`, or `gate:limit ` and one of `attempts`, `blocked`, `review-loop`, `fuse`, `decision`, `test-conflict`, `tests-changed` | `expect: must be finished, cancelled, gate:accept or gate:limit <reason>` |
 | `answers` | optional, default `[]`; an array of strings. Answer *i* is the one `--answer` of the *i*-th `--resume` | `answers: must be a list of texts` |
+| `cell` | optional; one of the 9 routing cells `S·low` … `L·high` (effort1). With it the try starts as `run quick --cell <cell> <description>` | `cell: must be one of S·low, S·medium, S·high, M·low, M·medium, M·high, L·low, L·medium, L·high` |
 
 A required field that is missing gives `<field>: missing`. Any other key is refused (AC-8), so a typo never counts
 as a default.
@@ -313,7 +314,7 @@ repo. `AGENT_STACK_CLAUDE` and the fake's variables pass through.
 
   After the try is scored it SHALL remove the temp copy.
 - **AC-4:** WHEN the temp copy is ready, THE SYSTEM SHALL run `node <repo root>/bin/cli.mjs run quick
-  <description>` in it, then read the outcome by the Contract's Outcome table. The run id is the name of the one
+  <description>` in it, or `run quick --cell <cell> <description>` when `task.json` has a `cell` (effort1 AC-29), then read the outcome by the Contract's Outcome table. The run id is the name of the one
   folder under the temp copy's `.claude/tmp/runs/`.
 - **AC-5:** WHEN the last driver command exited 3, the outcome is a gate, and an answer is left, THE SYSTEM SHALL
   run `run --resume <run id> --answer <next answer>`, then read the outcome again. Each `--resume` gets exactly one
@@ -335,7 +336,7 @@ repo. `AGENT_STACK_CLAUDE` and the fake's variables pass through.
   - a folder name that is not a valid id: `<tasks dir>/<folder>: not a valid eval task id`;
   - `task.json` that cannot be read or is not valid JSON: `<id>/task.json: not JSON`;
   - not an object: `<id>/task.json: not an object`;
-  - a missing required field (all but `answers`): `<id>/task.json: <field>: missing`;
+  - a missing required field (all but `answers` and `cell`): `<id>/task.json: <field>: missing`;
   - a field that breaks its rule: `<id>/task.json: ` and the message of the `task.json` table;
   - an unknown key: `<id>/task.json: unknown key <key>`, control characters in `<key>` printed as `?`.
 
@@ -385,7 +386,7 @@ repo. `AGENT_STACK_CLAUDE` and the fake's variables pass through.
   and a listing of `<repo root>/.claude/tmp/runs/` (git does not see that folder: `.git/info/exclude` lists
   `/.claude/`). On CI that folder may not exist; "missing" before and after is equal.
 - **AC-18:** THE SYSTEM SHALL keep two fake scripts per eval task under `tests/eval/scripts/`: `<id>.pass.json` and
-  `<id>.break.json`. The tests SHALL run each of the 5 eval tasks through the eval runner, with `AGENT_STACK_CLAUDE`
+  `<id>.break.json`. The tests SHALL run each eval task in `evals/tasks/` (the 5 of AC-24 and the 2 of effort1 AC-25) through the eval runner, with `AGENT_STACK_CLAUDE`
   set to `tests/run/fake-claude.mjs`:
   - one eval run per eval task and script, with `--task <id>` and `--yes`;
   - the test copies the script to a temp dir and points `FAKE_CLAUDE_SCRIPT` there, so the fake's `.idx` counter
@@ -411,7 +412,7 @@ repo. `AGENT_STACK_CLAUDE` and the fake's variables pass through.
 - **AC-23:** WHEN a run file has `costUnknownCalls` > 0, THE SYSTEM SHALL add the `<cost unknown>` suffix to the try
   line, add the calls to the totals, and count the try in `triesWithUnknownCost`. Unknown cost SHALL never count as
   $0 in silence.
-- **AC-24:** THE SYSTEM SHALL ship these 5 eval tasks in `evals/tasks/`. In each fixture, `generate` SHALL write a
+- **AC-24:** THE SYSTEM SHALL ship these eval tasks in `evals/tasks/`, with the 2 of effort1 AC-25: 7 in all. In each fixture, `generate` SHALL write a
   `commands.test` that is not empty, and that command SHALL exit 0 in a temp copy, so base-check (v04, AC-24)
   passes. The test checks both, without claude. "`main`" below is `main` in the temp copy, its first commit:
 
@@ -438,8 +439,8 @@ repo. `AGENT_STACK_CLAUDE` and the fake's variables pass through.
 
 - With the fake claude, one try (prepare, driver, check, clean) of a fixture of at most 5 files ends in under 15 s
   on the developer's laptop. The AC-18 test of `plain-fix` with `--k 1` fails above 15 s.
-- The estimate of AC-2 is $0.10 per try (from the 0.4.6 plan: about $0.1 a quick run). One full eval run of the 5
-  eval tasks with k = 3 is 15 tries, about $1.50.
+- The estimate of AC-2 is $0.10 per try (from the 0.4.6 plan: about $0.1 a quick run). One full eval run of the 7
+  eval tasks with k = 3 is 7 × 3 = 21 tries, about $2.10 (effort1; it was 5 × 3 = 15 tries, about $1.50).
 
 ## Out of scope
 
@@ -478,4 +479,8 @@ git --no-optional-locks status --porcelain        # the same before and after
 
 ## Changes
 
-None: this is the first version.
+- 2026-11-25 — AC-4, AC-8, AC-18, AC-24, Contract (`task.json` field `cell`, the `start` row), NFR (effort1): an
+  eval task may name a routing cell, and the eval runner passes it as `run quick --cell <cell>`. AC-18 and AC-24
+  count every eval task in `evals/tasks/`: the 5 of AC-24 and the 2 of effort1 AC-25. A full eval run is
+  7 × 3 = 21 tries, about $2.10. Why: effort1 routes each implement call by tier and complexity, and an eval
+  task must be able to test one cell's route.

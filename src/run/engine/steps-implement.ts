@@ -4,7 +4,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { Model } from "../claude.js";
+import { parseRoute, type Route, type Routing } from "../routing.js";
 import { isObj } from "../config.js";
 import { RunError } from "../errors.js";
 import { currentBranch, git, headSha, softReset } from "../git.js";
@@ -22,9 +22,17 @@ import { commandName } from "./command.js";
 const short = (sha: string): string => sha.slice(0, 7);
 const CONTINUE = "continue from `git status`.";
 
-/** AC-16: Opus for tier L, a risky task, a fix task and every attempt after the first; else Sonnet. */
-export function implementModel(info: TaskInfo, task: RunTask): Model {
-  return info.tier === "L" || info.risky || info.fix || task.attempts > 1 ? "opus" : "sonnet";
+/**
+ * The route of an implement attempt, never stored (effort1 AC-2..AC-5, AC-17, AC-18). In order: retry (an attempt
+ * after the first, or a fix task), risky, the cell `routing.<tier>.<complexity>`. Q1 carries the quick cell
+ * (the run file's `cell`, else M·medium) in its task info; a fix task and Q1 are never risky.
+ */
+export function implementRoute(routing: Routing, info: TaskInfo, task: RunTask): Route {
+  const value = task.attempts > 1 || info.fix ? routing.retry : info.risky ? routing.risky : routing[info.tier][info.complexity];
+  const route = parseRoute(value);
+  // The routing passed checkRouting when the run started or resumed.
+  if (route === null) throw new RunError(`gates.json routing has no valid route for ${info.id}: ${String(value)}.`, 1);
+  return route;
 }
 
 /**
@@ -102,7 +110,8 @@ export const implement: StepHandler = async (ctx, id) => {
   if (task.attempts === 0) task.attempts = 1;
   const commands = { test: ctx.cfg.commands.test, lint: ctx.cfg.commands.lint, verify: info.verify };
   const prompt = implementPrompt(ctx.projectDir, { taskId: task.id, taskDesc: info.desc, criteria: info.criteria, feedback: task.lastFeedback, commands });
-  const r = await roleCall(ctx, { role: "implement", commands }, implementModel(info, task), prompt, parseImplement);
+  const route = implementRoute(ctx.cfg.routing, info, task);
+  const r = await roleCall(ctx, { role: "implement", commands }, route.model, prompt, parseImplement, route.effort);
   const stray = undoGitSideEffects(ctx, task);
   if (r.kind === "fuse") {
     // A call stopped by error_max_budget_usd left edits, like an interrupted implement (AC-30, AC-35).

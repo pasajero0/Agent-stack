@@ -40,7 +40,8 @@ export function parseArgs(argv) {
 }
 
 const EXPECT_REASONS = ["attempts", "blocked", "review-loop", "fuse", "decision", "test-conflict", "tests-changed"];
-const KNOWN_KEYS = ["mode", "description", "fixture", "check", "expect", "answers"];
+const KNOWN_KEYS = ["mode", "description", "fixture", "check", "expect", "answers", "cell"];
+const CELLS = ["S·low", "S·medium", "S·high", "M·low", "M·medium", "M·high", "L·low", "L·medium", "L·high"];
 
 const isText = (v) => typeof v === "string" && v.trim() !== "";
 
@@ -100,6 +101,7 @@ function validateTask(id, taskDir) {
   if (Object.hasOwn(data, "answers") && !(Array.isArray(data.answers) && data.answers.every((a) => typeof a === "string"))) {
     problems.push(`${at}: answers: must be a list of texts`);
   }
+  if (Object.hasOwn(data, "cell") && !CELLS.includes(data.cell)) problems.push(`${at}: cell: must be one of ${CELLS.join(", ")}`);
   for (const key of Object.keys(data)) {
     if (!KNOWN_KEYS.includes(key)) problems.push(`${at}: unknown key ${key.replace(/[\u0000-\u001f\u007f-\u009f]/g, "?")}`);
   }

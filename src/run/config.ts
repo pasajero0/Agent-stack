@@ -5,6 +5,7 @@ import { RunError } from "./errors.js";
 import type { Fuse, RunConfig } from "./types.js";
 import { commandName } from "./engine/command.js";
 import { DEFAULT_SPEC_FLOW, isSpecFlow, specFlowNames, type SpecFlow } from "./spec-flow.js";
+import { checkRouting, type Routing } from "./routing.js";
 
 const DEFAULTS = {
   maxTurns: 60,
@@ -114,7 +115,8 @@ export function loadRunConfig(projectDir: string): RunConfig {
   const run = obj(parsed, "run", true);
   const cmds = obj(parsed, "commands", false);
 
-  return {
+  // The checks above and in `rest` stop at their first error; routing is checked once they pass (effort1 AC-12).
+  const rest = {
     maxTurns: positiveInt(run, "maxTurns", DEFAULTS.maxTurns),
     fuse: fuse(run),
     stepTimeoutMin: positive(run, "stepTimeoutMin", DEFAULTS.stepTimeoutMin),
@@ -131,6 +133,16 @@ export function loadRunConfig(projectDir: string): RunConfig {
     // The same default as .claude/bin/trace: docs/GLOSSARY.md unless gates.json names one ("" for none).
     glossary: dirPath(str(parsed, "glossary", "docs/GLOSSARY.md")),
   };
+  return { ...rest, routing: routing(parsed) };
+}
+
+/** `gates.json → routing` (effort1 AC-1, AC-12): every problem line, then the fix line, as one RunError. */
+function routing(o: Obj): Routing {
+  const v = o["routing"];
+  const problems = checkRouting(v, commandName());
+  if (problems.length > 0) throw new RunError([...problems, "Fix .claude/gates.json, then run again."].join("\n"), 1);
+  // checkRouting found no problem: v has exactly the 9 cells, retry and risky, each a route string.
+  return v as Routing;
 }
 
 /** `gates.json → specFlow` alone, for the check before every step (AC-84); a bad file or value is a RunError. */

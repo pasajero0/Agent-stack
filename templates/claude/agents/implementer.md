@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Use to implement exactly one task from the active stage's tasks.json (.claude/tmp/<stage>/tasks.json) — writes its failing tests first, then the code that makes its verify pass, and never weakens an existing test. Spawn with the model for the task's tier (S/M → sonnet, L → opus).
+description: Use to implement exactly one task from the active stage's tasks.json (.claude/tmp/<stage>/tasks.json) — writes its failing tests first, then the code that makes its verify pass, and never weakens an existing test. Under the driver, .claude/gates.json → routing picks its model and effort; by hand, spawn it with the model of the task's cell in routing.
 model: sonnet
 effort: medium
 tools: Read, Glob, Grep, Edit, Write, Bash
@@ -50,5 +50,7 @@ The driver (`agent-stack run`) gives you the task, its criteria, the feedback of
 shell commands you may run. It runs the checks, the review and the commit itself.
 
 - Run only the commands the prompt lists; never run `.claude/bin/verify`.
+- Run the task's verify (it runs this task's tests; it is allowed exactly as written); do not run the full test
+  command, the driver runs it after you.
 - Answer in the caller's schema: `status` DONE, BLOCKED or TEST_CONFLICT (then `conflict` with the test, the
   criterion and the reason), a report of what you did, and a commit type and subject.

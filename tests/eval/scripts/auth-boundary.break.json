@@ -1,0 +1,16 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "opus",
+    "expectEffort": "high",
+    "writes": {
+      "src/access.js": "/** True when the user may edit the document: only its owner or an admin may. */\nexport function canEdit(user, doc) {\n  return user.id === doc.ownerId || user.role === \"admin\";\n}\n"
+    },
+    "output": {
+      "status": "DONE",
+      "report": "canEdit allows only the owner or an admin",
+      "commit": { "type": "fix", "subject": "Allow only the owner or an admin to edit." },
+      "needsHumanDecision": []
+    }
+  }
+]

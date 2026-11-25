@@ -8,13 +8,17 @@ import { join } from "node:path";
 import { isObj } from "../config.js";
 import { RunError } from "../errors.js";
 import { criterionText } from "../prompts.js";
-import type { RunConfig } from "../types.js";
-import type { Tier } from "./context.js";
+import type { RunConfig, RunFile } from "../types.js";
+import { commandName } from "./command.js";
+import type { Complexity, Tier } from "./context.js";
 
 export interface PlanTask {
   id: string;
   ac: string[];
   tier: Tier;
+  complexity: Complexity;
+  /** Tier L only: why the task is not split (at most 80 characters, trimmed). */
+  splitReason?: string;
   desc: string;
   verify: string;
 }
@@ -24,6 +28,7 @@ export const tasksPath = (dir: string, stage: string): string => join(dir, stage
 export const specPath = (cfg: RunConfig, stage: string): string => `${cfg.specsDir}/${stage}/SPEC.md`;
 
 const TIERS: readonly Tier[] = ["S", "M", "L"];
+const COMPLEXITIES: readonly Complexity[] = ["low", "medium", "high"];
 
 const nonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
 
@@ -79,11 +84,23 @@ function parseTask(v: unknown, i: number, seen: Set<string>, fresh: boolean): Pl
   if (!Array.isArray(v.ac) || v.ac.length === 0 || !v.ac.every(nonEmptyStr)) return `task ${id} needs a non-empty ac array`;
   const tier = TIERS.find((t) => t === v.tier);
   if (tier === undefined) return `task ${id} needs a tier of S, M or L`;
+  // effort1 AC-15: never a default complexity, also in an approved plan (one written by 0.4.7 is refused).
+  const complexity = COMPLEXITIES.find((c) => c === v.complexity);
+  if (complexity === undefined) return `task ${id} needs a complexity of low, medium or high`;
+  let splitReason: string | undefined;
+  if (tier === "L") {
+    const reason = typeof v.splitReason === "string" ? v.splitReason.trim() : "";
+    if (reason === "") return `task ${id} is tier L and needs a splitReason: why it is not split`;
+    if (reason.length > 80) return `task ${id}: splitReason must be at most 80 characters`;
+    splitReason = reason;
+  }
   if (!nonEmptyStr(v.verify)) return `task ${id} needs a non-empty verify`;
   const never = fresh ? neverFails(v.verify) : null;
   if (never !== null) return `task ${id}: verify cannot fail (${never}); remove it`;
   if (v.passes !== false) return `task ${id} must have passes: false`;
-  return { id, ac: v.ac, tier, desc: typeof v.desc === "string" ? v.desc : "", verify: v.verify };
+  const task: PlanTask = { id, ac: v.ac, tier, complexity, desc: typeof v.desc === "string" ? v.desc : "", verify: v.verify };
+  if (splitReason !== undefined) task.splitReason = splitReason;
+  return task;
 }
 
 /**
@@ -118,13 +135,43 @@ export function readSpec(dir: string, cfg: RunConfig, stage: string): string {
   return readFileSync(file, "utf8");
 }
 
-/** The approved plan as it is on disk now (verify may have set `passes`); a broken one is exit 1. */
-export function readPlan(dir: string, cfg: RunConfig, stage: string): PlanTask[] {
+/** effort1 AC-15: what the human does about a missing complexity or splitReason, or null for any other problem. */
+function fixByHand(problem: string): string | null {
+  if (/^task \S+ needs a complexity of /.test(problem)) return 'Add "complexity" to each task by hand';
+  if (/^task \S+ is tier L and needs a splitReason: /.test(problem)) return 'Add "splitReason" to that task by hand';
+  if (/^task \S+: splitReason must be at most 80 characters$/.test(problem)) return "Shorten it by hand";
+  return null;
+}
+
+/**
+ * The approved plan as it is on disk now (verify may have set `passes`); a broken one is exit 1. A missing
+ * complexity or splitReason names the fix and the cancel command of run `runId` (effort1 AC-15).
+ */
+export function readPlan(dir: string, cfg: RunConfig, stage: string, runId: string): PlanTask[] {
   const file = tasksPath(dir, stage);
   const text = existsSync(file) ? readFileSync(file, "utf8") : "";
   const r = text === "" ? "tasks.json is missing" : parsePlan(text, readSpec(dir, cfg, stage), false);
-  if (typeof r === "string") throw new RunError(`${stageTmp(stage)}/tasks.json is no longer a valid plan: ${r}. Restore it, or cancel the run.`, 1);
+  if (typeof r === "string") {
+    const fix = fixByHand(r);
+    const end = fix === null ? "Restore it, or cancel the run." : `${fix}, or cancel the run: ${commandName()} run --cancel ${runId}.`;
+    throw new RunError(`${stageTmp(stage)}/tasks.json is no longer a valid plan: ${r}. ${end}`, 1);
+  }
   return r;
+}
+
+/** Task-mode steps that run before or at plan: on resume there is no approved plan to check (effort1 AC-15). */
+const BEFORE_PLAN = new Set(["scout", "clarify", "gate:answers", "spec", "gate:spec-approve", "gate:spec-merge", "plan"]);
+
+/**
+ * effort1 AC-15: on resume of a task-mode run past plan, the stage's tasks.json (if there) must be a valid plan
+ * by readPlan's rules, so a 0.4.7 plan exits 1 before the lock. At plan the file is a leftover: keepLeftover
+ * deletes an invalid one and plans again.
+ */
+export function requirePlanOnResume(dir: string, cfg: RunConfig, run: RunFile): void {
+  if (run.mode !== "task" || run.stage === null || BEFORE_PLAN.has(run.next)) return;
+  if (run.next === "gate:limit" && run.returnTo !== null && BEFORE_PLAN.has(run.returnTo)) return;
+  if (!existsSync(tasksPath(dir, run.stage))) return;
+  readPlan(dir, cfg, run.stage, run.id);
 }
 
 /** The sha256 of a tasks.json text, kept in a plan-approve reject (AC-14). */

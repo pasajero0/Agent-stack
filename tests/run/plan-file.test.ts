@@ -3,7 +3,7 @@ import { parsePlan } from "../../src/run/engine/plan-file.js";
 
 const SPEC = "- **AC-1:** x\n";
 const planWith = (verify: string, passes = false): string =>
-  JSON.stringify({ stage: "A1", tasks: [{ id: "T2", ac: ["AC-1"], tier: "S", desc: "d", verify, passes }] });
+  JSON.stringify({ stage: "A1", tasks: [{ id: "T2", ac: ["AC-1"], tier: "S", complexity: "low", desc: "d", verify, passes }] });
 
 describe("plan-file: a verify that cannot fail", () => {
   const never: [string, string][] = [

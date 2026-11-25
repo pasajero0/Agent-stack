@@ -170,12 +170,13 @@ describe("role prompts", () => {
     expect(p).toMatch(/skip the precondition and step 1/);
   });
 
-  it("v04 AC-17: the /plan skill says every task ends green, no test-only tasks, and a driver retry runs on Opus", () => {
+  it("v04 AC-17: the /plan skill says every task ends green, no test-only tasks, and a driver retry runs on the retry route", () => {
     const skill = readFileSync(new URL("../../templates/claude/skills/plan/SKILL.md", import.meta.url), "utf8");
     const flat = skill.replace(/\s+/g, " ");
     expect(flat).toMatch(/every task ends green/i);
     expect(flat).toMatch(/there are no test-only tasks/i);
-    expect(flat).toMatch(/under the driver \(`agent-stack run`\), a retry runs on Opus/i);
+    // effort1 AC-27 edits v04 AC-17: the retry runs on the retry route, not "on Opus".
+    expect(flat).toMatch(/under the driver \(`agent-stack run`\), a retry runs on the retry route/i);
   });
 
   it("v04 AC-65: the /plan skill says a verify must be able to fail, with the same patterns", () => {
@@ -233,6 +234,21 @@ describe("role prompts", () => {
     expect(p).toContain("- `.claude/bin/trace && npm test -- --test-name-pattern A2` (exactly)");
     expect(p).toMatch(/anything else is denied, so do not try it/i);
     expect(p.slice(p.indexOf("Shell commands you may run"))).not.toContain("lint");
+  });
+
+  it("F1: implement says to run the task's verify, not the full test command, and still names the test command", () => {
+    const p = implementPrompt(IMPL, { taskId: "T1", taskDesc: "d", criteria: [], feedback: null, commands: { test: "pnpm test", lint: "", verify: "" } });
+    expect(flat(p)).toMatch(/Run the task's verify \(it runs this task's tests; it is allowed exactly as written\)/);
+    expect(flat(p)).toMatch(/do not run the full test command, the driver runs it after you/);
+    expect(p).not.toContain("pnpm vitest");
+    expect(p).toContain("The test command: `pnpm test`.");
+  });
+
+  it("F1: the implementer agent's 'Under the driver' says the same and does not suggest pnpm vitest", () => {
+    const agent = flat(readFileSync(join(IMPL, ".claude", "agents", "implementer.md"), "utf8"));
+    expect(agent).toMatch(/Run the task's verify \(it runs this task's tests; it is allowed exactly as written\)/);
+    expect(agent).toMatch(/do not run the full test command, the driver runs it after you/);
+    expect(agent).not.toContain("pnpm vitest");
   });
 
   it("v04 AC-4: review labels the report UNVERIFIED CLAIMS FROM THE IMPLEMENTER", () => {

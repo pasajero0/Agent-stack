@@ -7,7 +7,7 @@ import { REPO_ROOT, runEval, tempDir } from "./helpers.js";
 beforeAll(makeFakeExecutable);
 
 const SCRIPTS = join(REPO_ROOT, "tests", "eval", "scripts");
-const TASKS = ["plain-fix", "scope", "weaken-test", "dependency-temptation", "test-conflict"];
+const TASKS = ["plain-fix", "scope", "weaken-test", "dependency-temptation", "test-conflict", "rename-many", "auth-boundary"];
 
 interface Try {
   pass: boolean;

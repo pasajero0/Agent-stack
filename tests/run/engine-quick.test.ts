@@ -43,7 +43,7 @@ describe("quick mode: the path", () => {
     expect(calls).toEqual(["1-implement.json"]);
     expect(r.logged()[0]?.env.AGENT_STACK_RUN).toBe(run.id);
     expect(text(r)).toContain("━━ Accept:");
-    expect(text(r)).toMatch(/-> implement:Q1 · implement · sonnet · call 1\/40 \.\.\./);
+    expect(text(r)).toMatch(/-> implement:Q1 · implement · sonnet · medium · call 1\/40 \.\.\./);
     expect(text(r)).toMatch(/ {3}ok in \d+s/);
   });
 

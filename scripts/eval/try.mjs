@@ -98,7 +98,9 @@ export async function oneTry(taskDir, task, n, opts) {
   } else {
     const started = Date.now();
     const driverRun = (args) => runChild(process.execPath, [cli, "run", ...args], prep.dir, { kind: "driver", deadline });
-    let driver = await driverRun(["quick", task.description]);
+    let driver = await driverRun(
+      task.cell === undefined ? ["quick", task.description] : ["quick", "--cell", task.cell, task.description],
+    );
     let o = readOutcome(prep.dir, driver);
     // AC-5: at a gate (exit 3) each --resume gets one answer, in order; a refused --resume (exit 1) ends the loop (AC-12).
     let next = 0;

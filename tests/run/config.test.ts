@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadRunConfig, parseFuse } from "../../src/run/config.js";
@@ -13,7 +13,14 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-const writeGates = (g: unknown) => writeFileSync(join(dir, ".claude", "gates.json"), JSON.stringify(g));
+/** The default routing, read from the template the harness deploys (effort1). */
+const ROUTING: unknown = JSON.parse(readFileSync(join(__dirname, "..", "..", "templates", "claude", "_routing.json"), "utf8"));
+
+/** Writes gates.json; an object gains the default routing unless it sets its own. */
+const writeGates = (g: unknown) => {
+  const withRouting = typeof g === "object" && g !== null && !Array.isArray(g) ? { routing: ROUTING, ...g } : g;
+  writeFileSync(join(dir, ".claude", "gates.json"), JSON.stringify(withRouting));
+};
 
 /** Loads the config and returns the RunError it throws; fails the test if it throws nothing else. */
 function refusal(label: string): RunError {
@@ -44,6 +51,7 @@ const DEFAULTS = {
   specFlow: "merge",
   stagePattern: DEFAULT_STAGE_PATTERN,
   glossary: "docs/GLOSSARY.md",
+  routing: ROUTING,
 };
 
 describe("loadRunConfig", () => {

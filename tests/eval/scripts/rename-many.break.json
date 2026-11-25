@@ -1,0 +1,16 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "sonnet",
+    "expectEffort": "medium",
+    "writes": {
+      "src/price.js": "/** The sum of the prices of the items, each price times its quantity. */\nexport function sumPrices(items) {\n  return items.reduce((sum, item) => sum + item.price * item.qty, 0);\n}\n\n/** The old name, kept so the callers still work. */\nexport const totalPrice = sumPrices;\n"
+    },
+    "output": {
+      "status": "DONE",
+      "report": "renamed the function; kept the old name as an alias so the callers need no change",
+      "commit": { "type": "refactor", "subject": "Rename totalPrice to sumPrices." },
+      "needsHumanDecision": []
+    }
+  }
+]
