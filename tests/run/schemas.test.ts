@@ -128,7 +128,7 @@ describe("typed parse functions", () => {
       needsHumanDecision: ["x"],
     });
     expect(typeof parseSpecOut({ summary: "s" })).toBe("string");
-    const task = { id: "T1", ac: ["AC-1"], tier: "S", desc: "d", verify: "true", passes: false };
+    const task = { id: "T1", ac: ["AC-1"], tier: "S", complexity: "low", desc: "d", verify: "true", passes: false };
     expect(parsePlanOut({ summary: "s", tasks: [task], needsHumanDecision: [] })).toEqual({ summary: "s", tasks: [task], needsHumanDecision: [] });
     expect(typeof parsePlanOut(5)).toBe("string");
   });

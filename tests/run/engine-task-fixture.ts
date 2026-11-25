@@ -52,11 +52,28 @@ export interface PlanTask {
   tier?: "S" | "M" | "L";
   desc?: string;
   verify?: string;
+  complexity?: "low" | "medium" | "high";
+  splitReason?: string;
 }
 
-/** The tasks as the plan role returns them and as tasks.json holds them. */
+const COMPLEXITY = { S: "low", M: "medium", L: "high" } as const;
+
+/** The tasks as the plan role returns them: every task has a complexity, an L task a splitReason. */
 export const planTasks = (tasks: PlanTask[]): Json[] =>
-  tasks.map((t) => ({ id: t.id, ac: t.ac, tier: t.tier ?? "S", desc: t.desc ?? `do ${t.id}`, verify: t.verify ?? "true", passes: false }));
+  tasks.map((t) => {
+    const tier = t.tier ?? "S";
+    const splitReason = t.splitReason ?? (tier === "L" ? "one change, no seam" : undefined);
+    return {
+      id: t.id,
+      ac: t.ac,
+      tier,
+      complexity: t.complexity ?? COMPLEXITY[tier],
+      ...(splitReason !== undefined ? { splitReason } : {}),
+      desc: t.desc ?? `do ${t.id}`,
+      verify: t.verify ?? "true",
+      passes: false,
+    };
+  });
 
 export const tasksJson = (tasks: PlanTask[]): string => JSON.stringify({ stage: STAGE, tasks: planTasks(tasks) });
 

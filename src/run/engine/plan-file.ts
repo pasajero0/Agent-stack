@@ -9,12 +9,15 @@ import { isObj } from "../config.js";
 import { RunError } from "../errors.js";
 import { criterionText } from "../prompts.js";
 import type { RunConfig } from "../types.js";
-import type { Tier } from "./context.js";
+import type { Complexity, Tier } from "./context.js";
 
 export interface PlanTask {
   id: string;
   ac: string[];
   tier: Tier;
+  complexity: Complexity;
+  /** Tier L only: why the task is not split (at most 80 characters, trimmed). */
+  splitReason?: string;
   desc: string;
   verify: string;
 }
@@ -24,6 +27,7 @@ export const tasksPath = (dir: string, stage: string): string => join(dir, stage
 export const specPath = (cfg: RunConfig, stage: string): string => `${cfg.specsDir}/${stage}/SPEC.md`;
 
 const TIERS: readonly Tier[] = ["S", "M", "L"];
+const COMPLEXITIES: readonly Complexity[] = ["low", "medium", "high"];
 
 const nonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
 
@@ -79,11 +83,25 @@ function parseTask(v: unknown, i: number, seen: Set<string>, fresh: boolean): Pl
   if (!Array.isArray(v.ac) || v.ac.length === 0 || !v.ac.every(nonEmptyStr)) return `task ${id} needs a non-empty ac array`;
   const tier = TIERS.find((t) => t === v.tier);
   if (tier === undefined) return `task ${id} needs a tier of S, M or L`;
+  // A plan approved before `complexity` existed is read as it is (fresh false), as medium.
+  const complexity = COMPLEXITIES.find((c) => c === v.complexity) ?? (fresh ? undefined : "medium");
+  if (complexity === undefined) return `task ${id} needs a complexity of low, medium or high`;
+  let splitReason: string | undefined;
+  if (tier === "L" && fresh) {
+    const reason = typeof v.splitReason === "string" ? v.splitReason.trim() : "";
+    if (reason === "") return `task ${id} is tier L and needs a splitReason: why it is not split`;
+    if (reason.length > 80) return `task ${id}: splitReason must be at most 80 characters`;
+    splitReason = reason;
+  } else if (tier === "L" && nonEmptyStr(v.splitReason)) {
+    splitReason = v.splitReason.trim();
+  }
   if (!nonEmptyStr(v.verify)) return `task ${id} needs a non-empty verify`;
   const never = fresh ? neverFails(v.verify) : null;
   if (never !== null) return `task ${id}: verify cannot fail (${never}); remove it`;
   if (v.passes !== false) return `task ${id} must have passes: false`;
-  return { id, ac: v.ac, tier, desc: typeof v.desc === "string" ? v.desc : "", verify: v.verify };
+  const task: PlanTask = { id, ac: v.ac, tier, complexity, desc: typeof v.desc === "string" ? v.desc : "", verify: v.verify };
+  if (splitReason !== undefined) task.splitReason = splitReason;
+  return task;
 }
 
 /**

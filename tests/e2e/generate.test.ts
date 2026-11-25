@@ -61,7 +61,7 @@ describe("generate → full gate cycle on a TypeScript repo", () => {
     // 4. The plan can be written once, unproven; then code opens.
     const plan = JSON.stringify({
       stage: "A0",
-      tasks: [{ id: "T1", ac: ["AC-1"], tier: "S", verify: "test -f src/app.ts", passes: false }],
+      tasks: [{ id: "T1", ac: ["AC-1"], tier: "S", complexity: "low", verify: "test -f src/app.ts", passes: false }],
     });
     const planPath = join(dir, ".claude/tmp/A0/tasks.json");
     expect(runHook(dir, "guard-file.sh", writeTool(planPath, plan)).code).toBe(0);

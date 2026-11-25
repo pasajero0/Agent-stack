@@ -56,11 +56,13 @@ export const roleSchemas: Record<Role, RoleSchema> = {
         type: "array",
         items: {
           type: "object",
-          required: ["id", "ac", "tier", "desc", "verify", "passes"],
+          required: ["id", "ac", "tier", "complexity", "desc", "verify", "passes"],
           properties: {
             id: { type: "string" },
             ac: strArray,
             tier: { enum: ["S", "M", "L"] },
+            complexity: { enum: ["low", "medium", "high"] },
+            splitReason: { type: "string" },
             desc: { type: "string" },
             verify: { type: "string" },
             passes: { const: false },

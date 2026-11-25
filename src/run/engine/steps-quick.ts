@@ -30,7 +30,7 @@ export const quickMode: ModeSteps = {
     const desc = fix
       ? `Fix what the human asked for after rejecting "${ctx.run.description}": ${fixComment(ctx.run, id)}`
       : ctx.run.description;
-    return { id, desc, criteria: [], tier: "M", risky: false, fix, verify: "" };
+    return { id, desc, criteria: [], tier: "M", complexity: "medium", risky: false, fix, verify: "" };
   },
 
   /** Q1 and quick fix tasks: the `test` command plus lint (AC-25). */

@@ -35,6 +35,8 @@ export type StepHandler = (ctx: Ctx, task: string | null) => Promise<StepEvent>;
 
 export type Tier = "S" | "M" | "L";
 
+export type Complexity = "low" | "medium" | "high";
+
 /** What implement, checks and review need to know about a task; the mode supplies it. */
 export interface TaskInfo {
   id: string;
@@ -42,6 +44,7 @@ export interface TaskInfo {
   /** Criterion texts (AC-16 prompt); empty in quick mode. */
   criteria: string[];
   tier: Tier;
+  complexity: Complexity;
   risky: boolean;
   /** A fix task F<k> from gate:accept. */
   fix: boolean;

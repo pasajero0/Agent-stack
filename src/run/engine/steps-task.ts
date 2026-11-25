@@ -240,7 +240,7 @@ export const taskMode: ModeSteps = {
     const { run } = ctx;
     if (isFix(id)) {
       const desc = `Fix what the human asked for after rejecting the result of "${run.description}" (stage ${run.stage ?? "?"}): ${fixComment(run, id)}`;
-      return { id, desc, criteria: [], tier: "M", risky: false, fix: true, verify: "" };
+      return { id, desc, criteria: [], tier: "M", complexity: "medium", risky: false, fix: true, verify: "" };
     }
     const stage = stageOf(run);
     const t = readPlan(ctx.projectDir, ctx.cfg, stage).find((x) => x.id === id);

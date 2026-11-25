@@ -27,7 +27,7 @@ import { transition, type StepEvent } from "./transitions.js";
 export function planTaskInfo(t: PlanTask, specMd: string): TaskInfo {
   const criteria = criteriaOf(specMd, t.ac);
   const risky = t.tier !== "L" && [t.desc, ...criteria].some(isRisky);
-  return { id: t.id, desc: t.desc, criteria, tier: t.tier, risky, fix: false, verify: t.verify };
+  return { id: t.id, desc: t.desc, criteria, tier: t.tier, complexity: t.complexity, risky, fix: false, verify: t.verify };
 }
 
 const lastPlanGate = (run: RunFile): GateRecord | undefined => [...run.gates].reverse().find((g) => g.gate === "gate:plan-approve");
@@ -65,7 +65,16 @@ function keepLeftover(ctx: Ctx, stage: string, specMd: string): boolean {
 /** Writes the checked plan as `tasks.json` (AC-12): the role has no write tool, since Claude Code guards `.claude/`. */
 function writePlan(file: string, stage: string, tasks: PlanTask[]): void {
   mkdirSync(dirname(file), { recursive: true });
-  const out = tasks.map((t) => ({ id: t.id, ac: t.ac, tier: t.tier, desc: t.desc, verify: t.verify, passes: false }));
+  const out = tasks.map((t) => ({
+    id: t.id,
+    ac: t.ac,
+    tier: t.tier,
+    complexity: t.complexity,
+    ...(t.splitReason !== undefined ? { splitReason: t.splitReason } : {}),
+    desc: t.desc,
+    verify: t.verify,
+    passes: false,
+  }));
   writeFileSync(file, JSON.stringify({ stage, tasks: out }, null, 2) + "\n");
 }
 
