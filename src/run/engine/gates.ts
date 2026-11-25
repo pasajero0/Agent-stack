@@ -5,8 +5,8 @@
 import { type CheckRun } from "../checks.js";
 import { RunError } from "../errors.js";
 import { diffStat, dirtyPaths, git, headSha } from "../git.js";
-import { parseRoute, type Routing } from "../routing.js";
-import type { CardAnswer, GateRecord, RunFile } from "../types.js";
+import type { GateRecord, RunFile } from "../types.js";
+import { limitAnswers, limitPrompt } from "./limit-prompt.js";
 import { timeFacts } from "./timing.js";
 import { A, cardText, decisionFacts, Facts, GateChanged, invalid, sha256, showCard, type CardInput } from "./card.js";
 import { fuseText } from "./call.js";
@@ -230,31 +230,7 @@ export const acceptGate: StepHandler = async (ctx) => {
   }
 };
 
-/** The limit card's prompt text and answers; a new attempt names the retry route (effort1 AC-11, AC-20). */
-function limitPrompt(reason: string, routing: Routing): { text: string; answers: CardAnswer[] } {
-  const r = parseRoute(routing.retry);
-  const attempt = r ? `a new attempt, ${r.model} · ${r.effort}` : "a new attempt";
-  switch (reason) {
-    case "fuse":
-      return { text: "raise the fuse for this run (in its own unit, above what is used), or cancel", answers: [{ key: "f", follows: "number", label: "new limit" }, A.cancel] };
-    case "decision":
-      return { text: "answer the role's questions", answers: [{ key: "r", follows: "text", label: "retry with your answer (the role gets it)" }, A.cancel] };
-    case "tests-changed":
-      return {
-        text: "allow these test changes, or send the task back",
-        answers: [{ key: "a", follows: null, label: "allow exactly these (the checks run next)" }, { key: "r", follows: "text", label: `retry with a comment (${attempt})` }, A.cancel],
-      };
-    case "test-conflict":
-      return {
-        text: "fix the test or the spec by hand if needed, then answer the implementer",
-        answers: [{ key: "r", follows: "text", label: "retry with your answer for the implementer (no attempt is counted)" }, A.cancel],
-      };
-    default:
-      return { text: "retry or cancel", answers: [{ key: "r", follows: null, label: `retry (${attempt})` }, A.cancel] };
-  }
-}
-
-export const limitAnswers = (reason: string, routing: Routing): CardAnswer[] => limitPrompt(reason, routing).answers;
+export { limitAnswers };
 
 /** The gate:limit card (AC-31, AC-35, AC-38, AC-57, AC-64, AC-66, AC-68). */
 function limitCard(ctx: Ctx): CardInput {
