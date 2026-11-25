@@ -98,8 +98,8 @@ describe("update keeps gates.json", () => {
     for (const k of Object.keys(before)) expect(after[k]).toEqual(before[k]);
   });
 
-  it("effort1 AC-16: a file with a routing key (any value) stays byte for byte", async () => {
-    for (const value of [{ S: 1 }, null, "x", []]) {
+  it("effort1 AC-16: a file with a routing key that is not an object stays byte for byte", async () => {
+    for (const value of [null, "x", []]) {
       const text = JSON.stringify({ a: 1, routing: value }, null, 4);
       writeFileSync(gatesPath(), text);
       capture();

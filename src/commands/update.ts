@@ -33,6 +33,7 @@ export async function updateCommand(
     process.exit(1);
   }
   const plan = planUpdate(projectDir, built, { force: options.force });
+  const keys = plan.routingKeysAdded;
 
   if (options.dryRun) {
     log.step("Harness update preview (dry run):");
@@ -43,7 +44,9 @@ export async function updateCommand(
       console.log(
         p === ".claude/gates.json" && plan.routingAdded
           ? `  ~ ${p} (routing block added)`
-          : `  = ${p} (yours — kept)`
+          : p === ".claude/gates.json" && keys.length
+            ? `  ~ ${p} (${keys.map((k) => `routing.${k}`).join(", ")} added)`
+            : `  = ${p} (yours — kept)`
       )
     );
     plan.edited.forEach((p) => console.log(`  = ${p} (you changed it — kept; --force overwrites)`));
@@ -64,9 +67,14 @@ export async function updateCommand(
       `${plan.kept.length + plan.edited.length} kept as yours.`
   );
   if (plan.routingAdded) log.dim("  added the routing block to .claude/gates.json");
+  if (keys.length) log.dim(`  added ${keys.map((k) => `routing.${k}`).join(", ")} to .claude/gates.json`);
   log.dim(
     "  .claude/rules/, .claude/tmp/ and your seed files (CLAUDE.md, gates.json…) were left untouched" +
-      (plan.routingAdded ? ", except the routing block added to gates.json." : ".")
+      (plan.routingAdded
+        ? ", except the routing block added to gates.json."
+        : keys.length
+          ? ", except the routing keys added to gates.json."
+          : ".")
   );
   plan.edited.forEach((p) => log.dim(`  kept ${p} — you changed it since it was deployed; --force overwrites`));
   reportExtras(plan);

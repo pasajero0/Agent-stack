@@ -239,6 +239,8 @@ export interface UpdatePlan {
   noHashes: boolean;
   /** gates.json is a JSON object without `routing`: `update` adds the default routing (it stays in `kept`). */
   routingAdded: boolean;
+  /** gates.json has a `routing` object missing some top-level keys: `update` adds these (in the order S, M, L, retry, risky, scout). */
+  routingKeysAdded: string[];
   /** The gates.json to write when `routingAdded`. */
   gatesWithRouting: GeneratedFile | null;
   /** gates.json is not valid JSON, or not an object: left as it was; the warning to print. */
@@ -246,6 +248,9 @@ export interface UpdatePlan {
 }
 
 const GATES = ".claude/gates.json";
+
+/** The six top-level keys of `routing`, in the order missing ones are added. */
+const ROUTING_KEYS = ["S", "M", "L", "retry", "risky", "scout"];
 
 /** The one change `update` makes to the seed gates.json: add the default routing as the last key (AC-9, AC-16). */
 function addRouting(full: string, builtContent: string, plan: UpdatePlan): void {
@@ -260,9 +265,23 @@ function addRouting(full: string, builtContent: string, plan: UpdatePlan): void 
     plan.gatesWarning = `${GATES} is not a JSON object, so routing was not added. Fix it, then run update again.`;
     return;
   }
-  if (Object.prototype.hasOwnProperty.call(current, "routing")) return;
   const built: unknown = JSON.parse(builtContent);
   if (!isObject(built)) return;
+  if (Object.prototype.hasOwnProperty.call(current, "routing")) {
+    const routing = current.routing;
+    if (!isObject(routing) || !isObject(built.routing)) return;
+    const missing = ROUTING_KEYS.filter((k) => !Object.prototype.hasOwnProperty.call(routing, k));
+    if (missing.length === 0) return;
+    const added: Record<string, unknown> = { ...routing };
+    for (const k of missing) added[k] = (built.routing as Record<string, unknown>)[k];
+    plan.routingKeysAdded = missing;
+    plan.gatesWithRouting = {
+      path: GATES,
+      content: JSON.stringify({ ...current, routing: added }, null, 2) + "\n",
+      action: "create",
+    };
+    return;
+  }
   const content = JSON.stringify({ ...current, routing: built.routing }, null, 2) + "\n";
   plan.routingAdded = true;
   plan.gatesWithRouting = { path: GATES, content, action: "create" }; // not in toWrite: gates.json stays a seed file
@@ -292,6 +311,7 @@ export function planUpdate(
     orphaned: [],
     noHashes: false,
     routingAdded: false,
+    routingKeysAdded: [],
     gatesWithRouting: null,
     gatesWarning: null,
   };
