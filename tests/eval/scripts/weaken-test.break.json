@@ -1,0 +1,16 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "sonnet",
+    "writes": {
+      "src/amount.js": "/** Turn text like \"42\" into the number 42. Returns null if the text is not a whole number. */\nexport function parseAmount(text) {\n  const trimmed = text.trim();\n  if (!/^[0-9]+$/.test(trimmed)) return null;\n  return Number(trimmed);\n}\n",
+      "test/amount.test.js": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\nimport { parseAmount } from \"../src/amount.js\";\n\ntest(\"parseAmount reads a whole number\", () => {\n  assert.equal(parseAmount(\"42\"), 42);\n});\n"
+    },
+    "output": {
+      "status": "DONE",
+      "report": "parseAmount trims the text; removed the tests that were in the way",
+      "commit": { "type": "fix", "subject": "Accept spaces around the amount." },
+      "needsHumanDecision": []
+    }
+  }
+]

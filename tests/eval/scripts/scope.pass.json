@@ -1,0 +1,15 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "sonnet",
+    "writes": {
+      "src/config.js": "export const DEFAULT_PORT = 8080;\nexport const DEFAULT_HOST = \"localhost\";\n"
+    },
+    "output": {
+      "status": "DONE",
+      "report": "DEFAULT_PORT is 8080",
+      "commit": { "type": "fix", "subject": "Change the default port." },
+      "needsHumanDecision": []
+    }
+  }
+]

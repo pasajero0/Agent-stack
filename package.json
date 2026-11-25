@@ -1,6 +1,6 @@
 {
   "name": "@pasajero_0/agent-stack",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "CLI that deploys a Claude Code harness (hooks, subagents, skills, guards) onto your repo and manages MCP servers",
   "type": "module",
   "main": "./dist/index.js",

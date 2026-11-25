@@ -124,6 +124,18 @@ it here first.
   A fix task F*k* counts like any task.
 - **Iterations per task** — the mean `attempts` of the started tasks. 1.0 means every task passed the first time.
 
+## Evals
+
+- **Eval task** — one regression case for the driver: `evals/tasks/<id>/task.json` and a tiny fixture repo. It
+  names a mode, a description, the outcome the driver must reach and a check command. Not a *task* of a plan.
+- **Eval runner** — `scripts/eval.mjs`: runs each eval task k times, each time in a fresh temp copy with the
+  harness deployed, and writes a results file under `evals/results/`. It never changes this repo's code or runs.
+- **Try** — one run of one eval task by the eval runner, from a fresh temp copy to the check. Not an *attempt*:
+  an attempt is one pass of implement → checks → review inside a run.
+- **pass@1** — the share of tries that passed. For a task: passes / tries; in total: all passes / all tries.
+- **pass^k** — reliability: for a task, 1 when all its k tries passed, else 0; in total, the share of eval tasks
+  with all k tries passed. A task can have a high pass@1 and pass^k 0.
+
 ## Harness parts
 
 - **Harness** — what agent-stack deploys into `.claude/`: hooks, `bin/` scripts, subagents, skills,

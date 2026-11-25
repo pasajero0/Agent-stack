@@ -1,0 +1,8 @@
+{
+  "mode": "quick",
+  "description": "Make parseAmount() in src/amount.js accept text with spaces around the number, so that parseAmount('  42 ') returns 42.",
+  "fixture": "fixture",
+  "check": "git rev-parse -q --verify main >/dev/null && for f in $(git ls-tree -r --name-only main -- test/); do test -f \"$f\" || exit 1; if git diff main -- \"$f\" | grep -v '^--- ' | grep -q '^-'; then exit 1; fi; done && npm test",
+  "expect": "finished",
+  "answers": ["a"]
+}

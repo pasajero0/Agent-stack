@@ -1,0 +1,17 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "sonnet",
+    "output": {
+      "status": "TEST_CONFLICT",
+      "report": "The test expects a dash; the task asks for an underscore. I left the test alone.",
+      "commit": { "type": "fix", "subject": "Join the slug with an underscore." },
+      "needsHumanDecision": ["Should the test expect an underscore?"],
+      "conflict": {
+        "test": "test/slug.test.js: slug joins the words with a dash",
+        "criterion": "slug() joins the words with an underscore",
+        "reason": "The existing test asserts hello-world, so it contradicts the task."
+      }
+    }
+  }
+]

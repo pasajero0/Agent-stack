@@ -1,0 +1,15 @@
+[
+  {
+    "expectRole": "implement",
+    "expectModel": "sonnet",
+    "writes": {
+      "src/math.js": "export function add(a, b) {\n  return a + b;\n}\n\n/** Return twice the number. */\nexport function double(n) {\n  return n * 2;\n}\n"
+    },
+    "output": {
+      "status": "DONE",
+      "report": "double(n) now returns n * 2",
+      "commit": { "type": "fix", "subject": "Double the number." },
+      "needsHumanDecision": []
+    }
+  }
+]
