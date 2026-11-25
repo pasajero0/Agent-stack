@@ -39,11 +39,26 @@ function budgetLeft(run: RunFile): number | null {
   return Math.max(0, Math.round((f.usd - run.costUsd) * 10_000) / 10_000);
 }
 
+/** Q1: the scout's own caps; it never waits longer, or runs more turns, than the shared limits allow. */
+export const SCOUT_TIMEOUT_MIN = 3;
+export const SCOUT_MAX_TURNS = 20;
+
+/** The timeout and the turn limit of one call: the scout gets min(shared, its cap); other roles keep the shared limits. */
+export function callLimits(cfg: { maxTurns: number; stepTimeoutMin: number }, role: Role): { timeoutMs: number; maxTurns: number } {
+  if (role === "scout") {
+    return {
+      timeoutMs: Math.min(cfg.stepTimeoutMin, SCOUT_TIMEOUT_MIN) * 60_000,
+      maxTurns: Math.min(cfg.maxTurns, SCOUT_MAX_TURNS),
+    };
+  }
+  return { timeoutMs: cfg.stepTimeoutMin * 60_000, maxTurns: cfg.maxTurns };
+}
+
 function spec(ctx: Ctx, target: CallTarget, model: Model, effort?: string): CallSpec {
   const s = roleSchemas[target.role];
   const base = {
     model,
-    maxTurns: ctx.cfg.maxTurns,
+    maxTurns: callLimits(ctx.cfg, target.role).maxTurns,
     schema: { type: s.type, required: s.required, properties: s.properties },
     budgetUsd: budgetLeft(ctx.run),
   };
@@ -75,7 +90,7 @@ async function callOnce(ctx: Ctx, target: CallTarget, model: Model, prompt: stri
     runId: run.id,
     callsDir: join(runDir(ctx.projectDir, run.id), "calls"),
     callNo: run.calls,
-    timeoutMs: ctx.cfg.stepTimeoutMin * 60_000,
+    timeoutMs: callLimits(ctx.cfg, role).timeoutMs,
     env: ctx.env,
     validate: (v) => validateOutput(role, v),
     signal: ctx.signal,
