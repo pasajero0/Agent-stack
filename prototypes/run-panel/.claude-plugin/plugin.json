@@ -1,0 +1,6 @@
+{
+  "name": "run-panel",
+  "version": "0.1.0",
+  "description": "Trial: a live pane of the latest agent-stack driver run (steps, tasks, model, cost, last actions)",
+  "types": "./types/index.d.ts"
+}

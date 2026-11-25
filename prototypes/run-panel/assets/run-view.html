@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Driver run</title>
+<style>
+  :root, [data-theme="light"] {
+    --bg: #fbfbfa; --fg: #1f2328; --muted: #6b7280; --line: #e5e7eb; --card: #ffffff; --hover: #f3f4f6;
+    --ok: #1a7f37; --run: #b35900; --wait: #9a6700; --wait-bg: #fff3c4; --bad: #cf222e; --bad-bg: #ffebe9;
+    --bar: #d1d5db; --edit: #1a7f37; --find: #0969da; --cmd: #9a6700; --detail: #f6f8fa;
+  }
+  [data-theme="dark"] {
+    --bg: #1e1e1e; --fg: #d4d4d4; --muted: #8b949e; --line: #2d2d2d; --card: #252526; --hover: #2a2d2e;
+    --ok: #3fb950; --run: #f0883e; --wait: #e3b341; --wait-bg: #3a2f0b; --bad: #f85149; --bad-bg: #3d1214;
+    --bar: #3a3d41; --edit: #3fb950; --find: #58a6ff; --cmd: #e3b341; --detail: #1b1b1c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px 20px; max-width: 1200px; background: var(--bg); color: var(--fg);
+         font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .muted { color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+  h1 { font-size: 16px; margin: 0; min-width: 0; flex: 1 1 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row { row-gap: 8px; }
+  .note, .gate, .pre, .result, table, .bar { max-width: 100%; }
+  #app > * + * { margin-top: 10px; }
+  .theme { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+  .theme select { width: 104px; font-size: 12px; padding: 1px 4px; border-radius: 5px; border: 1px solid var(--line);
+                  background: var(--card); color: var(--fg); cursor: pointer; }
+  .badge { padding: 1px 8px; border-radius: 10px; font-weight: 600; font-size: 12px; }
+  .s-running { background: color-mix(in srgb, var(--run) 18%, transparent); color: var(--run); }
+  .s-waiting { background: var(--wait-bg); color: var(--wait); }
+  .s-finished { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .s-other { background: var(--bad-bg); color: var(--bad); }
+  .gate { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--wait-bg); border-left: 4px solid var(--wait); }
+  .gate b { color: var(--wait); }
+  .note { margin: 8px 0; padding: 6px 10px; border-radius: 6px; }
+  .warn { background: var(--wait-bg); color: var(--wait); }
+  .bad { background: var(--bad-bg); color: var(--bad); }
+  .finding { cursor: pointer; text-decoration: underline dotted; }
+  .bar { height: 6px; border-radius: 3px; background: var(--bar); overflow: hidden; margin: 10px 0 4px; }
+  .bar > i { display: block; height: 100%; background: var(--ok); transition: width .4s; }
+  .pre { margin: 8px 0 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); cursor: pointer; }
+  .pre:hover { background: var(--hover); }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 12px; }
+  tr.task { cursor: pointer; }
+  tr.task:hover { background: var(--hover); }
+  td.num { text-align: right; white-space: nowrap; }
+  tr.done td.mark { color: var(--ok); }
+  tr.active { background: color-mix(in srgb, var(--run) 10%, transparent); }
+  tr.active td.mark { color: var(--run); }
+  tr.todo { color: var(--muted); }
+  td.caret { color: var(--muted); }
+  td.title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr.detail td { overflow-wrap: anywhere; }
+  .flags { white-space: nowrap; color: var(--bad); }
+  tr.detail td { background: var(--detail); padding: 10px 12px 12px 40px; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin-top: 6px; }
+  .kv > span:nth-child(odd) { color: var(--muted); }
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .step { padding: 1px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  .step.open { border-color: var(--run); color: var(--run); }
+  .plus { color: var(--ok); } .minus { color: var(--bad); }
+  .denial { color: var(--bad); }
+  .actions { margin-top: 12px; }
+  .act { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .k-edit { color: var(--edit); } .k-find { color: var(--find); } .k-run { color: var(--cmd); } .k-read { color: var(--muted); }
+  .spin { display: inline-block; animation: spin 1.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin: 14px 0 12px; }
+  .stage { min-width: 0; padding: 8px 10px; border: 1px solid var(--line); background: var(--card); border-radius: 8px; }
+  .stage .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stage .num { color: var(--muted); font-weight: 400; font-size: 11px; margin-right: 4px; }
+  .stage .meta { color: var(--muted); font-size: 12px; }
+  .stage.done { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+  .stage.done .name { color: var(--ok); }
+  .stage.active { border-color: var(--run); background: color-mix(in srgb, var(--run) 10%, var(--card)); }
+  .stage.active .name { color: var(--run); }
+  .stage.wait { border-color: var(--wait); background: var(--wait-bg); }
+  .stage.todo { color: var(--muted); }
+  .stage.fail { border-color: var(--bad); background: var(--bad-bg); }
+  .stage.fail .name { color: var(--bad); }
+  .stage.skip { border-style: dashed; color: var(--muted); }
+  .stage.click { cursor: pointer; }
+  .stage.click:hover { background: var(--hover); }
+  .stage.sel { outline: 2px solid var(--find); outline-offset: -1px; }
+  .panel { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--detail); }
+  .panel h3 { margin: 0 0 6px; font-size: 13px; }
+  .panel pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 360px; overflow: auto; }
+  .hl { color: var(--bad); font-weight: 600; }
+  .stage .meta .fails { color: var(--bad); }
+  .result { margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .actions.big .act { font-size: 13px; padding: 1px 0; }
+  footer { margin-top: 12px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="app" class="muted">Waiting for run-view.data.js…</div>
+<script>
+(function () {
+  var W = {
+    en: { needsYou: 'Needs you', answers: 'Answers', answerInChat: 'Answer in the chat: the operator shows the card.',
+          work: 'work', left: 'left ≈', calls: 'calls', noUpdate: 'no update for', longCmd: 'a long command or a hang',
+          stopped: 'the driver looks stopped', tasks: 'tasks', findings: 'Findings', done: 'done', attempts: 'Attempts',
+          head: ['', '', '#', 'Task', 'Model', 'Time', 'Cost', ''], now: 'Now', stale: 'data is', old: 'old: is the Claude session with the mod open?',
+          redone: 'redone', before: 'Before code', desc: 'Description', size: 'Size', criteria: 'Criteria', steps: 'Steps',
+          denials: 'Permission denials', commit: 'Commit', none: '—', call: 'call', turns: 'turns', theme: 'Theme', themes: { auto: 'Auto', light: '☀ Light', dark: '☾ Dark' },
+          costly: 'over 3× the median cost', quick: 'quick', result: 'Result', task: 'Task', failed: 'failed', attempt: 'attempt',
+          noDetail: 'Nothing recorded for this step.', checkOut: 'Failed check output (last lines)', fullOut: 'Full output', reviewNotes: 'Reviewer notes',
+          baseOk: 'The tests were green before any work.', runs: 'runs', usually: 'usually', results: 'Results', skipped: 'skipped', skipWhy: function (n) { return 'Quick mode reviews only a diff over ' + n + ' lines (quickReviewLines, a default, not measured); this diff was smaller.'; }, notLive: 'The driver does not stream check output; it keeps the last lines when a check fails.', committed: 'Committed', clickHint: 'Click a step for details.',
+          what: { 'base-check': 'the driver checks that the tests are green before any work (the test command)',
+                  clarify: 'the model reads the request and the code and asks its questions', spec: 'the model writes the spec',
+                  plan: 'the model splits the spec into tasks', implement: 'the implementer writes the tests and the code',
+                  checks: 'the driver runs the task verify and the checks', review: 'the reviewer reads the diff',
+                  commit: 'the driver commits the task', gate: 'waits for your answer' } },
+    ru: { needsYou: 'Ждёт тебя', answers: 'Ответы', answerInChat: 'Ответь в чате: карточку покажет оператор.',
+          work: 'работы', left: 'осталось ≈', calls: 'вызовов', noUpdate: 'нет обновлений', longCmd: 'долгая команда или зависание',
+          stopped: 'драйвер, похоже, остановлен', tasks: 'задач', findings: 'Главное', done: 'готово', attempts: 'Попытки',
+          head: ['', '', '#', 'Задача', 'Модель', 'Время', 'Цена', ''], now: 'Сейчас', stale: 'данным', old: ': открыта ли сессия Claude с модом?',
+          redone: 'переделан', before: 'До кода', desc: 'Описание', size: 'Размер', criteria: 'Критерии', steps: 'Шаги',
+          denials: 'Отказы в правах', commit: 'Коммит', none: '—', call: 'вызов', turns: 'ходов', theme: 'Тема', themes: { auto: 'Авто', light: '☀ Светлая', dark: '☾ Тёмная' },
+          costly: 'дороже медианы в 3 раза', quick: 'quick', result: 'Итог', task: 'Задача', failed: 'упало', attempt: 'попытка',
+          noDetail: 'Для этого шага ничего не записано.', checkOut: 'Вывод упавшей проверки (последние строки)', fullOut: 'Весь вывод', reviewNotes: 'Замечания ревьюера',
+          baseOk: 'Тесты были зелёными до начала работы.', runs: 'идёт', usually: 'обычно', results: 'Результаты', skipped: 'пропущен', skipWhy: function (n) { return 'В quick ревью идёт, только если дифф больше ' + n + ' строк (quickReviewLines — значение по умолчанию, не замер); этот дифф меньше.'; }, notLive: 'Драйвер не показывает вывод проверки по ходу; хвост вывода он сохраняет, только если проверка упала.', committed: 'Закоммичено', clickHint: 'Нажми на шаг, чтобы увидеть детали.',
+          what: { 'base-check': 'драйвер проверяет, что тесты зелёные до начала работы (команда тестов)',
+                  clarify: 'модель читает запрос и код и задаёт вопросы', spec: 'модель пишет спеку',
+                  plan: 'модель разбивает спеку на задачи', implement: 'исполнитель пишет тесты и код',
+                  checks: 'драйвер гоняет verify задачи и проверки', review: 'ревьюер читает дифф',
+                  commit: 'драйвер коммитит задачу', gate: 'ждёт твоего ответа' } }
+  };
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  var open = {};
+  try { open = JSON.parse(store('run-view.open') || '{}') || {}; } catch (e) { open = {}; }
+  var themePick = store('run-view.theme') || 'auto';
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function mmss(sec) { var s = Math.max(0, Math.round(sec || 0)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60),
+    r = ('0' + s % 60).slice(-2); return h ? h + ':' + ('0' + m).slice(-2) + ':' + r : m + ':' + r; }
+  function money(v) { return v > 0 ? '$' + v.toFixed(2) : ''; }
+  function diff(d) { var m = /\+(\d+) −(\d+)/.exec(d || ''); return m ? '<span class="plus">+' + m[1] + '</span> <span class="minus">−' + m[2] + '</span>' : ''; }
+  function kind(line) { var t = (/·\s*(\w+)/.exec(line) || [])[1] || '';
+    if (t === 'Edit' || t === 'Write') return ['✎', 'k-edit']; if (t === 'Bash') return ['▷', 'k-run'];
+    if (t === 'Grep' || t === 'Glob') return ['⌕', 'k-find']; return ['◇', 'k-read']; }
+  function title(desc) { var one = String(desc || '').replace(/\s+/g, ' ').trim();
+    var cut = one.split(/(?<=[.:;])\s|\s—\s/)[0] || one; return cut.length > 70 ? cut.slice(0, 69) + '…' : cut; }
+  function endsWithId(step, id) { return step.slice(-(id.length + 1)) === ':' + id; }
+  function toggle(key) { open[key] = !open[key]; store('run-view.open', JSON.stringify(open)); render(window.RUN); }
+  window.__toggle = toggle;
+  window.__qstep = function (n) { open.qstep = open.qstep === n ? '' : n; store('run-view.open', JSON.stringify(open)); render(window.RUN); };
+  window.__theme = function (pick) { themePick = pick; store('run-view.theme', themePick); render(window.RUN); };
+  window.__finding = function (id) { open['t:' + id] = true; store('run-view.open', JSON.stringify(open)); render(window.RUN);
+    var el = document.getElementById('row-' + id); if (el) el.scrollIntoView({ block: 'center' }); };
+
+
+  // What the checks step runs, how long it usually takes, and the results it recorded.
+  function checksNow(s, w) {
+    var typical = s.checkTypicalSec > 0 ? ' · ' + esc(w.usually) + ' ~' + mmss(s.checkTypicalSec) : '';
+    return '<div class="mono">' + (s.checkCmds || []).map(function (c) { return '▷ ' + esc(c); }).join('<br>') + '</div>' +
+      '<div class="muted">' + esc(w.runs) + ' ' + mmss(s.stepSec) + typical + '</div>' +
+      '<div class="muted" style="font-size:11px">' + esc(w.notLive) + '</div>';
+  }
+  function checksResults(s, w) {
+    if (!s.checkResults || !s.checkResults.length) return '';
+    return '<h3>' + esc(w.results) + '</h3><div class="mono">' + s.checkResults.map(function (c) {
+      return c.skipped ? '<span class="muted">– ' + esc(c.cmd) + '</span>' :
+        (c.exit === 0 ? '<span class="plus">✓</span> ' : '<span class="hl">✗ exit ' + c.exit + '</span> ') + esc(c.cmd);
+    }).join('<br>') + '</div>';
+  }
+
+  function render(s) {
+    if (!s) return;
+    var w = s.lang === 'ru' ? W.ru : W.en;
+    document.documentElement.lang = s.lang === 'ru' ? 'ru' : 'en';
+    document.documentElement.setAttribute('data-theme', themePick === 'auto' ? (s.theme || 'dark') : themePick);
+    var running = s.status === 'running', html = [];
+    var done = s.tasks.filter(function (t) { return t.done; }).length;
+    var callsOf = function (step) { return s.callRows.filter(function (c) { return c.step === step; }); };
+
+    if (s.gate) {
+      html.push('<div class="gate"><b>⏸ ' + esc(w.needsYou) + '</b> · <span class="mono">' + esc(s.gate.gate) + '</span> · ' +
+        mmss(s.gate.waitSec) + (s.gate.title ? ' · ' + esc(s.gate.title) : '') +
+        (s.gate.question ? '<div>' + esc(s.gate.question) + '</div>' : '') +
+        (s.gate.answers ? '<div class="mono">' + esc(w.answers) + ': ' + esc(s.gate.answers) + '</div>' : '') +
+        '<div class="muted">' + esc(w.answerInChat) + '</div></div>');
+    }
+    var cls = running ? 's-running' : s.status === 'waiting' ? 's-waiting' : s.status === 'finished' ? 's-finished' : 's-other';
+    var mark = running ? '<span class="spin">◐</span>' : s.status === 'waiting' ? '⏸' : s.status === 'finished' ? '●' : '✗';
+    var left = s.estimateSec > 0 ? Math.max(0, s.estimateSec - s.workSec) : 0;
+    var head = (s.evalTask ? 'evals · ' + s.evalTask + ' · ' : '') + (s.stage || (w.quick + ': ' + (s.description.length > 70 ? s.description.slice(0, 69) + '…' : s.description)));
+    html.push('<div class="row"><h1 title="' + esc(s.description) + '">' + esc(head) + '</h1>' +
+      '<span class="badge ' + cls + '">' + mark + ' ' + esc(s.status) + '</span>' +
+      '<span>' + mmss(s.workSec) + ' ' + esc(w.work) + '</span>' +
+      (left > 0 ? '<span class="muted">' + esc(w.left) + ' ' + mmss(left) + '</span>' : '') +
+      '<span><b>$' + s.cost.toFixed(2) + '</b>' + (s.costUnknown > 0 ? ' + ?' : '') + '</span>' +
+      '<span class="muted">' + s.calls + ' ' + esc(w.calls) + '</span>' +
+      '<label class="theme"><span class="muted">' + esc(w.theme) + '</span><select onchange="__theme(this.value)">' +
+      ['auto', 'light', 'dark'].map(function (k) {
+        return '<option value="' + k + '"' + (themePick === k ? ' selected' : '') + '>' + esc(w.themes[k]) + '</option>';
+      }).join('') + '</select></label></div>');
+    // Steps that run the test suite are quiet for minutes: warn later there.
+    var quietOk = /^(base-check|checks)/.test(s.step) ? 300 : /^(implement|review|spec|plan|clarify)/.test(s.step) ? 180 : 60;
+    if (running && s.ageSec > quietOk) {
+      html.push('<div class="note ' + (s.ageSec > 600 ? 'bad' : 'warn') + '">' + esc(w.noUpdate) + ' ' + mmss(s.ageSec) + ': ' +
+        esc(s.ageSec > 600 ? w.stopped : w.longCmd) + '</div>');
+    }
+    if (s.findings.length) {
+      html.push('<div class="note bad">⚑ ' + esc(w.findings) + ': ' + s.findings.map(function (f) {
+        var id = (/^([A-Z]+\d+)\b/.exec(f) || [])[1];
+        return id ? '<span class="finding" onclick="__finding(\'' + esc(id) + '\')">' + esc(f) + '</span>' : esc(f);
+      }).join(' · ') + '</div>');
+    }
+    if (s.tasks.length) {
+      html.push('<div class="bar"><i style="width:' + (100 * done / s.tasks.length).toFixed(1) + '%"></i></div>' +
+        '<div class="muted">' + done + ' / ' + s.tasks.length + ' ' + esc(w.tasks) + '</div>');
+    }
+
+    // Before code: one line, details on click.
+    var pre = s.mode === 'quick' ? [] : s.steps.filter(function (r) { return !/^(implement|checks|review|commit):/.test(r.step) && r.step.indexOf('gate:') !== 0; });
+    var groups = {};
+    pre.forEach(function (r) { var g = groups[r.step] || (groups[r.step] = { sec: 0, n: 0, done: true }); g.sec += r.sec; g.n++; g.done = g.done && r.done; });
+    var summary = Object.keys(groups).map(function (k) { var g = groups[k];
+      return '<span class="mono">' + (g.done ? '✓' : '▶') + ' ' + esc(k) + ' ' + mmss(g.sec) + (money(s.preCost[k] || 0) ? ' · ' + money(s.preCost[k]) : '') +
+        (g.n > 1 ? ' <span class="denial">(' + esc(w.redone) + ' ' + (g.n - 1) + '×)</span>' : '') + '</span>';
+    }).join('&nbsp;&nbsp; ');
+    if (pre.length) html.push('<div class="pre" onclick="__toggle(\'pre\')"><span class="muted">' + (open.pre ? '▾' : '▸') + ' ' + esc(w.before) + ':</span> ' + summary);
+    if (pre.length && open.pre) {
+      var gates = s.steps.filter(function (r) { return r.step.indexOf('gate:') === 0 && !/:(T|F)\d+$/.test(r.step); });
+      html.push('<div class="steps">' + pre.concat(gates).map(function (r) {
+        var cs = callsOf(r.step); return '<span class="step mono">' + esc(r.step) + ' ' + mmss(r.sec) + '</span>';
+      }).join('') + '</div>');
+      html.push('<div class="kv mono">' + s.callRows.filter(function (c) { return c.step.indexOf(':') < 0; }).map(function (c) {
+        return '<span>' + esc(w.call) + ' ' + c.n + ' · ' + esc(c.step) + '</span><span>' + esc(c.model || '') + ' · ' + c.turns + ' ' + esc(w.turns) +
+          ' · ' + money(c.cost) + (c.denials.length ? ' <span class="denial">⚠ ' + esc(c.denials.join(' | ')) + '</span>' : '') + '</span>';
+      }).join('') + '</div>');
+    }
+    if (pre.length) html.push('</div>');
+
+
+    // quick: one task, so a pipeline of its steps instead of the plan table.
+    if (s.mode === 'quick') {
+      var q = s.tasks[0] || { id: 'Q1', desc: s.description, denials: [], attempts: 0, cost: 0, diff: '', commit: '', model: '' };
+      var names = ['base-check', 'implement', 'checks', 'review', 'commit', 'gate:accept'];
+      html.push('<div class="pipe">' + names.map(function (n, i) {
+        var full = n === 'base-check' || n.indexOf('gate:') === 0 ? n : n + ':' + q.id;
+        var rs = s.steps.filter(function (r) { return r.step === full; });
+        var sec = rs.reduce(function (a, r) { return a + r.sec; }, 0);
+        var c = callsOf(full).reduce(function (a, x) { return a + x.cost; }, 0);
+        var live = s.status === 'running' || s.status === 'waiting';
+        var isNow = live && s.step === full;
+        var failCount = n === 'checks' ? (q.feedback && /^Check failed/.test(q.feedback) ? Math.max(1, rs.length - (q.checksFailed ? 0 : 1)) : 0) : 0;
+        if (n === 'checks' && !q.checksFailed && failCount > rs.length - 1) failCount = rs.length - 1;
+        var finished = s.status === 'finished';
+        // A step with no record while a later step has one was skipped (quick review below quickReviewLines).
+        var later = names.slice(i + 1).some(function (m) { var f = m === 'base-check' || m.indexOf('gate:') === 0 ? m : m + ':' + q.id;
+          return s.steps.some(function (r) { return r.step === f; }); });
+        var skipped = !rs.length && later && !isNow;
+        var st = skipped ? 'skip' : isNow ? (n.indexOf('gate:') === 0 ? 'wait' : 'active') : n === 'checks' && q.checksFailed ? 'fail' :
+          (rs.length && rs.every(function (r) { return r.done; })) || (finished && n.indexOf('gate:') === 0) ? 'done' : 'todo';
+        var icon = st === 'skip' ? '⤼' : st === 'done' ? '✓' : st === 'fail' ? '✗' : st === 'active' ? '<span class="spin">◐</span>' : st === 'wait' ? '⏸' : '○';
+        var model = n === 'implement' && q.model ? q.model : '';
+        var sel = open.qstep === n;
+        return '<div class="stage click ' + st + (sel ? ' sel' : '') + '" onclick="__qstep(\'' + n + '\')"><div class="name"><span class="num">' + (i + 1) + '</span>' + icon + ' ' + esc(n) +
+          '</div><div class="meta mono">' + (skipped ? esc(w.skipped) : rs.length ? mmss(sec) : '&nbsp;') + (rs.length > 1 ? ' · ×' + rs.length : '') +
+          (failCount > 0 ? ' <span class="fails">· ' + failCount + ' ✗</span>' : '') +
+          (c > 0 ? ' · ' + money(c) : '') + '</div>' + (model ? '<div class="meta mono">' + esc(model) + '</div>' : '') + '</div>';
+      }).join('') + '</div>');
+      if (open.qstep) {
+        var nm = open.qstep, fullName = nm === 'base-check' || nm.indexOf('gate:') === 0 ? nm : nm + ':' + q.id;
+        var body = '';
+        var cs = s.callRows.filter(function (c) { return c.step === fullName; });
+        if (nm === 'base-check') body = '<div>' + esc(w.baseOk) + '</div>';
+        if (nm === 'review' && !s.steps.some(function (r) { return r.step === fullName; }) && s.steps.some(function (r) { return r.step === 'commit:' + q.id; })) body = '<div>' + esc(w.skipWhy(s.quickReviewLines || 120)) + '</div>';
+        if (nm === 'implement' || nm === 'review') {
+          body = cs.map(function (c, i) {
+            return '<div class="mono muted">' + esc(w.attempt) + ' ' + (i + 1) + ' · ' + esc(c.model) + ' · ' + c.turns + ' ' + esc(w.turns) + ' · ' + money(c.cost) +
+              (c.status ? ' · ' + esc(c.status) : '') + '</div><pre>' + esc(c.report) + '</pre>';
+          }).join('');
+          if (nm === 'review' && q.notes.length) body += '<h3>' + esc(w.reviewNotes) + '</h3>' + q.notes.map(function (x) { return '<pre>' + esc(x) + '</pre>'; }).join('');
+        }
+        if (nm === 'checks') body = (s.step === fullName ? checksNow(s, w) : '') + checksResults(s, w);
+        if (nm === 'checks' && q.feedback) {
+          var lines = q.feedback.split('\n');
+          var bad = lines.filter(function (l) { return /×|✗|FAIL|Error|failed|exited [1-9]/.test(l); });
+          body += '<h3>' + esc(w.checkOut) + '</h3><pre>' + bad.map(function (l) { return '<span class="hl">' + esc(l) + '</span>'; }).join('\n') + '</pre>' +
+            '<details><summary class="muted">' + esc(w.fullOut) + '</summary><pre>' + lines.map(function (l) {
+              return /×|✗|FAIL|Error|failed/.test(l) ? '<span class="hl">' + esc(l) + '</span>' : esc(l); }).join('\n') + '</pre></details>';
+        }
+        if (nm === 'commit' && q.commit) body = '<div>' + esc(w.committed) + ': <span class="mono">' + esc(q.commit.slice(0, 7)) + '</span> ' + diff(q.diff) + '</div>';
+        if (nm.indexOf('gate:') === 0 && s.gate) body = '<div>' + esc(s.gate.question || s.gate.title) + '</div><div class="mono">' + esc(s.gate.answers) + '</div>';
+        if (q.denials.length && nm === 'implement') body += q.denials.map(function (x) { return '<div class="denial mono">⚠ ' + esc(x) + '</div>'; }).join('');
+        html.push('<div class="panel"><h3>' + esc(nm) + '</h3>' + (body || '<div class="muted">' + esc(w.noDetail) + '</div>') + '</div>');
+      } else {
+        html.push('<div class="muted">' + esc(w.clickHint) + '</div>');
+      }
+      html.push('<div class="muted">' + esc(w.task) + ': ' + esc(q.desc) + '</div>');
+      if (running || s.actions.length) {
+        html.push('<div class="actions big"><b>' + esc(w.now) + ':</b> <span class="mono">' + esc(s.step) + '</span> ' + mmss(s.stepSec) +
+          '<div class="muted">' + esc(w.what[s.step.split(':')[0]] || (s.step.indexOf('gate:') === 0 ? w.what.gate : '')) + '</div>' +
+          (/^(checks|base-check)/.test(s.step) ? checksNow(s, w) : ''));
+        s.actions.forEach(function (a) { var k = kind(a);
+          html.push('<div class="act mono"><span class="' + k[1] + '">' + k[0] + '</span> ' + esc(a.replace(/^\s*·\s*/, '')) + '</div>'); });
+        html.push('</div>');
+      }
+      if (q.commit || q.denials.length || q.attempts > 1) {
+        html.push('<div class="result"><b>' + esc(w.result) + ':</b> ' + (q.commit ? '<span class="mono">' + esc(q.commit.slice(0, 7)) + '</span> ' + diff(q.diff) : '') +
+          (q.cost > 0 ? ' · ' + money(q.cost) : '') + (q.attempts > 1 ? ' · <span class="denial">↻ ' + q.attempts + '</span>' : '') +
+          q.denials.map(function (d) { return '<div class="denial mono">⚠ ' + esc(d) + '</div>'; }).join('') + '</div>');
+      }
+    } else {
+    // Tasks: essentials in the row, details on click.
+    var costs = s.tasks.filter(function (t) { return t.done && t.cost > 0; }).map(function (t) { return t.cost; }).sort(function (a, b) { return a - b; });
+    var median = costs.length ? costs[Math.floor((costs.length - 1) / 2)] : 0;
+    html.push('<table><colgroup><col style="width:20px"><col style="width:24px"><col style="width:44px"><col>' +
+      '<col style="width:130px"><col style="width:64px"><col style="width:64px"><col style="width:64px"></colgroup><thead><tr>' + w.head.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>');
+    s.tasks.forEach(function (t) {
+      var rows = s.steps.filter(function (r) { return endsWithId(r.step, t.id); });
+      var sec = rows.reduce(function (a, r) { return a + r.sec; }, 0);
+      var active = endsWithId(s.step, t.id);
+      var rc = t.done ? 'done' : active ? 'active' : 'todo';
+      var m = t.done ? '●' : active ? '<span class="spin">◐</span>' : '○';
+      var costly = median > 0 && t.cost > 3 * median;
+      var flags = (t.attempts > 1 ? '↻ ' : '') + (t.denials.length ? '⚠' + t.denials.length + ' ' : '') + (costly ? '$' : '');
+      var isOpen = !!open['t:' + t.id];
+      html.push('<tr id="row-' + esc(t.id) + '" class="task ' + rc + '" onclick="__toggle(\'t:' + esc(t.id) + '\')">' +
+        '<td class="caret">' + (isOpen ? '▾' : '▸') + '</td><td class="mark">' + m + '</td><td class="mono">' + esc(t.id) + '</td>' +
+        '<td class="title" title="' + esc(t.desc) + '">' + esc(title(t.desc)) + (active ? ' <span class="muted mono">· ' + esc(s.step.split(':')[0]) + '</span>' : '') + '</td>' +
+        '<td class="mono">' + esc(t.model || '—') + '</td><td class="num mono">' + (rows.length ? mmss(sec) : '') + '</td>' +
+        '<td class="num mono">' + money(t.cost) + '</td><td class="flags">' + flags + '</td></tr>');
+      if (isOpen) {
+        var steps = rows.map(function (r) {
+          var c = callsOf(r.step).reduce(function (a, x) { return a + x.cost; }, 0);
+          return '<span class="step mono' + (r.done ? '' : ' open') + '">' + esc(r.step.split(':')[0]) + ' ' + mmss(r.sec) + (c > 0 ? ' · ' + money(c) : '') + '</span>';
+        }).join('');
+        html.push('<tr class="detail"><td colspan="8"><div>' + esc(t.desc) + '</div><div class="kv">' +
+          '<span>' + esc(w.size) + '</span><span class="mono">' + esc(t.tier) + '</span>' +
+          '<span>' + esc(w.criteria) + '</span><span class="mono">' + esc((t.ac || []).join(', ') || w.none) + '</span>' +
+          '<span>' + esc(w.steps) + '</span><span><div class="steps">' + (steps || w.none) + '</div></span>' +
+          '<span>' + esc(w.attempts) + '</span><span class="mono">' + (t.attempts || 0) + '</span>' +
+          (costly ? '<span>$</span><span class="denial">' + esc(w.costly) + '</span>' : '') +
+          '<span>' + esc(w.denials) + '</span><span class="mono">' + (t.denials.length ? t.denials.map(function (d) {
+            return '<div class="denial">⚠ ' + esc(d) + '</div>'; }).join('') : w.none) + '</span>' +
+          (t.feedback && /^Check failed/.test(t.feedback) ? '<span>✗</span><span><pre class="mono" style="margin:0;white-space:pre-wrap">' + t.feedback.split('\n').filter(function (l) { return /×|✗|FAIL|Error|failed|exited [1-9]/.test(l); }).map(esc).join('\n') + '</pre></span>' : '') +
+          '<span>' + esc(w.commit) + '</span><span class="mono">' + (t.commit ? esc(t.commit.slice(0, 7)) + ' ' + diff(t.diff) : w.none) + '</span>' +
+          '</div></td></tr>');
+      }
+    });
+    html.push('</tbody></table>');
+
+    if (running || s.actions.length) {
+      html.push('<div class="actions"><b>' + esc(w.now) + ':</b> <span class="mono">' + esc(s.step) + '</span> ' + mmss(s.stepSec) +
+        (s.model ? ' · <span class="mono">' + esc(s.model) + '</span>' : '') +
+        '<div class="muted">' + esc(w.what[s.step.split(':')[0]] || (s.step.indexOf('gate:') === 0 ? w.what.gate : '')) + '</div>' +
+        (s.actions.length === 0 && s.nowLast && s.nowLast.indexOf('step ') !== 0 ? '<div class="mono muted">' + esc(s.nowLast) + '</div>' : '') + '</div>');
+      s.actions.forEach(function (a) { var k = kind(a);
+        html.push('<div class="act mono"><span class="' + k[1] + '">' + k[0] + '</span> ' + esc(a.replace(/^\s*·\s*/, '')) + '</div>'); });
+    }
+    }
+    var age = (Date.now() - (window.RUN_WRITTEN_AT || 0)) / 1000;
+    html.push('<footer class="muted mono">' + esc(s.runId) + ' · ' + (age > 10 ? '<span class="denial">' + esc(w.stale) + ' ' + mmss(age) + ' ' + esc(w.old) + '</span>' :
+      new Date(window.RUN_WRITTEN_AT).toLocaleTimeString()) + '</footer>');
+    var app = document.getElementById('app');
+    app.className = '';
+    var next = document.createElement('div');
+    next.innerHTML = html.join('');
+    morph(app, next);
+  }
+
+  // A small morph: keep nodes that did not change, update text and attributes in place.
+  function morph(a, b) {
+    var ac = a.childNodes, bc = b.childNodes, i;
+    for (i = 0; i < bc.length; i++) {
+      var x = ac[i], y = bc[i];
+      if (!x) { a.appendChild(y.cloneNode(true)); continue; }
+      if (x.nodeType !== y.nodeType || x.nodeName !== y.nodeName) { a.replaceChild(y.cloneNode(true), x); continue; }
+      if (x.nodeType === 3) { if (x.nodeValue !== y.nodeValue) x.nodeValue = y.nodeValue; continue; }
+      if (x.nodeType !== 1) continue;
+      if (x.nodeName === 'DETAILS' && x.open && !y.hasAttribute('open')) y.setAttribute('open', '');
+      if (x.outerHTML === y.outerHTML) continue;
+      var k, at = y.attributes;
+      for (k = 0; k < at.length; k++) if (x.getAttribute(at[k].name) !== at[k].value) x.setAttribute(at[k].name, at[k].value);
+      // A <details> the person opened stays open: its `open` belongs to the person, not to the data.
+      for (k = x.attributes.length - 1; k >= 0; k--) {
+        var an = x.attributes[k].name;
+        if (an === 'open' && x.nodeName === 'DETAILS') continue;
+        if (!y.hasAttribute(an)) x.removeAttribute(an);
+      }
+      morph(x, y);
+    }
+    while (ac.length > bc.length) a.removeChild(a.lastChild);
+  }
+
+  function load() {
+    var old = document.getElementById('data');
+    if (old) old.remove();
+    var sc = document.createElement('script');
+    sc.id = 'data';
+    sc.src = 'run-view.data.js?t=' + Date.now();
+    sc.onload = function () { render(window.RUN); };
+    document.head.appendChild(sc);
+  }
+  // Poll by state, and not at all while the tab is hidden.
+  function delay() { var st = window.RUN && window.RUN.status;
+    return st === 'running' ? 2000 : st === 'waiting' ? 5000 : st ? 15000 : 30000; }
+  var timer = 0;
+  function loop() { clearTimeout(timer); if (document.visibilityState !== 'hidden') load(); timer = setTimeout(loop, delay()); }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') loop(); });
+  loop();
+})();
+</script>
+</body>
+</html>
