@@ -4,6 +4,7 @@
  */
 import { RunError } from "../errors.js";
 import { branchExists, slugify } from "../git.js";
+import { parseCell } from "../routing.js";
 import { newTask, type ModeSteps } from "./context.js";
 import { fixComment } from "./gates.js";
 import { lintItems } from "./task-core.js";
@@ -30,7 +31,9 @@ export const quickMode: ModeSteps = {
     const desc = fix
       ? `Fix what the human asked for after rejecting "${ctx.run.description}": ${fixComment(ctx.run, id)}`
       : ctx.run.description;
-    return { id, desc, criteria: [], tier: "M", complexity: "medium", risky: false, fix, verify: "" };
+    // effort1 AC-28: the run file's cell, else M·medium (AC-5). A fix task takes the retry route anyway (AC-3).
+    const cell = parseCell(ctx.run.cell) ?? { tier: "M", complexity: "medium" };
+    return { id, desc, criteria: [], ...cell, risky: false, fix, verify: "" };
   },
 
   /** Q1 and quick fix tasks: the `test` command plus lint (AC-25). */

@@ -3,6 +3,7 @@
  * reads and writes the file; this module only checks it.
  */
 import { isObj, parseFuse } from "./config.js";
+import { parseCell } from "./routing.js";
 import { DEFAULT_SPEC_FLOW, SPEC_FLOWS } from "./spec-flow.js";
 import type {
   AnswerRecord,
@@ -168,10 +169,11 @@ export function toRunFile(v: unknown, id: string): RunFile {
   const o = obj(v, "run.json");
   if (o.id !== id) bad("id");
   const costUsd = typeof o.costUsd === "number" && Number.isFinite(o.costUsd) && o.costUsd >= 0 ? o.costUsd : bad("costUsd");
+  const mode = oneOf(MODES, o.mode, "mode");
   return {
     id,
     description: str(o.description, "description"),
-    mode: oneOf(MODES, o.mode, "mode"),
+    mode,
     // AC-84: a run file from before the spec flow reads as merge.
     specFlow: o.specFlow === undefined ? DEFAULT_SPEC_FLOW : oneOf(SPEC_FLOWS, o.specFlow, "specFlow"),
     specApproved: o.specApproved === undefined || o.specApproved === null ? null : gitId(o.specApproved, "specApproved"),
@@ -199,5 +201,12 @@ export function toRunFile(v: unknown, id: string): RunFile {
     // AC-81: a run file from before these fields has no times.
     steps: o.steps === undefined ? [] : arr(o.steps, "steps", stepTime),
     estimateSec: o.estimateSec === undefined || o.estimateSec === null ? null : count(o.estimateSec, "estimateSec"),
+    // effort1 AC-31: a run file from before this field has none; only a quick run may name a cell.
+    ...(o.cell === undefined ? {} : { cell: cellOf(o.cell, mode) }),
   };
+}
+
+function cellOf(v: unknown, mode: Mode): string | null {
+  if (v === null) return null;
+  return mode === "quick" && typeof v === "string" && parseCell(v) !== null ? v : bad("cell");
 }

@@ -129,7 +129,7 @@ function lockRefusal(dir: string): RunError {
   );
 }
 
-export function startRun(o: EngineOptions & { mode: Mode; description: string; stage?: string }): Promise<ExitCode> {
+export function startRun(o: EngineOptions & { mode: Mode; description: string; stage?: string; cell?: string }): Promise<ExitCode> {
   return guard(o, async () => {
     const dir = o.projectDir;
     const description = o.description.trim();
@@ -181,6 +181,8 @@ export function startRun(o: EngineOptions & { mode: Mode; description: string; s
       estimateSec: null,
       calls: 0,
       fuse: cfg.fuse,
+      // effort1 AC-28: run quick --cell; every other run writes null. src/commands/run.ts checked the value.
+      cell: o.mode === "quick" ? (o.cell ?? null) : null,
     };
     // AC-81: a quick run is one task; a task run is estimated at gate:plan-approve, when its tasks are known.
     if (o.mode === "quick") run.estimateSec = estimate(dir, run, 1)?.sec ?? null;

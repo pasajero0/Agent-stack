@@ -25,7 +25,7 @@ const CONTINUE = "continue from `git status`.";
 /**
  * The route of an implement attempt, never stored (effort1 AC-2..AC-5, AC-17, AC-18). In order: retry (an attempt
  * after the first, or a fix task), risky, the cell `routing.<tier>.<complexity>`. Q1 carries the quick cell
- * (M·medium) in its task info; a fix task and Q1 are never risky.
+ * (the run file's `cell`, else M·medium) in its task info; a fix task and Q1 are never risky.
  */
 export function implementRoute(routing: Routing, info: TaskInfo, task: RunTask): Route {
   const value = task.attempts > 1 || info.fix ? routing.retry : info.risky ? routing.risky : routing[info.tier][info.complexity];

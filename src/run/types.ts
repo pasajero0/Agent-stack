@@ -151,6 +151,11 @@ export interface RunFile {
   steps: StepTime[];
   /** The estimated work time in seconds, or null (AC-81). */
   estimateSec: number | null;
+  /**
+   * `run quick --cell`: the routing cell Q1 uses instead of M·medium, or null (effort1 AC-28). Optional: a run file
+   * without the key (0.4.7) reads as null and stays without it.
+   */
+  cell?: string | null;
 }
 
 /** gates.json values the driver needs, with the `run` key's defaults filled in. */

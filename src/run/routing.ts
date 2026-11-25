@@ -13,6 +13,16 @@ export type Complexity = (typeof COMPLEXITIES)[number];
 /** The 9 cell names, `S·low` … `L·high`. */
 export const CELLS: readonly string[] = TIERS.flatMap((t) => COMPLEXITIES.map((c) => `${t}${MID}${c}`));
 
+/** One of the 9 cell names → its tier and complexity; null for anything else (effort1 AC-28). */
+export function parseCell(value: unknown): { tier: Tier; complexity: Complexity } | null {
+  for (const tier of TIERS) {
+    for (const complexity of COMPLEXITIES) {
+      if (value === `${tier}${MID}${complexity}`) return { tier, complexity };
+    }
+  }
+  return null;
+}
+
 export interface Route {
   model: "opus" | "sonnet" | "haiku";
   effort: string;
@@ -37,7 +47,7 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const has = (o: Record<string, unknown>, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k);
 
 /** JSON.stringify, then U+007F–U+009F shown as `?`, so a value cannot fake a line. */
-function show(v: unknown): string {
+export function show(v: unknown): string {
   return (JSON.stringify(v) ?? String(v)).replace(/[\u007f-\u009f]/g, "?");
 }
 
