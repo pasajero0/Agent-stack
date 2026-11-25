@@ -1,9 +1,10 @@
 /**
  * One role call as the engine sees it: the fuse before it (AC-35), the schema re-run (AC-37), infra and
- * abort (AC-36, AC-51), and the endings that are a failed attempt or a role re-run (AC-38).
+ * abort (AC-36, AC-51), and the endings that are a failed attempt or a role re-run (AC-38). The scout's call
+ * is one attempt that never throws a `RunError` (`oneCall`, scout1 AC-10).
  */
 import { join } from "node:path";
-import { callClaude, type CallCommands, type CallSpec, type Model } from "../claude.js";
+import { callClaude, type CallCommands, type CallOutcome, type CallSpec, type Model } from "../claude.js";
 import { RunError } from "../errors.js";
 import { roleSchemas, validateOutput } from "../schemas.js";
 import { runDir, writeRun } from "../store.js";
@@ -54,6 +55,89 @@ function spec(ctx: Ctx, target: CallTarget, model: Model, effort?: string): Call
 }
 
 /**
+ * One call of `target.role`, or null when the fuse is reached before it (AC-35): the call count and the run file
+ * before the call (so the count survives a kill), the head and end lines, and the cost after it (AC-62).
+ */
+async function callOnce(ctx: Ctx, target: CallTarget, model: Model, prompt: string, effort: string | undefined): Promise<CallOutcome | null> {
+  const { run } = ctx;
+  const role = target.role;
+  if (fuseReached(run)) return null;
+  run.calls += 1;
+  writeRun(ctx.projectDir, run);
+  const limit = run.fuse !== "off" && "calls" in run.fuse ? `/${run.fuse.calls}` : "";
+  const head = `-> ${run.next} · ${role} · ${model}${effort !== undefined ? ` · ${effort}` : ""} · call ${run.calls}${limit} ...`;
+  ctx.out(head);
+  ctx.progress.line(head);
+  const started = Date.now();
+  const o = await callClaude(spec(ctx, target, model, effort), {
+    cwd: ctx.projectDir,
+    prompt,
+    runId: run.id,
+    callsDir: join(runDir(ctx.projectDir, run.id), "calls"),
+    callNo: run.calls,
+    timeoutMs: ctx.cfg.stepTimeoutMin * 60_000,
+    env: ctx.env,
+    validate: (v) => validateOutput(role, v),
+    signal: ctx.signal,
+    onTool: (line) => {
+      ctx.out(line);
+      ctx.progress.line(line);
+    },
+  });
+  // AC-62: an unknown cost is counted apart, never as $0.
+  if (o.costUsd === null) run.costUnknownCalls += 1;
+  else run.costUsd += o.costUsd;
+  const end = `   ${o.kind} in ${Math.round((Date.now() - started) / 1000)}s`;
+  ctx.out(end);
+  ctx.progress.line(end);
+  return o;
+}
+
+/** Why a scout call gave no output (scout1 AC-10): its ending, as the no-map line names it. */
+export type NoOutputReason = "infra" | "schema" | "max-turns" | "timeout" | "exec-error";
+
+export type OneCallResult<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "fuse"; midCall: boolean }
+  | { kind: "none"; reason: NoOutputReason };
+
+/**
+ * The scout's call (scout1 AC-10): one attempt that never throws a `RunError`. Infra, schema (also a parse failure
+ * after `ok`), max turns, timeout and exec-error end it with `none` and no second call. The fuse is as in
+ * `roleCall`; an abort is `Interrupted` (v04 AC-51). Only a parsed `ok` adds its denials to `humanDecisions`.
+ */
+export async function oneCall<T>(
+  ctx: Ctx,
+  target: CallTarget,
+  model: Model,
+  prompt: string,
+  parse: (v: unknown) => T | string,
+  effort?: string
+): Promise<OneCallResult<T>> {
+  const o = await callOnce(ctx, target, model, prompt, effort);
+  if (o === null) return { kind: "fuse", midCall: false };
+  switch (o.kind) {
+    case "aborted":
+      throw new Interrupted();
+    case "budget":
+      return { kind: "fuse", midCall: true };
+    case "infra":
+    case "schema":
+    case "timeout":
+    case "exec-error":
+      return { kind: "none", reason: o.kind };
+    case "turns":
+      return { kind: "none", reason: "max-turns" };
+    case "ok": {
+      const value = parse(o.output);
+      if (typeof value === "string") return { kind: "none", reason: "schema" };
+      ctx.run.humanDecisions.push(...o.denials);
+      return { kind: "ok", value };
+    }
+  }
+}
+
+/**
  * Calls `target.role` with `prompt`. A schema mismatch is re-run once with the same prompt; a second one,
  * and any infrastructure failure, is a `RunError(1)` with `next` kept. Permission denials go to
  * `humanDecisions` (AC-32). The run file is written before each call so the call count survives a kill.
@@ -71,35 +155,8 @@ export async function roleCall<T>(
   const role = target.role;
   let mismatch = "";
   for (let round = 0; round < 2; round++) {
-    if (fuseReached(run)) return { kind: "fuse", midCall: false };
-    run.calls += 1;
-    writeRun(ctx.projectDir, run);
-    const limit = run.fuse !== "off" && "calls" in run.fuse ? `/${run.fuse.calls}` : "";
-    const head = `-> ${run.next} · ${role} · ${model}${effort !== undefined ? ` · ${effort}` : ""} · call ${run.calls}${limit} ...`;
-    ctx.out(head);
-    ctx.progress.line(head);
-    const started = Date.now();
-    const o = await callClaude(spec(ctx, target, model, effort), {
-      cwd: ctx.projectDir,
-      prompt,
-      runId: run.id,
-      callsDir: join(runDir(ctx.projectDir, run.id), "calls"),
-      callNo: run.calls,
-      timeoutMs: ctx.cfg.stepTimeoutMin * 60_000,
-      env: ctx.env,
-      validate: (v) => validateOutput(role, v),
-      signal: ctx.signal,
-      onTool: (line) => {
-        ctx.out(line);
-        ctx.progress.line(line);
-      },
-    });
-    // AC-62: an unknown cost is counted apart, never as $0.
-    if (o.costUsd === null) run.costUnknownCalls += 1;
-    else run.costUsd += o.costUsd;
-    const end = `   ${o.kind} in ${Math.round((Date.now() - started) / 1000)}s`;
-    ctx.out(end);
-    ctx.progress.line(end);
+    const o = await callOnce(ctx, target, model, prompt, effort);
+    if (o === null) return { kind: "fuse", midCall: false };
     switch (o.kind) {
       case "aborted":
         throw new Interrupted();

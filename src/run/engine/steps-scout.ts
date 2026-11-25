@@ -4,16 +4,17 @@
  * content: at most 100 items are checked, each with at most one `lstat` and one `realpath`. It also holds the
  * scout map text (the writer, AC-22) and the map reader (AC-17): the two sides of one entry-line form.
  */
-import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, writeFileSync, type Stats } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync, type Stats } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { RunError } from "../errors.js";
 import { scoutPrompt } from "../prompts.js";
 import { parseRoute } from "../routing.js";
 import { parseScout } from "../schemas.js";
 import { runDir } from "../store.js";
-import { roleCall } from "./call.js";
-import { resumeHint, type Ctx, type StepHandler } from "./context.js";
+import { oneCall } from "./call.js";
+import type { Ctx, StepHandler } from "./context.js";
 import { toLimit } from "./task-core.js";
+import type { StepEvent } from "./transitions.js";
 
 /** One item of the scout's output, after the schema check. */
 export interface ScoutItem {
@@ -207,7 +208,8 @@ const placesText = (n: number): string => (n === 1 ? "1 place" : `${n} places`);
 /**
  * The scout step (AC-1 to AC-4, AC-6, AC-19): one call on `routing.scout`, the entry checks, then the scout map
  * written by rename from a temp file in the run folder. A map that is already there (a kill after it was
- * written) makes no new call.
+ * written) makes no new call. A scout problem never stops the run (AC-10, AC-11, AC-28): it prints the no-map
+ * line and goes to clarify. Only the fuse (AC-13) and an interrupt (AC-14) stop it, as for any call step.
  */
 export const scout: StepHandler = async (ctx) => {
   const file = scoutMapPath(ctx);
@@ -218,20 +220,31 @@ export const scout: StepHandler = async (ctx) => {
   const route = parseRoute(ctx.cfg.routing.scout);
   // The routing passed checkRouting when the run started or resumed.
   if (route === null) throw new RunError(`gates.json routing.scout is not a valid route: ${String(ctx.cfg.routing.scout)}.`, 1);
-  const r = await roleCall(ctx, { role: "scout" }, route.model, scoutPrompt({ description: ctx.run.description }), parseScout, route.effort);
+  // AC-10: one attempt; an early ending is a no-map line, never a RunError. AC-13: the fuse, AC-14: an abort.
+  const r = await oneCall(ctx, { role: "scout" }, route.model, scoutPrompt({ description: ctx.run.description }), parseScout, route.effort);
   if (r.kind === "fuse") return toLimit(ctx, "fuse", "scout");
-  if (r.kind === "failed") {
-    throw new RunError(`The scout call ended early: ${r.message}. The run stays at scout; ${resumeHint(ctx.run.id)} tries again.`, 1);
-  }
+  if (r.kind === "none") return noMap(ctx, r.reason);
   const { kept, dropped } = checkEntries(r.value.entries, ctx.projectDir);
-  if (kept.length === 0) {
-    const why = r.value.entries.length === 0 ? "empty list" : "no entry kept";
-    say(ctx, `scout: no map (${why}); the run goes on without it`);
-    return { type: "scouted" };
-  }
+  if (kept.length === 0) return noMap(ctx, r.value.entries.length === 0 ? "empty list" : "no entry kept");
   const tmp = `${file}.tmp`;
-  writeFileSync(tmp, mapText(ctx.run.id, route.model, route.effort, kept));
-  renameSync(tmp, file);
+  try {
+    writeFileSync(tmp, mapText(ctx.run.id, route.model, route.effort, kept));
+    renameSync(tmp, file);
+  } catch {
+    // AC-28: try to remove the temp file; the run goes on without a map.
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      // Nothing more to do: the temp file is not the scout map, and no step reads it.
+    }
+    return noMap(ctx, "write failed");
+  }
   say(ctx, `scout: map of ${placesText(kept.length)} written to scout.md${dropped > 0 ? ` (${dropped} dropped)` : ""}`);
   return { type: "scouted" };
 };
+
+/** The no-map line (AC-10, AC-11, AC-28); the run goes on to clarify. */
+function noMap(ctx: Ctx, reason: string): StepEvent {
+  say(ctx, `scout: no map (${reason}); the run goes on without it`);
+  return { type: "scouted" };
+}
