@@ -168,6 +168,14 @@ it here first.
 - **`gates.json`** — the project's settings for the gates. Yours: `update` never rewrites it, so new keys
   get defaults in code. One exception: `routing` has no default in code, so `update` adds the block when it is
   missing, and adds a missing top-level key of it (such as `scout`). It never changes a value that is there.
+- **OS sandbox** — Claude Code's own sandbox for the Bash tool and its child processes: macOS Seatbelt, or
+  `bwrap` + `socat` on Linux and WSL2. It limits the files Bash reads and writes and the domains it reaches. It
+  does not cover Read, Edit, Write, WebFetch, MCP servers or hooks.
+- **Sandbox block** — the `sandbox` object the harness writes into `.claude/settings.json`: the sandbox on, no retry
+  outside it, the secret folders unreadable, network only to `gates.json` → `sandbox.allowedDomains`. `update`
+  merges it with the user's own `sandbox` keys: a switch the user set wins, with a warning when it is weaker. Two
+  exceptions, each announced: an object or list of the wrong type is replaced, and a secret folder the user removed
+  comes back.
 - **Interactive / autonomous** — `gates.json` → `mode`. Interactive asks the human; autonomous never asks,
   blocks instead, and records decisions under NEEDS HUMAN DECISION.
 - **Seed files** — files `init` writes once and `update` leaves alone: `CLAUDE.md`, `CODEMAP.md`,
