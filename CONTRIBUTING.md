@@ -104,6 +104,13 @@ not when it is fixed.
   Example: `feat(release): 0.4.2 — readable gates (#4)`.
 - The description has four parts: what changed, upgrading, what is not covered, and how it was verified
   (commands and their results).
+- **Before the merge**, check the release once more (defect #48). A fix found after the merge is a separate
+  `docs:` or `fix:` commit on `main`; the tag stays on the release commit.
+  1. The version in `package.json` is raised, and the release evals ran after that.
+  2. The evals results file the README quotes says the new version, a commit of the release branch, and the same
+     `totals` as the README.
+  3. Read the start of the README and its tables as a new reader: nothing in them contradicts the new numbers or
+     the Limits section.
 
 ## Tags
 
