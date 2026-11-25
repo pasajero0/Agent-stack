@@ -14,7 +14,7 @@ export type Complexity = (typeof COMPLEXITIES)[number];
 export const CELLS: readonly string[] = TIERS.flatMap((t) => COMPLEXITIES.map((c) => `${t}${MID}${c}`));
 
 export interface Route {
-  model: string;
+  model: "opus" | "sonnet" | "haiku";
   effort: string;
 }
 
@@ -27,7 +27,8 @@ const ROUTE_PATTERN = /^(opus|sonnet|haiku)·(low|medium|high|xhigh|max)$/;
 export function parseRoute(value: unknown): Route | null {
   if (typeof value !== "string") return null;
   const m = ROUTE_PATTERN.exec(value);
-  return m ? { model: m[1]!, effort: m[2]! } : null;
+  // ROUTE_PATTERN limits group 1 to the three models.
+  return m ? { model: m[1] as Route["model"], effort: m[2]! } : null;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> =>

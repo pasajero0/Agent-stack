@@ -38,7 +38,7 @@ function budgetLeft(run: RunFile): number | null {
   return Math.max(0, Math.round((f.usd - run.costUsd) * 10_000) / 10_000);
 }
 
-function spec(ctx: Ctx, target: CallTarget, model: Model): CallSpec {
+function spec(ctx: Ctx, target: CallTarget, model: Model, effort?: string): CallSpec {
   const s = roleSchemas[target.role];
   const base = {
     model,
@@ -47,7 +47,7 @@ function spec(ctx: Ctx, target: CallTarget, model: Model): CallSpec {
     budgetUsd: budgetLeft(ctx.run),
   };
   return target.role === "implement"
-    ? { ...base, role: "implement", commands: target.commands }
+    ? { ...base, role: "implement", commands: target.commands, ...(effort !== undefined ? { effort } : {}) }
     : { ...base, role: target.role };
 }
 
@@ -61,7 +61,9 @@ export async function roleCall<T>(
   target: CallTarget,
   model: Model,
   prompt: string,
-  parse: (v: unknown) => T | string
+  parse: (v: unknown) => T | string,
+  /** implement only: the route's effort, passed as `--effort` and shown in the head line. */
+  effort?: string
 ): Promise<RoleResult<T>> {
   const { run } = ctx;
   const role = target.role;
@@ -71,11 +73,11 @@ export async function roleCall<T>(
     run.calls += 1;
     writeRun(ctx.projectDir, run);
     const limit = run.fuse !== "off" && "calls" in run.fuse ? `/${run.fuse.calls}` : "";
-    const head = `-> ${run.next} · ${role} · ${model} · call ${run.calls}${limit} ...`;
+    const head = `-> ${run.next} · ${role} · ${model}${effort !== undefined ? ` · ${effort}` : ""} · call ${run.calls}${limit} ...`;
     ctx.out(head);
     ctx.progress.line(head);
     const started = Date.now();
-    const o = await callClaude(spec(ctx, target, model), {
+    const o = await callClaude(spec(ctx, target, model, effort), {
       cwd: ctx.projectDir,
       prompt,
       runId: run.id,

@@ -9,7 +9,7 @@ import { execa } from "execa";
 import { lineSplitter, toolLines } from "./engine/progress.js";
 import type { Role } from "./types.js";
 
-export type Model = "opus" | "sonnet";
+export type Model = "opus" | "sonnet" | "haiku";
 
 /** implement's commands: its `--allowedTools` entries are built from them. */
 export interface CallCommands {
@@ -29,7 +29,7 @@ interface CallSpecBase {
 
 /** Keyed on role: `commands` is required for implement and absent for every other role. */
 export type CallSpec =
-  | (CallSpecBase & { role: "implement"; commands: CallCommands })
+  | (CallSpecBase & { role: "implement"; commands: CallCommands; /** `--effort`, right after `--model` (implement only). */ effort?: string })
   | (CallSpecBase & { role: Exclude<Role, "implement">; commands?: never });
 
 export interface CallIo {
@@ -146,6 +146,7 @@ export function buildArgs(spec: CallSpec, scope: CallScope): string[] {
     String(spec.maxTurns),
     "--model",
     spec.model,
+    ...(spec.role === "implement" && spec.effort !== undefined ? ["--effort", spec.effort] : []),
     "--json-schema",
     JSON.stringify(spec.schema),
     "--tools",

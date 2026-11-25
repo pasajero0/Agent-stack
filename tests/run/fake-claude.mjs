@@ -7,7 +7,8 @@
 // A response: { expectRole?, expectModel?, writes?: {path: content}, deletes?: string[], exec?: string,
 //               exit?: number, stdout?: string | object, sleepMs?: number, output?: unknown }
 // With expectRole set, the fake exits 9 unless the prompt's first non-empty line names the role and
-// `--model` fits it (opus for every role but implement; expectModel when given).
+// `--model` fits it (opus for every role but implement; expectModel when given), and exits 9 when a role
+// other than implement gets `--effort` (effort1 AC-24). With expectEffort set, it exits 9 unless `--effort` equals it.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { execSync } from "node:child_process";
@@ -63,6 +64,15 @@ if (response.expectRole) {
     process.stderr.write(`fake-claude: expected role ${role} (model ${wantModel ?? "any"}), got model ${model}, header "${header}"\n`);
     process.exit(9);
   }
+  // effort1 AC-24: only implement gets --effort.
+  if (role !== "implement" && argv.includes("--effort")) {
+    process.stderr.write(`fake-claude: role ${role} must get no --effort\n`);
+    process.exit(9);
+  }
+}
+if (response.expectEffort !== undefined && flag("--effort") !== response.expectEffort) {
+  process.stderr.write(`fake-claude: expected --effort ${response.expectEffort}, got ${flag("--effort")}\n`);
+  process.exit(9);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

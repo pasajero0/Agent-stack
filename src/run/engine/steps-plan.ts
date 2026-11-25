@@ -18,15 +18,15 @@ import { ask, comment, humanFeedback, NO_INPUT, recordGate } from "./gates.js";
 import { specChanged, toSpecApprove } from "./spec-change.js";
 import { criteriaOf, deletePlan, parsePlan, planSha256, readPlan, readSpec, tasksPath, type PlanTask } from "./plan-file.js";
 import { boundsFeedback, checkRole, guardRole, requireBranch, requireClean, undoGit, undoOutside, withFeedback, type RoleMark } from "./role-bounds.js";
-import { implementModel, lastCallOutput } from "./steps-implement.js";
+import { implementRoute, lastCallOutput } from "./steps-implement.js";
 import { toLimit } from "./task-core.js";
 import { proposalOf, stageOf } from "./steps-spec.js";
 import { transition, type StepEvent } from "./transitions.js";
 
-/** A plan task as implement, checks and review see it; risky only for tier S or M (AC-13). */
+/** A plan task as implement, checks and review see it; risky for every tier (effort1 AC-4). */
 export function planTaskInfo(t: PlanTask, specMd: string): TaskInfo {
   const criteria = criteriaOf(specMd, t.ac);
-  const risky = t.tier !== "L" && [t.desc, ...criteria].some(isRisky);
+  const risky = [t.desc, ...criteria].some(isRisky);
   return { id: t.id, desc: t.desc, criteria, tier: t.tier, complexity: t.complexity, risky, fix: false, verify: t.verify };
 }
 
@@ -141,7 +141,7 @@ function planCard(ctx: Ctx, stage: string, tasks: PlanTask[], text: string): Car
   const f = new Facts();
   for (const t of tasks) {
     const info = planTaskInfo(t, specMd);
-    const model = implementModel(info, { ...newTask(t.id), attempts: 1 });
+    const model = implementRoute(ctx.cfg.routing, info, { ...newTask(t.id), attempts: 1 }).model;
     f.add(`${t.id}  ${t.tier} · ${model}${info.risky ? " · risky" : ""} · ${criteriaText(t.ac)}   ${t.desc}`);
     f.whole(`      verify: ${t.verify}`);
     // AC-77: Claude Code allows no command substitution by a rule, so --allowedTools never lets implement run it.
