@@ -166,6 +166,11 @@ export interface PlanOutput {
   needsHumanDecision: string[];
 }
 
+/** The scout's output (scout1): its map entries, before the entry checks. */
+export interface ScoutOutput {
+  entries: { path: string; lines?: string; why: string }[];
+}
+
 export type CommitType = "feat" | "fix" | "refactor" | "test" | "docs" | "chore" | "perf";
 
 export interface TestConflict {
@@ -342,6 +347,19 @@ export function parseSpecOut(v: unknown): SpecOutput | string {
   if (err !== null) return err;
   if (!isObj(v) || !isStr(v.specPath) || !isStr(v.summary)) return "output must be an object";
   return { specPath: v.specPath, summary: v.summary, needsHumanDecision: strings(v.needsHumanDecision) };
+}
+
+/** Validates against the scout schema (scout1), then returns the typed entries; else the mismatch text. */
+export function parseScout(v: unknown): ScoutOutput | string {
+  const err = validateOutput("scout", v);
+  if (err !== null) return err;
+  if (!isObj(v) || !Array.isArray(v.entries)) return "output must be an object";
+  const entries: ScoutOutput["entries"] = [];
+  for (const e of v.entries) {
+    if (!isObj(e) || !isStr(e.path) || !isStr(e.why)) return "entries must be {path, lines?, why}[]";
+    entries.push(isStr(e.lines) ? { path: e.path, lines: e.lines, why: e.why } : { path: e.path, why: e.why });
+  }
+  return { entries };
 }
 
 export function parsePlanOut(v: unknown): PlanOutput | string {

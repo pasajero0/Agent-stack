@@ -20,6 +20,7 @@ import { withFeedback } from "./role-bounds.js";
 import { lintItems, toLimit } from "./task-core.js";
 import { planHandlers, planTaskInfo } from "./steps-plan.js";
 import { proposalOf, specHandlers, stageOf } from "./steps-spec.js";
+import { scout } from "./steps-scout.js";
 import type { StepEvent } from "./transitions.js";
 import { commandName } from "./command.js";
 
@@ -229,11 +230,14 @@ const answersGate: StepHandler = async (ctx) => {
 
 export const taskMode: ModeSteps = {
   maxAttempts: 3,
-  handlers: { clarify, "gate:answers": answersGate, ...specHandlers, ...planHandlers },
+  handlers: { scout, clarify, "gate:answers": answersGate, ...specHandlers, ...planHandlers },
 
-  /** AC-5: clarify first; no branch until the answers are confirmed. `--stage` pre-fills the stage id (AC-7). */
+  /**
+   * scout1 AC-1: the scout first, then clarify (AC-5); no branch until the answers are confirmed. `--stage`
+   * pre-fills the stage id (AC-7).
+   */
   start(input) {
-    return { next: "clarify", tasks: [], newBranch: null, stagePrefill: input.stage };
+    return { next: "scout", tasks: [], newBranch: null, stagePrefill: input.stage };
   },
 
   taskInfo(ctx, id) {

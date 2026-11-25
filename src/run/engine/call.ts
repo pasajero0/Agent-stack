@@ -46,9 +46,11 @@ function spec(ctx: Ctx, target: CallTarget, model: Model, effort?: string): Call
     schema: { type: s.type, required: s.required, properties: s.properties },
     budgetUsd: budgetLeft(ctx.run),
   };
-  return target.role === "implement"
-    ? { ...base, role: "implement", commands: target.commands, ...(effort !== undefined ? { effort } : {}) }
-    : { ...base, role: target.role };
+  const eff = effort !== undefined ? { effort } : {};
+  if (target.role === "implement") return { ...base, role: "implement", commands: target.commands, ...eff };
+  // scout1 AC-2: the scout's route has an effort too.
+  if (target.role === "scout") return { ...base, role: "scout", ...eff };
+  return { ...base, role: target.role };
 }
 
 /**
@@ -62,7 +64,7 @@ export async function roleCall<T>(
   model: Model,
   prompt: string,
   parse: (v: unknown) => T | string,
-  /** implement only: the route's effort, passed as `--effort` and shown in the head line. */
+  /** implement and scout only: the route's effort, passed as `--effort` and shown in the head line. */
   effort?: string
 ): Promise<RoleResult<T>> {
   const { run } = ctx;

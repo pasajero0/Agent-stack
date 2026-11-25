@@ -38,6 +38,22 @@ export function loadAgent(projectDir: string, name: string, need?: { re: RegExp;
   return body;
 }
 
+/** The scout prompt (scout1 Contract, AC-3): the rules live here, as clarify's do; there is no scout skill. */
+export function scoutPrompt(p: { description: string }): string {
+  return [
+    "# Role: scout",
+    "",
+    "The driver has started a task run. You only read the repository: you must not edit files, run commands, or do the task.",
+    "",
+    "Task description:",
+    p.description,
+    "",
+    "- List the places that the next roles (clarify, then spec, then plan) should read first for this task: specs, the code the task changes, its tests, and the docs that define its words.",
+    "- At most 30 entries, the most important first. Each entry has one line of why.",
+    '- `path` is relative to the repository root. Give `lines` as "<first>-<last>" (or one number) when only part of a file matters; leave it out for a whole file or a folder.',
+  ].join("\n");
+}
+
 export function clarifyPrompt(p: { description: string; used: string[] }): string {
   return [
     "# Role: clarify",

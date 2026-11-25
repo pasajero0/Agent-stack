@@ -82,7 +82,7 @@ describe("plan role: complexity and splitReason", () => {
     mergeSpec(r);
     expect(await resumeRun({ ...r.opts() }), text(r)).toBe(3);
     expect(r.run().next).toBe("gate:plan-approve");
-    expect(r.logged().length).toBe(4);
-    expect(r.logged()[3]?.prompt).toContain("task T1 needs a complexity of low, medium or high");
+    expect(r.logged().length).toBe(5);
+    expect(r.logged()[4]?.prompt).toContain("task T1 needs a complexity of low, medium or high");
   });
 });

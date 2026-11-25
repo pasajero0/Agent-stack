@@ -13,6 +13,7 @@ export type Role = "clarify" | "spec" | "plan" | "scout" | "implement" | "review
 
 /** The step a run is at. `implement:<task>`, `checks:<task>`, `review:<task>`, `commit:<task>` carry a task id. */
 export type Next =
+  | "scout"
   | "clarify"
   | "gate:answers"
   | "spec"

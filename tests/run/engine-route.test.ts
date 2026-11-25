@@ -255,7 +255,8 @@ describe("implement route in a run", () => {
     const r = newRepo();
     const code = await taskRun(r, ONE({}), [call("sonnet", "low", { writes: { "hello.txt": "hello\n" } }), review()]);
     expect(code, text(r)).toBe(0);
-    const others = r.logged().filter((c) => !isImplement(c.prompt));
+    // scout1: the scout call has its own route and --effort; its argv is checked by the scout1 AC-2 test.
+    const others = r.logged().filter((c) => !isImplement(c.prompt) && !c.prompt.startsWith("# Role: scout"));
     const roles = others.map((c) => /# Role: (\w+)/.exec(c.prompt)?.[1]);
     for (const role of ["spec", "plan", "review"]) expect(roles).toContain(role);
     for (const c of others) {

@@ -65,7 +65,7 @@ describe("effort1 AC-15: a resume with a plan that is no longer valid", () => {
     expect(await resumeRun({ ...r.opts() })).toBe(1);
     expect(text(r)).toContain(noComplexity("T1", id));
     expect(readFileSync(runFilePath(r), "utf8")).toBe(before);
-    expect(r.logged().length).toBe(3);
+    expect(r.logged().length).toBe(4);
   });
 
   it("effort1 AC-15: the first task that fails is named", async () => {
@@ -121,7 +121,7 @@ describe("effort1 AC-15: a resume with a plan that is no longer valid", () => {
     patchRun(r, { next: "plan", status: "running", humanDecisions: [] });
     expect(await resumeRun({ ...r.opts() }), text(r)).toBe(3);
     expect(r.run().next).toBe("gate:plan-approve");
-    expect(r.logged().length).toBe(4);
+    expect(r.logged().length).toBe(5);
     const tasks: unknown = JSON.parse(readFileSync(join(r.dir, TASKS_PATH), "utf8"));
     expect(tasks).toMatchObject({ tasks: [{ id: "T1", complexity: "low" }, { id: "T2", complexity: "low" }] });
   });

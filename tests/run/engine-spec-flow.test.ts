@@ -10,7 +10,7 @@ import { cleanupProjects, git, write } from "../hooks/fixture.js";
 import { resumeRun, startRun, statusRun } from "../../src/run/engine/index.js";
 import { SPEC_FLOWS } from "../../src/run/spec-flow.js";
 import { impl, makeFakeExecutable, repo, review, sh, text, type Repo } from "./engine-fixture.js";
-import { clarify, plan, prompter, spec, SPEC_PATH, specMd, STAGE, TASK_DESC, twoTasksDone } from "./engine-task-fixture.js";
+import { clarify, plan, prompter, scout, spec, SPEC_PATH, specMd, STAGE, TASK_DESC, twoTasksDone } from "./engine-task-fixture.js";
 
 beforeAll(makeFakeExecutable);
 afterEach(() => cleanupProjects());
@@ -27,7 +27,7 @@ function branchRepo(): Repo {
 
 /** Starts a task run in flow `branch` up to gate:spec-approve (exit 3). */
 async function toSpecApprove(r: Repo, extra: unknown[] = []): Promise<void> {
-  r.script([clarify(), spec(), ...(extra as never[])]);
+  r.script([scout(), clarify(), spec(), ...(extra as never[])]);
   const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
   expect(code, text(r)).toBe(3);
 }
@@ -44,14 +44,14 @@ describe("spec flow: the setting (AC-83, AC-84)", () => {
   it("v04 AC-83: the allowed names are merge and branch, and a missing key is merge", async () => {
     expect([...SPEC_FLOWS]).toEqual(["merge", "branch"]);
     const r = repo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     expect(r.run().specFlow).toBe("merge");
   });
 
   it("v04 AC-83: the run file and --status --json carry the flow", async () => {
     const r = branchRepo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     expect(r.run().specFlow).toBe("branch");
     r.out.length = 0;
@@ -88,7 +88,7 @@ describe("spec flow: the setting (AC-83, AC-84)", () => {
 
   it("v04 AC-84: a run file without specFlow reads as merge", async () => {
     const r = repo();
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     const file = join(r.dir, ".claude/tmp/runs", r.run().id, "run.json");
     const raw = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
@@ -118,7 +118,7 @@ describe("spec flow branch: the run stays on the branch (AC-85, AC-86, AC-90)", 
     write(r.dir, `docs/specs/${STAGE}/SPEC.md`, specMd());
     git(r.dir, "add", "docs");
     git(r.dir, "commit", "-q", "-m", "docs(b1): spec — old");
-    r.script([clarify()]);
+    r.script([scout(), clarify()]);
     expect(await startRun({ ...r.opts(), mode: "task", description: TASK_DESC })).toBe(3);
     expect(text(r)).toContain(`docs/specs/${STAGE}/ already exists on HEAD`);
   });

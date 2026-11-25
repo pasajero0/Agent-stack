@@ -30,6 +30,15 @@ export const specMd = (stage = STAGE): string =>
     "",
   ].join("\n");
 
+/**
+ * A scout call (scout1): every task run makes it first. The default entry is README.md, which every test repo
+ * holds, so the run writes a scout map and goes on to clarify.
+ */
+export const scout = (entries: Json[] = [{ path: "README.md", why: "the project readme" }]): Json => ({
+  expectRole: "scout",
+  output: { entries },
+});
+
 export const clarify = (o: { size?: "task" | "story" | "epic"; id?: string; split?: { id: string; goal: string }[] } = {}): Json => ({
   expectRole: "clarify",
   output: {
@@ -110,9 +119,9 @@ export const twoTasksDone = (): Json[] => [
   review(),
 ];
 
-/** Starts a task run that stops at gate:spec-merge (exit 3): clarify, answers (Enter × 3), spec. */
+/** Starts a task run that stops at gate:spec-merge (exit 3): scout, clarify, answers (Enter × 3), spec. */
 export async function toSpecMerge(r: Repo, extra: Json[] = []): Promise<void> {
-  r.script([clarify(), spec(), ...extra]);
+  r.script([scout(), clarify(), spec(), ...extra]);
   const code = await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC });
   expect(code, text(r)).toBe(3);
 }

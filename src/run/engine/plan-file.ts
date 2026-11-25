@@ -160,7 +160,7 @@ export function readPlan(dir: string, cfg: RunConfig, stage: string, runId: stri
 }
 
 /** Task-mode steps that run before or at plan: on resume there is no approved plan to check (effort1 AC-15). */
-const BEFORE_PLAN = new Set(["clarify", "gate:answers", "spec", "gate:spec-approve", "gate:spec-merge", "plan"]);
+const BEFORE_PLAN = new Set(["scout", "clarify", "gate:answers", "spec", "gate:spec-approve", "gate:spec-merge", "plan"]);
 
 /**
  * effort1 AC-15: on resume of a task-mode run past plan, the stage's tasks.json (if there) must be a valid plan

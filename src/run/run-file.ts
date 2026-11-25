@@ -35,6 +35,7 @@ const MODES: readonly Mode[] = ["task", "quick"];
 const LIMITS: readonly LimitReason[] = ["attempts", "blocked", "review-loop", "fuse", "decision", "test-conflict", "tests-changed"];
 const SIZES = ["task", "story", "epic"] as const;
 const FIXED_NEXT = [
+  "scout",
   "clarify",
   "gate:answers",
   "spec",

@@ -9,7 +9,7 @@ import { cleanupProjects, git, patchGates } from "../hooks/fixture.js";
 import { resumeRun, startRun } from "../../src/run/engine/index.js";
 import { sha256 } from "../../src/run/engine/card.js";
 import { makeFakeExecutable, repo, text, type Json, type Repo } from "./engine-fixture.js";
-import { clarify, mergeSpec, plan, spec, TASK_DESC, TASKS_PATH, type PlanTask } from "./engine-task-fixture.js";
+import { clarify, mergeSpec, plan, scout, spec, TASK_DESC, TASKS_PATH, type PlanTask } from "./engine-task-fixture.js";
 
 beforeAll(makeFakeExecutable);
 afterEach(() => cleanupProjects());
@@ -35,7 +35,7 @@ const TASKS: PlanTask[] = [
 
 /** Start to gate:plan-approve (exit 3) with a six-criteria spec; `after` are the role calls after the spec. */
 async function toGate(r: Repo, after: Json[]): Promise<void> {
-  r.script([clarify(), spec({ writes: { "docs/specs/B1/SPEC.md": SIX_AC } }), ...after]);
+  r.script([scout(), clarify(), spec({ writes: { "docs/specs/B1/SPEC.md": SIX_AC } }), ...after]);
   expect(await startRun({ ...r.opts({ gate: ["", "", ""] }), mode: "task", description: TASK_DESC }), text(r)).toBe(3);
   mergeSpec(r);
   expect(await resumeRun({ ...r.opts() }), text(r)).toBe(3);
