@@ -18,6 +18,9 @@ export interface Route {
   effort: string;
 }
 
+/** A routing that passed `checkRouting`: every value is a route string. */
+export type Routing = Record<Tier, Record<Complexity, string>> & { retry: string; risky: string };
+
 const ROUTE_PATTERN = /^(opus|sonnet|haiku)·(low|medium|high|xhigh|max)$/;
 
 /** "<model>·<effort>" → {model, effort}; null if the value breaks the route pattern. */
