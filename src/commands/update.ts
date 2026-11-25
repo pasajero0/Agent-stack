@@ -5,6 +5,7 @@ import {
   buildHarnessFiles,
   planUpdate,
   removeHarnessFiles,
+  RoutingTemplateError,
   writeHarnessFiles,
   type UpdatePlan,
 } from "../claude/harness.js";
@@ -20,7 +21,15 @@ export async function updateCommand(options: { dryRun?: boolean; force?: boolean
   }
 
   const params = await detectHarnessParams(projectDir);
-  const plan = planUpdate(projectDir, buildHarnessFiles(params), { force: options.force });
+  let built;
+  try {
+    built = buildHarnessFiles(params);
+  } catch (e) {
+    if (!(e instanceof RoutingTemplateError)) throw e;
+    log.error(e.message);
+    process.exit(1);
+  }
+  const plan = planUpdate(projectDir, built, { force: options.force });
 
   if (options.dryRun) {
     log.step("Harness update preview (dry run):");

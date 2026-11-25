@@ -8,6 +8,7 @@ import type { HarnessParams } from "../detect/harness-params.js";
 import { detectHarnessParams } from "../detect/harness-params.js";
 import { buildGatesConfig } from "./gates.js";
 import { log } from "../utils/logger.js";
+import { checkRouting } from "../run/routing.js";
 
 interface HookCommand {
   type: string;
@@ -256,6 +257,24 @@ function templatesRoot(): string {
   throw new Error("Could not find templates/claude");
 }
 
+/** `templates/claude/_routing.json` cannot be read or is not a valid routing (AC-19). */
+export class RoutingTemplateError extends Error {
+  constructor() {
+    super("templates/claude/_routing.json is not a valid routing; reinstall agent-stack.");
+  }
+}
+
+function loadDefaultRouting(root: string): Record<string, unknown> {
+  let routing: unknown;
+  try {
+    routing = JSON.parse(readFileSync(join(root, "_routing.json"), "utf-8"));
+  } catch {
+    throw new RoutingTemplateError();
+  }
+  if (checkRouting(routing).length > 0) throw new RoutingTemplateError();
+  return routing as Record<string, unknown>;
+}
+
 /** agent-stack's own version (package.json) — the CLI's --version and the deployed harness manifest. */
 export function toolVersion(): string {
   const thisDir = dirname(fileURLToPath(import.meta.url));
@@ -394,8 +413,9 @@ One folder per stage under \`${p.docsDir}specs/\`. Each \`SPEC.md\` lists the AD
 }
 
 /** Build the full harness file set (pure — no IO side effects on the target). */
-export function buildHarnessFiles(params: HarnessParams): GeneratedFile[] {
-  const root = templatesRoot();
+export function buildHarnessFiles(params: HarnessParams, templatesDir?: string): GeneratedFile[] {
+  const root = templatesDir ?? templatesRoot();
+  const routing = loadDefaultRouting(root); // first: a broken template stops before anything is built
   const files: GeneratedFile[] = [];
 
   for (const abs of walk(root)) {
@@ -413,7 +433,7 @@ export function buildHarnessFiles(params: HarnessParams): GeneratedFile[] {
   });
   files.push({
     path: ".claude/gates.json",
-    content: JSON.stringify(buildGatesConfig(params), null, 2) + "\n",
+    content: JSON.stringify(buildGatesConfig(params, routing), null, 2) + "\n",
     action: "create",
   });
   files.push({ path: "CLAUDE.md", content: buildClaudeMd(params, root), action: "create" });
@@ -593,9 +613,9 @@ export async function removeHarnessFiles(projectDir: string, paths: string[]): P
 }
 
 /** Detect params, build the harness, write it to disk. */
-export async function emitHarness(projectDir: string): Promise<GeneratedFile[]> {
+export async function emitHarness(projectDir: string, templatesDir?: string): Promise<GeneratedFile[]> {
   const params = await detectHarnessParams(projectDir);
-  const files = buildHarnessFiles(params);
+  const files = buildHarnessFiles(params, templatesDir);
   await writeHarnessFiles(projectDir, files);
   return files;
 }

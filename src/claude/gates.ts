@@ -47,6 +47,8 @@ export interface GatesConfig {
   slo: { maxFileLines: number | null; newDependencies: number | null };
   /** Project-specific health metrics: the command prints one number; {files} = changed code files. */
   health: HealthMetric[];
+  /** Which model and effort each task runs on; the default is `templates/claude/_routing.json`. */
+  routing: Record<string, unknown>;
 }
 
 export interface HealthMetric {
@@ -108,7 +110,8 @@ export function monorepoDocsLayout(docsDir: string): string[] {
 /** Default `stagePattern`: the stage id is the leading letters+digits of the branch's last segment. */
 export const DEFAULT_STAGE_PATTERN = "^([A-Za-z]+[0-9]+)([-_.]|$)";
 
-export function buildGatesConfig(p: HarnessParams): GatesConfig {
+/** `routing` is the default routing the caller read (and checked) from `_routing.json`. */
+export function buildGatesConfig(p: HarnessParams, routing: Record<string, unknown>): GatesConfig {
   const generated = p.generatedGlobs ? p.generatedGlobs.split("|") : [];
   return {
     mode: "interactive",
@@ -135,5 +138,6 @@ export function buildGatesConfig(p: HarnessParams): GatesConfig {
     health: p.complexityCommand
       ? [{ name: "complexity", command: p.complexityCommand, max: 0 }]
       : [],
+    routing,
   };
 }
