@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.8 — effort and model by task size
+
+- **Routing block in `gates.json`:** the driver now picks the model and the effort of each call from the tier and
+  the complexity of the task, instead of always using the default level. This fixes defect #41 (the plan skill
+  said tier S runs on "sonnet, low effort", but the driver never passed `--effort`).
+- **Plan complexity:** the plan step writes `complexity` for each task (and `splitReason` for an L task).
+- **`run quick --cell <tier>·<complexity>`** picks the routing cell; an eval `task.json` may set `cell`.
+
+### Upgrading from 0.4.7
+
+- Run `agent-stack update`: it adds the routing block to `gates.json`.
+- A run started on 0.4.7 whose plan is written (at `gate:plan-approve` or later) stops with AC-15. Add
+  `complexity` (and `splitReason` for an L task) to its tasks by hand, or cancel the run. A run still at its plan
+  step just runs plan again.
+- The plan-approve card line and the implement head line changed. If a script matched them, change the script.
+- New: `run quick --cell <tier>·<complexity>` picks the routing cell of Q1 (default M·medium). An eval
+  `task.json` may set `cell`.
+
 ## 0.4.7 — regression task set
 
 - **Eval runner** (`scripts/eval.mjs`, repo only, not shipped): runs each task of `evals/tasks/` k times (default
