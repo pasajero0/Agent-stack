@@ -1,9 +1,10 @@
 /**
  * The scout step (scout1). This part holds the entry checks: the driver's pure checks on the scout's map
  * entries (Contract "Entry checks", AC-12, AC-21). They read no file content: at most 100 items are checked,
- * each with at most one `lstat` and one `realpath`.
+ * each with at most one `lstat` and one `realpath`. It also holds the scout map text (the writer, AC-22) and
+ * the map reader (AC-17): the two sides of one entry-line form.
  */
-import { lstatSync, realpathSync, type Stats } from "node:fs";
+import { lstatSync, readFileSync, realpathSync, type Stats } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 /** One item of the scout's output, after the schema check. */
@@ -126,4 +127,60 @@ export function checkEntries(items: readonly ScoutItem[], projectDir: string): C
     kept.push(range === undefined ? { path: place.path, why: item.why } : { path: place.path, range, why: item.why });
   }
   return { kept, dropped: items.length - kept.length };
+}
+
+const MAX_WHY_CODE_POINTS = 200;
+const NO_REASON = "(no reason given)";
+const UNSAFE_ALL = new RegExp(UNSAFE.source, "gu");
+
+/**
+ * The `why` of a kept entry as the scout map holds it (AC-22): every whitespace run becomes one space (this covers
+ * a newline, U+2028 and U+2029), each other unsafe character becomes `?`, then trim; above 200 code points it is
+ * its first 199 code points and `…`; empty becomes `(no reason given)`.
+ */
+export function cleanWhy(why: string): string {
+  const text = why.replace(/\s+/gu, " ").replace(UNSAFE_ALL, "?").trim();
+  const points = [...text];
+  if (points.length > MAX_WHY_CODE_POINTS) return `${points.slice(0, MAX_WHY_CODE_POINTS - 1).join("")}…`;
+  return text === "" ? NO_REASON : text;
+}
+
+/** The entry line of a kept entry: ``- `<path>` — <why>`` or ``- `<path>:<range>` — <why>``. */
+function entryLine(e: KeptEntry): string {
+  const place = e.range === undefined ? e.path : `${e.path}:${e.range}`;
+  return `- \`${place}\` — ${cleanWhy(e.why)}`;
+}
+
+/**
+ * The scout map text (Contract "The scout map's layout"): `# Scout map`, an empty line, the header, an empty line,
+ * one entry line per kept entry in order. Every line ends with `\n`.
+ */
+export function mapText(runId: string, model: string, effort: string, kept: readonly KeptEntry[]): string {
+  const places = kept.length === 1 ? "1 place" : `${kept.length} places`;
+  const lines = ["# Scout map", "", `Run ${runId} · ${model} · ${effort} · ${places}`, "", ...kept.map(entryLine)];
+  return `${lines.join("\n")}\n`;
+}
+
+const ENTRY_LINE = /^- `[^`]+` — .+$/u;
+const MAX_LINE_CODE_POINTS = 600;
+
+/**
+ * The map reader (Contract "The map section", AC-17): the entry lines of the scout map, in order, at most the
+ * first 30. An entry line matches ``^- `[^`]+` — .+$``, holds no unsafe character and has at most 600 code points;
+ * every other line is ignored. A missing or unreadable file gives no lines. The paths are not checked again.
+ */
+export function readMapLines(file: string): string[] {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    if (out.length >= MAX_KEPT) break;
+    if (!ENTRY_LINE.test(line) || UNSAFE.test(line) || [...line].length > MAX_LINE_CODE_POINTS) continue;
+    out.push(line);
+  }
+  return out;
 }
