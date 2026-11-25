@@ -7,10 +7,16 @@
   said tier S runs on "sonnet, low effort", but the driver never passed `--effort`).
 - **Plan complexity:** the plan step writes `complexity` for each task (and `splitReason` for an L task).
 - **`run quick --cell <tier>·<complexity>`** picks the routing cell; an eval `task.json` may set `cell`.
+- **Scout call:** a task run starts with a scout call (`routing.scout`, default haiku · low). It reads the
+  repository and writes `scout.md` to the run folder, a map of the places to read first. Clarify, spec and plan
+  get the map in their prompts. Spec: `docs/specs/scout1/SPEC.md`.
+- **`run --stats --json` is version 2**, with the role `scout` in `byRole` (six roles).
 
 ### Upgrading from 0.4.7
 
-- Run `agent-stack update`: it adds the routing block to `gates.json`.
+- Run `agent-stack update`: it adds the routing block to `gates.json`. It also adds `routing.scout` when the
+  routing block is already there. Until then the driver refuses to start (effort1 AC-15).
+- `run --stats --json` is now `"version": 2`. If a script reads it, accept the role `scout` in `byRole`.
 - A run started on 0.4.7 whose plan is written (at `gate:plan-approve` or later) stops with AC-15. Add
   `complexity` (and `splitReason` for an L task) to its tasks by hand, or cancel the run. A run still at its plan
   step just runs plan again.

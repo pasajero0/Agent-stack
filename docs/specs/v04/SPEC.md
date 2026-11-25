@@ -46,7 +46,8 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
   - implementation follows routing (effort1): the model and effort come from the route of the task's tier and
     complexity;
   - a risky task runs on the risky route;
-  - a retry runs on the retry route.
+  - a retry runs on the retry route;
+  - the scout follows `routing.scout` (scout1).
 - **Size task:** a full spec with one or two tasks. The light spec stays for setup work.
 - **Branches and commits** are the driver's. It commits after each task; the model only edits files.
 - **Checks after a task:** its `verify` plus lint.
@@ -71,7 +72,7 @@ Shared words are defined in [docs/GLOSSARY.md](../../GLOSSARY.md): stage, spec, 
 driver, mode, size, gate, attempt, fuse, live run, driver call, test conflict, spec flow. Below is only what this spec makes precise; a
 word for this spec only is marked `(local)`.
 
-- **Step**: one unit of the pipeline that the driver executes. Steps are clarify, spec, plan, base-check,
+- **Step**: one unit of the pipeline that the driver executes. Steps are scout, clarify, spec, plan, base-check,
   implement, checks, review and commit. A gate is a step that waits for the human. A *stage* is the unit of
   work with a spec; never call a step a stage.
 - **Run id** (local): `r-<yyyymmdd>-<hhmmss>`.
@@ -79,6 +80,7 @@ word for this spec only is marked `(local)`.
   - the run file `run.json`;
   - one file per Claude call, `calls/<n>-<role>.json`, with its argv (without the prompt), exit code and raw
     result;
+  - `scout.md`, the scout's map, when the scout found a place (scout1);
   - `split.md` for an epic.
 - **Lock** (local): `.claude/tmp/runs/lock`. It is created atomically and holds the run id and the driver's pid.
 - **Live run**: status `running` and its lock pid is alive. A `running` run whose pid is dead is
@@ -162,7 +164,7 @@ Glosses for references kept outside git.
 ## Model and state transitions
 
 Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `cancelled`. `next` holds one of:
-- `clarify`, `gate:answers`, `spec`, `gate:spec-merge`, `gate:spec-approve`, `plan`, `gate:plan-approve`,
+- `scout`, `clarify`, `gate:answers`, `spec`, `gate:spec-merge`, `gate:spec-approve`, `plan`, `gate:plan-approve`,
   `base-check`;
 - `implement:<task>`, `checks:<task>`, `review:<task>`, `commit:<task>`;
 - `gate:accept`, `gate:limit`.
@@ -171,7 +173,8 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 
 | `next` | Event | New `next` | Criterion |
 | --- | --- | --- | --- |
-| — | `run task "<d>"` | clarify | AC-5 |
+| — | `run task "<d>"` | scout | AC-5 |
+| scout | the scout call ends (map or no map) | clarify | AC-5 |
 | clarify | valid output | gate:answers | AC-6 |
 | gate:answers | size task/story confirmed, stage id valid | spec (driver created `spec/<stage>`) | AC-7, AC-8 |
 | gate:answers | size epic confirmed | run finished, `split.md` | AC-9 |
@@ -191,7 +194,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 
 | `next` | Event | New `next` | Criterion |
 | --- | --- | --- | --- |
-| — | `run task "<d>"` on a branch that is not the base branch | clarify (the run stays on that branch) | AC-85 |
+| — | `run task "<d>"` on a branch that is not the base branch | scout (the run stays on that branch) | AC-85 |
 | gate:answers | size task/story confirmed, stage id valid | spec (no new branch) | AC-85 |
 | spec | SPEC.md written in bounds, terms checked | driver commits → gate:spec-approve | AC-87 |
 | gate:spec-approve | approve | plan (same branch) | AC-87 |
@@ -221,7 +224,7 @@ Run status moves `running` ⇄ `waiting` (at a gate), and ends `finished` | `can
 | checks | frozen tests weakened, a check config or a package manifest changed | gate:limit (tests changed) | AC-66 |
 | gate:limit (tests changed) | allow / retry with a comment | checks / implement (attempt + 1) | AC-66 |
 | any | fuse reached | gate:limit (fuse) | AC-35 |
-| any | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
+| any, except scout | infrastructure failure, or schema mismatch twice | unchanged, exit 1 | AC-36, AC-37 |
 | spec / plan | output missing, out of bounds or (spec) terms failing twice | unchanged, exit 1 | AC-40, AC-44, AC-45, AC-59 |
 | spec / plan | output missing and `needsHumanDecision` not empty | gate:limit (decision) | AC-57 |
 | base-check | `test` exits non-zero | unchanged, exit 1 | AC-41 |
@@ -402,7 +405,7 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 - gets `-p --output-format stream-json --verbose --max-turns <maxTurns> --model <model> [--effort <effort>] --json-schema <role
   schema>`, plus
   `--max-budget-usd <dollars left>` only with a dollar fuse; `--effort <effort>` follows `--model` for implement
-  only, both from the route (effort1 AC-7); no other role gets `--effort`;
+  and scout only, both from the route (effort1 AC-7, scout1 AC-2); no other role gets `--effort`;
 - gets the role prompt on stdin;
 - gets `AGENT_STACK_RUN` in its environment;
 - loads only the project (AC-58):
@@ -417,6 +420,7 @@ The binary is `$AGENT_STACK_CLAUDE` when it is set (the fake in tests), otherwis
 
 | Role | Model | `--tools` | `--permission-mode` | `--allowedTools` |
 | --- | --- | --- | --- | --- |
+| scout | the model of `routing.scout` (scout1) | Read,Glob,Grep | default | — |
 | clarify | opus | Read,Glob,Grep | default | — |
 | spec | opus | Read,Glob,Grep,Write,Edit,Agent | acceptEdits | — |
 | plan | opus | Read,Glob,Grep | default | — |
@@ -430,6 +434,12 @@ from `/plan`, implement from the `implementer` agent, review from the `code-revi
 (what is done, what the role must not do) and the output it wants. It keeps no copy of a skill's or an agent's
 rules, so an improved agent reaches the driver too.
 
+- **scout** (scout1): "the driver has started a task run; you only read the repository and must not edit files,
+  run commands or do the task"; the description; list the places the next roles should read first (at most 30
+  entries, the most important first, each with a line of why; `path` relative to the root, `lines` optional).
+  The full prompt is in scout1 Contract, "The scout prompt".
+- The **clarify**, **spec** and **plan** prompts also hold the map section when the scout map has an entry
+  (scout1 AC-5).
 - **clarify**:
   - ask at most 5 questions, each with a recommended answer;
   - size the work;
@@ -474,6 +484,8 @@ rules, so an improved agent reaches the driver too.
 
 **Role outputs** come from the result's `structured_output`. Only the required fields are listed.
 
+- **scout** (scout1): `{ entries: {path, why, lines?}[] }`. The driver checks the entries and writes
+  `scout.md` itself (scout1 AC-12).
 - **clarify**:
   - `questions`: `{text, recommended}[]`, at most 5;
   - `size`: `task` \| `story` \| `epic`;
@@ -546,7 +558,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 
 ### Task mode
 
-- **AC-5:** WHEN `run task` starts on a clean tree, THE SYSTEM SHALL run clarify with the description.
+- **AC-5:** WHEN `run task` starts on a clean tree, THE SYSTEM SHALL run the scout first (scout1 AC-1), then
+  clarify with the description.
 - **AC-6:** WHEN clarify returns valid output, THE SYSTEM SHALL store it as `proposal` and stop at
   gate:answers with the input defined in the Contract.
 - **AC-7:** WHEN a stage id is confirmed, THE SYSTEM SHALL accept it only if all three hold:
@@ -712,15 +725,17 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   further call (partner of AC-2). The fuse is reached when:
   - with `calls`, `calls` equals the limit;
   - with `usd`, `costUsd` reaches the limit, or a call ends with `error_max_budget_usd`.
+  - The scout step is a call step: this AC holds for it (scout1 AC-13).
 
   With `"off"` there is no fuse step.
   - The interrupted step counts no attempt, and its edits stay for the step after the fuse is raised.
 - **AC-36:** IF a call ends with no result JSON (and the driver did not kill it), or with `is_error` and
   `num_turns` 0, THEN THE SYSTEM SHALL
   keep `next`, count no attempt, print the error and exit with code 1. `--resume` retries the step (partner
-  of AC-16).
+  of AC-16). Except the scout: its call ends the step and the run goes on to clarify (scout1 AC-10).
 - **AC-37:** IF a role's `structured_output` does not match its schema, or the call ends with
-  `error_max_structured_output_retries`, THEN THE SYSTEM SHALL re-run the call once. On a second mismatch it SHALL keep `next` and exit with code 1 (partner of AC-6, AC-20).
+  `error_max_structured_output_retries`, THEN THE SYSTEM SHALL re-run the call once. On a second mismatch it SHALL keep `next` and exit with code 1 (partner of AC-6, AC-20). Except the scout: one attempt, no re-run, and the run goes on
+  without a map (scout1 AC-10).
 - **AC-38:** IF implement returns BLOCKED, THEN THE SYSTEM SHALL go to gate:limit, reason "blocked", with
   the report (partner of AC-16).
   - IF a call ends with `error_max_turns`, or with `error_during_execution` after more than 0 turns, or is
@@ -728,6 +743,7 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     feedback. It SHALL keep the edits for the next attempt.
   - The same endings in clarify, spec, plan or review SHALL re-run that role once with the reason as
     feedback, then exit with code 1. Those roles have no attempts.
+  - The same endings in the scout SHALL NOT re-run it: the run goes on to clarify with no map (scout1 AC-10).
 - **AC-39:** IF a task's blocking count is not lower than at its previous review, THEN THE SYSTEM SHALL go to
   gate:limit, reason "review loop" (partner of AC-34).
 - **AC-40:** IF the spec or plan role changes paths outside its bounds (AC-8, AC-12), changes the branch, or
@@ -1146,6 +1162,13 @@ Manual check, once, with the real `claude` on a scratch repo:
    show each card, pass the answers with `--answer`, and finish; no Edit or Write of code by the chat itself.
 
 ## Changes
+
+- 2026-11-25 — AC-5, AC-35, AC-36, AC-37, AC-38, state table (the rows that start a task run, AC-85's row, "any
+  infrastructure failure"), run file `next` values, Terms "Step" and "Run folder", Decisions "Models", Contract
+  ("How Claude Code is invoked": role table, `--effort`; Role prompts; Role outputs): scout1. Why: a task run now
+  starts with a cheap scout call that writes `scout.md` for clarify, spec and plan. The scout follows
+  `routing.scout` and gets `--effort`. Its failure never stops the run, so AC-36 to AC-38 and the "any" row
+  except it.
 
 - 2026-11-25 — AC-12, AC-13, AC-16, AC-17, AC-31, AC-60, AC-66, AC-68, AC-78, AC-79, state table (gate:limit),
   Decisions "Models", Terms "Valid plan", Contract (CLI `--cell`, run file `cell`, implement argv `--effort`,

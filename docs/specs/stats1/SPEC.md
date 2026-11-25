@@ -40,7 +40,7 @@ Leonid decided these in the grill (2026-11-24):
   driver already has (`readLock` and `pidAlive`, `src/run/store.ts`), read-only.
 - **A bad call file keeps the run.** A malformed or missing call file counts as `unreadable` or `missing` and is
   named in a warning. Only a malformed `run.json` skips the whole run.
-- **Fixed `--json` shape** with `"version": 1` and a `skipped` list. `usage --save` does not read it in this
+- **Fixed `--json` shape** with `"version": 2` (six roles; scout1) and a `skipped` list. `usage --save` does not read it in this
   stage.
 
 ## Terms
@@ -139,7 +139,7 @@ Lines of the totals block:
   ` · iterations per task <x.xx>`, or ` · iterations per task —` with t = 0.
 - `rejected:` — spec, plan and accept, always all three.
 - `limit stops:` — the eight reasons, always all eight.
-- `calls:` — each of the five roles in the order clarify, spec, plan, implement, review: `<role> <n>`, then
+- `calls:` — each of the six roles in the order scout, clarify, spec, plan, implement, review: `<role> <n>`, then
   ` (<outcome> <count> · …)` with only the outcomes above 0, in the order of AC-5; a role with no calls is
   `<role> 0`. Then ` · missing <m>`.
 - `permission denials: <d>`.
@@ -161,7 +161,7 @@ When no run is counted, the header and the totals are not printed (AC-11).
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "runs": [
     {
       "id": "r-20261120-101500",
@@ -199,7 +199,7 @@ When no run is counted, the header and the totals are not printed (AC-11).
     "tasks": 3, "firstPass": 2, "firstPassShare": 0.67, "iterationsPerTask": 1.33,
     "rejected": { "spec": 0, "plan": 1, "accept": 0 },
     "limitStops": { "…": "the same eight keys as a run" },
-    "calls": { "total": 11, "missing": 0, "byRole": { "…": "the same five roles and nine keys as a run" } },
+    "calls": { "total": 11, "missing": 0, "byRole": { "…": "the same six roles and nine keys as a run" } },
     "workSec": 845, "waitSec": 190, "runsWithoutTimes": 0,
     "costUsd": 1.23, "costUnknownCalls": 1
   },
@@ -208,7 +208,7 @@ When no run is counted, the header and the totals are not printed (AC-11).
 }
 ```
 
-- Every key above is always present. `byRole` always has the five roles; each role always has the nine keys;
+- Every key above is always present. `byRole` always has the six roles; each role always has the nine keys;
   `limitStops` always has the eight keys.
 - In a run: `stage` is a string or null. `firstPassShare` and `iterationsPerTask` are null with no started task.
   `workSec` and `waitSec` are whole seconds, or null when the run has no `steps`.
@@ -291,7 +291,7 @@ When no run is counted, the header and the totals are not printed (AC-11).
   The totals SHALL sum the times over the counted runs that have `steps`, and SHALL count the runs without
   `steps` as `runsWithoutTimes`.
 - **AC-7:** WHEN `run --stats --json` runs, THE SYSTEM SHALL print one JSON object in the Contract's shape with
-  `"version": 1`, holding the same numbers as the text output, and nothing else on stdout. It SHALL exit 0.
+  `"version": 2`, holding the same numbers as the text output, and nothing else on stdout. It SHALL exit 0.
 
 ### Unhappy path
 
@@ -359,7 +359,7 @@ When no run is counted, the header and the totals are not printed (AC-11).
   pass over them without a skip or a warning: only folders are run folders.
 - **AC-19:** WHEN a run folder's `calls/` holds a file, THE SYSTEM SHALL treat its name as valid only when it
   matches `<n>-<role>.json`, with n matching `[1-9][0-9]*` (no leading zero), from 1 to the run file's `calls`,
-  and a role of clarify, spec, plan, implement or review.
+  and a role of scout, clarify, spec, plan, implement or review.
   - A name of another form (also `01-plan.json`, or a subfolder) SHALL add the warning
     `<run id>: calls/<file> is not a call file`, and the entry is not counted.
   - IF `calls/` exists but cannot be listed, THEN THE SYSTEM SHALL count every call from 1 to `calls` as missing
@@ -426,4 +426,7 @@ git status --porcelain            # the same before and after: run stats changed
 
 ## Changes
 
-None: this is the first version.
+- 2026-11-25 — Decisions ("Fixed `--json` shape"), Contract (text `calls:` line, JSON `version`, `byRole`), AC-5,
+  AC-7, AC-19: scout1. Why: a task run now has a sixth role, the scout, so `byRole` gains `scout` and a call file
+  `<n>-scout.json` is valid. The shape changed, so `version` rises from 1 to 2 (the spec's own rule: a later
+  change to this shape raises `version`).

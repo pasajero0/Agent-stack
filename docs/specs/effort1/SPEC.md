@@ -41,7 +41,7 @@ Leonid decided these in the grill (2026-11-25):
   rename across many files). Then complexity comes from the logic, not the number of files: an atomic mechanical
   rename is L·low. Every L task has a required `splitReason`.
 - **Old plans:** a `tasks.json` without `complexity` (a run started on 0.4.7) is refused, never given a default.
-- **Only implement** gets a route. clarify, spec, plan and review keep their model and get no `--effort`.
+- **Only implement and the scout** get a route (scout1). clarify, spec, plan and review keep their model and get no `--effort`.
 - **The plan-approve card** shows the route of the first attempt after the risky route is applied, and keeps the
   `· risky` mark.
 
@@ -122,12 +122,13 @@ is (AC-28).
   "M": { "low": "sonnet·low", "medium": "sonnet·medium", "high": "opus·high" },
   "L": { "low": "sonnet·medium", "medium": "opus·medium", "high": "opus·high" },
   "retry": "opus·high",
-  "risky": "opus·high"
+  "risky": "opus·high",
+  "scout": "haiku·low"
 }
 ```
 
 - A route matches `^(opus|sonnet|haiku)·(low|medium|high|xhigh|max)$`.
-- The keys of `routing` are exactly `S`, `M`, `L`, `retry`, `risky`. The keys of a tier object are exactly `low`,
+- The keys of `routing` are exactly `S`, `M`, `L`, `retry`, `risky`, `scout` (scout1). The keys of a tier object are exactly `low`,
   `medium`, `high`. Any other key is refused, so a typo never passes in silence.
 
 **Routing check messages** (AC-12). The routing check runs after the checks `loadRunConfig` makes today, which stop
@@ -135,7 +136,7 @@ at their first error; so a bad `run.fuse` is reported alone, and routing is chec
 routing check prints one line per problem, in this order:
 1. the cells S.low, S.medium, S.high, M.low … L.high; a tier line (missing, or not an object) stands where its
    three cells would be;
-2. `retry`, then `risky`;
+2. `retry`, then `risky`, then `scout`;
 3. unknown keys of `routing`, in the file's order;
 4. unknown keys of `S`, then of `M`, then of `L`, each in the file's order.
 
@@ -148,7 +149,7 @@ as in every other hint (v04 AC-73).
 | `routing` is not an object | `gates.json routing must be an object; got <got>. Fix it, or remove the key and run <cmd> update.` |
 | `routing.<tier>` is missing | `gates.json routing.<tier> is missing. Add it as an object with low, medium and high.` |
 | `routing.<tier>` is not an object | `gates.json routing.<tier> must be an object with low, medium and high; got <got>.` |
-| a cell, `retry` or `risky` is missing | `gates.json routing.<path> is missing. Add it as "<model>·<effort>".` |
+| a cell, `retry`, `risky` or `scout` is missing | `gates.json routing.<path> is missing. Add it as "<model>·<effort>".` |
 | a value breaks the route pattern | `gates.json routing.<path> must be "<model>·<effort>" (model opus, sonnet or haiku; effort low, medium, high, xhigh or max); got <got>.` |
 | an unknown key | `gates.json routing.<path> is not a routing key; remove it.` |
 
@@ -172,8 +173,9 @@ again.` No message holds a route value, so the AC-22 grep of `src/` stays empty.
 The plan role's JSON schema (`src/run/schemas.ts`) lists `complexity` in `required` with the enum, and
 `splitReason` as an optional string.
 
-**`claude` argv for implement.** `--effort <effort>` follows `--model <model>` right away; both come from the
-route. Every other role's argv is as today: no `--effort`, the same model.
+**`claude` argv for implement and the scout.** `--effort <effort>` follows `--model <model>` right away; both come
+from the route (the scout's from `routing.scout`, scout1). Every other role's argv is as today: no `--effort`, the
+same model.
 
 **The call head line** (stdout and `progress.log`) for implement:
 `-> implement:T1 · implement · opus · high · call 3/40 ...` (T1 of the card below). Other roles: unchanged.
@@ -208,7 +210,9 @@ the model and effort of `routing.retry`. With the default routing: `(a new attem
 | On disk | What update does | Output |
 | --- | --- | --- |
 | a JSON object without a `routing` key | adds `routing` with the default routing as the last key; writes `JSON.stringify(…, null, 2)` and a newline | see below |
-| a JSON object with a `routing` key (any value) | nothing | as today |
+| a JSON object with a `routing` object that has all six top-level keys | nothing | as today |
+| a JSON object with a `routing` object without one or more top-level keys | adds each missing key with its default value (scout1 Contract) | see scout1 |
+| a JSON object with a `routing` key that is not an object | nothing | as today |
 | not valid JSON | nothing; exit 0 | warning `.claude/gates.json is not valid JSON, so routing was not added. Fix it, then run update again.` |
 | valid JSON, not an object | nothing; exit 0 | warning `.claude/gates.json is not a JSON object, so routing was not added. Fix it, then run update again.` |
 | missing | as today (created from the template, with routing) | as today |
@@ -285,7 +289,7 @@ With `cell`, the eval runner starts the try with `node <repo root>/bin/cli.mjs r
 
 - **AC-1:** WHEN the driver starts a run or resumes one (`run quick`, `run task`, `run --resume`), THE SYSTEM SHALL
   read and check `gates.json → routing` with the other `gates.json` values, before any step, any branch and any
-  lock. A valid routing has all 9 cells, `retry` and `risky`, each matching the route pattern, and no other key.
+  lock. A valid routing has all 9 cells, `retry`, `risky` and `scout`, each matching the route pattern, and no other key.
 - **AC-2:** WHEN implement starts the first attempt of a plan task that is not risky, THE SYSTEM SHALL use the cell
   `routing.<tier>.<complexity>` of that task.
 - **AC-3:** WHEN implement starts an attempt after the first (`attempts` > 1) of any task, or any attempt of a fix
@@ -322,7 +326,7 @@ With `cell`, the eval runner starts the try with `node <repo root>/bin/cli.mjs r
 
 ### Unhappy path
 
-- **AC-12:** IF `routing` is missing, is not an object, misses a cell, `retry` or `risky`, holds a value that breaks
+- **AC-12:** IF `routing` is missing, is not an object, misses a cell, `retry`, `risky` or `scout`, holds a value that breaks
   the route pattern, or holds an unknown key, THEN THE SYSTEM SHALL exit 1 before any step, print every problem as
   the Contract's routing check messages say, and change nothing: no run folder, no branch, no lock, no run file
   write (partner of AC-1).
@@ -331,8 +335,8 @@ With `cell`, the eval runner starts the try with `node <repo root>/bin/cli.mjs r
 - **AC-14:** IF a task of the plan role's output has no valid `complexity`, or an L task has no `splitReason`, one
   that is empty after trim, or one longer than 80 characters after trim, THEN THE SYSTEM SHALL treat the output as not a valid plan, with the Contract's message
   naming the task (undo and run plan once more, v04 AC-45) (partner of AC-6).
-- **AC-15:** IF a task-mode run resumes, its `next` is any step except a step before plan (clarify, gate:answers, spec,
-  gate:spec-approve, gate:spec-merge), plan, and gate:limit whose `returnTo` is clarify, spec or plan, its stage's
+- **AC-15:** IF a task-mode run resumes, its `next` is any step except a step before plan (scout, clarify, gate:answers, spec,
+  gate:spec-approve, gate:spec-merge), plan, and gate:limit whose `returnTo` is scout, clarify, spec or plan (the list is `BEFORE_PLAN`, `src/run/engine/plan-file.ts:163`), its stage's
   `tasks.json` exists, and that file lacks a valid `complexity` in a task (a plan written by 0.4.7), or an L task
   lacks a valid `splitReason`, THEN THE SYSTEM SHALL exit 1 before the lock, so the run file, `status` and `next`
   stay as they were (partner of AC-2, AC-8):
@@ -353,8 +357,9 @@ With `cell`, the eval runner starts the try with `node <repo root>/bin/cli.mjs r
     example `taskInfo`, `src/run/engine/steps-task.ts:246`);
   - every other `readPlan` problem keeps today's ending, `Restore it, or cancel the run.`;
   - it SHALL never use a default complexity.
-- **AC-16:** IF `.claude/gates.json` already has a `routing` key (any value), THEN `update` SHALL leave the file
-  byte for byte as it was. IF the file is not valid JSON or not a JSON object, THEN `update` SHALL leave it as it
+- **AC-16:** IF `.claude/gates.json` already has a `routing` key that is an object with all six top-level keys, or
+  that is not an object, THEN `update` SHALL leave the file byte for byte as it was. IF the `routing` object lacks a
+  top-level key, THEN `update` SHALL add it with its default value and change no value that is there (scout1). IF the file is not valid JSON or not a JSON object, THEN `update` SHALL leave it as it
   was, print the Contract's warning for that case, and exit 0. WHEN `update` adds routing, every other key SHALL keep its value and its order
   (partner of AC-9).
 - **AC-17:** IF a task is a fix task or Q1, THEN THE SYSTEM SHALL not check `complexity` or `splitReason` for it:
@@ -362,7 +367,7 @@ With `cell`, the eval runner starts the try with `node <repo root>/bin/cli.mjs r
   without `--cell` (partner of AC-3, AC-5).
 - **AC-18:** IF a risky task is on an attempt after the first, THEN THE SYSTEM SHALL use the retry route, not the
   risky route: the retry route wins (partner of AC-4).
-- **AC-19:** IF `templates/claude/_routing.json` cannot be read or is not a valid routing by AC-1's rules, THEN
+- **AC-19:** IF `templates/claude/_routing.json` cannot be read or is not a valid routing by AC-1's rules (the six top-level keys, `scout` included), THEN
   `generate` and `update` SHALL exit 1 with `templates/claude/_routing.json is not a valid routing; reinstall
   agent-stack.` and write nothing (the file is part of the package, so the user cannot fix it in the repo). A test SHALL check that the shipped file is valid and equals the Contract's block (partner of
   AC-9, AC-10).
@@ -420,8 +425,8 @@ With `cell`, the eval runner starts the try with `node <repo root>/bin/cli.mjs r
   the plan role copies that example. The test checks the section, its four numbered questions, the word
   `splitReason`, and the example.
 - **AC-24:** WHEN the fake claude (`tests/run/fake-claude.mjs`) gets a response with `expectEffort`, THE SYSTEM
-  SHALL exit 9 unless `--effort` equals it. A response with `expectRole` other than implement SHALL exit 9 when
-  `--effort` is present. The engine tests use this to check AC-2 to AC-5, AC-7, AC-13 and AC-28.
+  SHALL exit 9 unless `--effort` equals it. A response with `expectRole` other than implement or scout SHALL exit 9 when
+  `--effort` is present (scout1 AC-24). The engine tests use this to check AC-2 to AC-5, AC-7, AC-13 and AC-28.
 - **AC-25:** THE SYSTEM SHALL ship two more eval tasks in `evals/tasks/`, in quick mode, each with a `cell` chosen
   to test that cell's route, and with `pass` and `break` fake scripts under `tests/eval/scripts/` as evals1 AC-18
   says:
@@ -490,7 +495,7 @@ With `cell`, the eval runner starts the try with `node <repo root>/bin/cli.mjs r
   task's cell); a `--cell` value written with `.` or spaces in place of `·`.
 - Checking that the installed `claude` knows `--effort` (How to verify does it by hand once). A `claude` that
   refuses the flag fails the call as today (an infrastructure failure, v04 AC-36).
-- Moving an existing `routing` block to new defaults on `update`: once the key is there, it is the user's.
+- Moving an existing `routing` block to new defaults on `update`: once the key is there, it is the user's. Its values stay the user's; only a missing top-level key is added (scout1).
 - The by-hand flow (no driver): the implementer subagent's effort stays as its frontmatter says (`effort: medium`).
 - The 0.4.8 release edits (version in `package.json`, CODEMAP): a separate release step, as in 0.4.7.
 
@@ -518,4 +523,8 @@ node <repo>/bin/cli.mjs run quick --cell L.low "x"; echo "exit $?"   # exit 1, l
 
 ## Changes
 
-None: this is the first version.
+- 2026-11-25 — Decisions "Only implement gets a route", Contract (default routing, keys, routing check order and
+  messages, update table, argv), AC-1, AC-12, AC-15, AC-16, AC-19, AC-24, Out of scope: scout1. Why: the scout
+  call is a second role with a route, `routing.scout` (default haiku·low). `update` now adds a missing top-level
+  key of an existing routing block, so a repo on 0.4.7 gets `scout` without losing its own values. AC-15's steps
+  before plan, and `BEFORE_PLAN`, gain `scout`.

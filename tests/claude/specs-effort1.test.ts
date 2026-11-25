@@ -109,7 +109,7 @@ describe("specs edited by effort1", () => {
   it("effort1 AC-27: v04 Contract names --effort, the new card line and source, --cell and the run file cell", () => {
     const contract = section(v04, "## Contract");
     expect(contract).toMatch(/--model <model> \[--effort <effort>\]/);
-    expect(contract).toMatch(/`--effort <effort>` follows `--model` for implement\s+only/);
+    expect(contract).toMatch(/`--effort <effort>` follows `--model` for implement\s+and scout only/);
     expect(contract).toMatch(/"T1 {2}S · low -> sonnet · low · AC-/);
     expect(contract).toMatch(/"source": "sha256 of tasks\.json and the 11 route values/);
     expect(contract).toMatch(/the 11 route values of `routing` \(effort1 AC-21\)/);
