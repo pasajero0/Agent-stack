@@ -81,7 +81,7 @@ describe("run stats format", () => {
       "  first pass 2/3 (67%) · iterations per task 1.33",
       "  rejected: spec 0 · plan 1 · accept 0",
       "  limit stops: attempts 0 · blocked 0 · review-loop 0 · fuse 0 · decision 0 · test-conflict 0 · tests-changed 0 · unknown 0",
-      "  calls: clarify 0 · spec 0 · plan 0 · implement 0 · review 0 · missing 0",
+      "  calls: scout 0 · clarify 0 · spec 0 · plan 0 · implement 0 · review 0 · missing 0",
       "  permission denials: 0",
       "  time: 14:05 work + 3:10 waiting (1 run without times)",
       "  cost: $1.23 · 1 call with unknown cost",
@@ -104,7 +104,7 @@ describe("run stats format", () => {
     writeFileSync(join(d, "1-implement.json"), "{nope");
     mkdirSync(join(runs(), "junk"), { recursive: true });
     const l = await text();
-    expect(l).toContain("  calls: clarify 0 · spec 0 · plan 0 · implement 1 (unreadable 1) · review 0 · missing 1");
+    expect(l).toContain("  calls: scout 0 · clarify 0 · spec 0 · plan 0 · implement 1 (unreadable 1) · review 0 · missing 1");
     expect(l.slice(-3)).toEqual([
       "skipped: junk — not a run id",
       `warning: ${A}: calls/1-implement.json is unreadable: not JSON`,
@@ -124,7 +124,7 @@ describe("run stats format", () => {
   it("stats1 AC-11: --json with nothing counted gives the empty shape", async () => {
     putRun(A, "{oops");
     const j = await json();
-    expect(j["version"]).toBe(1);
+    expect(j["version"]).toBe(2);
     expect(j["runs"]).toEqual([]);
     expect(j["skipped"]).toEqual([{ id: A, reason: "run.json is malformed: not JSON" }]);
     expect(j["warnings"]).toEqual([]);
@@ -132,13 +132,13 @@ describe("run stats format", () => {
     expect(t).toMatchObject({ runs: 0, tasks: 0, firstPass: 0, firstPassShare: null, iterationsPerTask: null, workSec: null, waitSec: null, runsWithoutTimes: 0, costUsd: 0, costUnknownCalls: 0 });
     expect(t["byStatus"]).toEqual({ finished: 0, cancelled: 0, waiting: 0, interrupted: 0, running: 0 });
     expect(Object.keys(t["limitStops"])).toHaveLength(8);
-    expect(Object.keys(t["calls"]["byRole"])).toEqual(["clarify", "spec", "plan", "implement", "review"]);
+    expect(Object.keys(t["calls"]["byRole"])).toEqual(["scout", "clarify", "spec", "plan", "implement", "review"]);
   });
 
   it("stats1 AC-7: --json holds the Contract's shape and the same numbers as the text", async () => {
     seed();
     const j = await json();
-    expect(j["version"]).toBe(1);
+    expect(j["version"]).toBe(2);
     expect(j["runs"]).toHaveLength(2);
     const r = j["runs"][0];
     expect(r).toMatchObject({

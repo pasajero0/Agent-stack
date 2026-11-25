@@ -9,7 +9,7 @@ export type CallKind = "ok" | "schema" | "max-turns" | "exec-error" | "budget" |
 
 /** The outcome order everywhere (AC-5). */
 export const CALL_KINDS: readonly CallKind[] = ["ok", "schema", "max-turns", "exec-error", "budget", "infra", "killed", "unreadable"];
-export const CALL_ROLES: readonly Role[] = ["clarify", "spec", "plan", "implement", "review"];
+export const CALL_ROLES: readonly Role[] = ["scout", "clarify", "spec", "plan", "implement", "review"];
 
 export interface RoleCalls {
   calls: number;
@@ -32,7 +32,7 @@ export const emptyRole =(): RoleCalls => ({
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-const NAME = /^(0|[1-9][0-9]*)-(clarify|spec|plan|implement|review)\.json$/;
+const NAME = /^(0|[1-9][0-9]*)-(scout|clarify|spec|plan|implement|review)\.json$/;
 
 type Read = { kind: CallKind; denials: number } | { why: string };
 
@@ -82,10 +82,10 @@ function readCall(path: string, role: Role): Read {
 /** Reads `<runDir>/calls/`. `live`: the run's process is alive, so call number `calls` may be in progress. */
 export function readCalls(runDir: string, run: RunFile, live: boolean): RunCalls {
   const roles: Record<Role, RoleCalls> = {
+    scout: emptyRole(),
     clarify: emptyRole(),
     spec: emptyRole(),
     plan: emptyRole(),
-    scout: emptyRole(),
     implement: emptyRole(),
     review: emptyRole(),
   };
@@ -114,7 +114,7 @@ export function readCalls(runDir: string, run: RunFile, live: boolean): RunCalls
       continue;
     }
     const n = Number(m[1]);
-    const role = m[2] as Role; // NAME admits only the five roles
+    const role = m[2] as Role; // NAME admits only the six roles
     if (n < 1 || n > total) {
       if (!(live && n > total)) warnings.push(`${run.id}: calls/${e.name} is outside 1..${total}`);
       continue;
