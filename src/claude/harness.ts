@@ -10,6 +10,7 @@ import { log } from "../utils/logger.js";
 import { checkRouting } from "../run/routing.js";
 import { HOOKS_BLOCK } from "./hooks-block.js";
 import { MANIFEST, manifestContent, sha256, tracked } from "./update-plan.js";
+import { buildSandboxBlock, detectedDomains, generatedSandbox } from "./sandbox.js";
 
 // The update planning lives in update-plan.ts; these names stay importable from here.
 export {
@@ -87,6 +88,7 @@ function buildSettings(p: HarnessParams): string {
   const settings = {
     $schema: "https://json.schemastore.org/claude-code-settings.json",
     permissions: { allow },
+    sandbox: buildSandboxBlock(detectedDomains(p.packageManager, p.forgeCli)),
     hooks: HOOKS_BLOCK,
   };
   return JSON.stringify(settings, null, 2) + "\n";
@@ -204,7 +206,8 @@ export function buildHarnessFiles(params: HarnessParams, templatesDir?: string):
   const hashes: Record<string, string> = {};
   for (const f of files) if (tracked(f.path)) hashes[f.path] = sha256(f.content);
   const allow = (JSON.parse(buildSettings(params)) as { permissions: { allow: string[] } }).permissions.allow;
-  files.push({ path: MANIFEST, content: manifestContent(params, hashes, allow), action: "create" });
+  const sandbox = generatedSandbox(detectedDomains(params.packageManager, params.forgeCli));
+  files.push({ path: MANIFEST, content: manifestContent(params, hashes, allow, sandbox), action: "create" });
 
   return files;
 }

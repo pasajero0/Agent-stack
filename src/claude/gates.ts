@@ -1,5 +1,6 @@
 import { SKIP_MARKS } from "../run/engine/skip-marks.js";
 import type { HarnessParams } from "../detect/harness-params.js";
+import { detectedDomains } from "./sandbox.js";
 
 /** interactive: step-by-step diff confirmation (default). autonomous: no confirmations, hard limits. */
 export type GateMode = "interactive" | "autonomous";
@@ -47,6 +48,8 @@ export interface GatesConfig {
   slo: { maxFileLines: number | null; newDependencies: number | null };
   /** Project-specific health metrics: the command prints one number; {files} = changed code files. */
   health: HealthMetric[];
+  /** The domains Bash may reach inside the OS sandbox; seeded from detection, read by `update`. */
+  sandbox: { allowedDomains: string[] };
   /** Which model and effort each task runs on; the default is `templates/claude/_routing.json`. */
   routing: Record<string, unknown>;
 }
@@ -138,6 +141,7 @@ export function buildGatesConfig(p: HarnessParams, routing: Record<string, unkno
     health: p.complexityCommand
       ? [{ name: "complexity", command: p.complexityCommand, max: 0 }]
       : [],
+    sandbox: { allowedDomains: detectedDomains(p.packageManager, p.forgeCli) },
     routing,
   };
 }

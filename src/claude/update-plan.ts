@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { join, dirname, posix, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GeneratedFile } from "./types.js";
+import type { GeneratedFile, UpdatePlan } from "./types.js";
 import { HOOKS_BLOCK, hookScript } from "./hooks-block.js";
+
+export type { UpdatePlan } from "./types.js";
 
 const HARNESS_HOOKS = new Set(
   Object.values(HOOKS_BLOCK).flatMap((entries) =>
@@ -184,8 +186,14 @@ export function toolVersion(): string {
   return "0.0.0";
 }
 
-export function manifestContent(params: unknown, files: Record<string, string>, generatedAllow: unknown): string {
-  return JSON.stringify({ templateVersion: toolVersion(), params, files, generatedAllow }, null, 2) + "\n";
+export function manifestContent(
+  params: unknown,
+  files: Record<string, string>,
+  generatedAllow: unknown,
+  generatedSandbox: unknown
+): string {
+  const manifest = { templateVersion: toolVersion(), params, files, generatedAllow, generatedSandbox };
+  return JSON.stringify(manifest, null, 2) + "\n";
 }
 
 interface Manifest {
@@ -211,40 +219,6 @@ function readManifest(projectDir: string): Manifest {
   const hashes: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const [k, v] of Object.entries(m.files)) if (typeof v === "string") hashes[k] = v;
   return { hashes, generatedAllow };
-}
-
-export interface UpdatePlan {
-  created: string[];
-  changed: string[];
-  unchanged: number;
-  /** Seed files already on disk — the user's, left untouched. */
-  kept: string[];
-  /** What `update` actually writes: new files + changed emitter-owned files. */
-  toWrite: GeneratedFile[];
-  /** The user's own hook entries carried over into the regenerated settings.json. */
-  customHooks: string[];
-  /** Hooks an earlier version registered and this one dropped (their files stay on disk). */
-  retiredHooks: string[];
-  /** settings.json on disk was not valid JSON: its custom hooks, if any, could not be carried over. */
-  settingsUnreadable: boolean;
-  /** The user's own settings.json keys and permission entries carried over (variant A2). */
-  customSettings: string[];
-  /** Harness files the user changed since they were deployed: left as they are (`--force` overwrites). */
-  edited: string[];
-  /** Harness files no longer shipped, untouched since deployment: `update` deletes them. */
-  removed: string[];
-  /** Harness files no longer shipped but changed by the user: left in place. */
-  orphaned: string[];
-  /** The manifest predates file hashes (≤ 0.2): edits cannot be told apart this time. */
-  noHashes: boolean;
-  /** gates.json is a JSON object without `routing`: `update` adds the default routing (it stays in `kept`). */
-  routingAdded: boolean;
-  /** gates.json has a `routing` object missing some top-level keys: `update` adds these (in the order S, M, L, retry, risky, scout). */
-  routingKeysAdded: string[];
-  /** The gates.json to write when `routingAdded`. */
-  gatesWithRouting: GeneratedFile | null;
-  /** gates.json is not valid JSON, or not an object: left as it was; the warning to print. */
-  gatesWarning: string | null;
 }
 
 const GATES = ".claude/gates.json";
@@ -392,7 +366,8 @@ export function planUpdate(
   if (manifest) {
     const m: unknown = JSON.parse(manifest.content);
     const built = isObject(m) ? m : {};
-    classify({ ...manifest, content: manifestContent(built.params, hashes, built.generatedAllow) });
+    const content = manifestContent(built.params, hashes, built.generatedAllow, built.generatedSandbox);
+    classify({ ...manifest, content });
   }
   return plan;
 }
