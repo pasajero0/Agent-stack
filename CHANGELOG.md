@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.3 — Fewer stops that need a human
+
+- **A test runner config that lists new test files does not stop the run (defect #58, partly):** the driver no
+  longer stops at `tests-changed` when a task only adds paths of its own new test files to `vitest.config.*`,
+  `vitest.workspace.*`, `jest.config.*` or `playwright.config.*`, in a list that selects test files (`include`,
+  `exclude`, `testMatch`, `testIgnore`, `testPathIgnorePatterns`, or a `const` list used only as `include` or
+  `exclude`), written one entry per line directly under its opening line. Gate:accept shows one line per config:
+  `test config change passed: <path> lists new test file(s) <paths>`. Any other change stops as before: a list that runs code (`setupFiles`, `globalSetup`, …), CI
+  workflows, linters and `pnpm-workspace.yaml` always stop. See docs/specs/v04/SPEC.md → AC-66.
+- **A red check runs once more before it fails the attempt (defects #43, #50, #56):** if a check command ends
+  with a non-zero exit, the driver runs it a second time. Green on the second run: the task goes on, the task's
+  check record keeps the first exit, and gate:accept shows `check passed on a second run: <command> (first exit
+  <n>)`. Red again: the attempt fails with the second run's output. A timeout, an interrupt, an empty command
+  and the base check are not run again. This can hide a test the task made unstable; the accept line shows it.
+- **Defect log:** #60.
+- **Eval run** on 0.5.3, k = 3, real `claude`, started from the chat inside the OS sandbox: 21/21 passed,
+  pass^3 = 1, $1.16, 5:06 — `evals/results/2026-11-26-220348.json`.
+
+### Upgrading from 0.5.2
+
+- Nothing to do by hand. A failing check now takes up to twice its time before the attempt fails.
+
 ## 0.5.2 — The driver starts from the chat inside the sandbox
 
 - **CI runs on release branches:** the workflow also runs on every commit sent to `release/**` and `hotfix/**`.

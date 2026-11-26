@@ -88,7 +88,13 @@ const strings = (v: unknown, f: string): string[] => arr(v, f, (x) => str(x, f))
 
 function check(v: unknown, f: string): CheckResult {
   const o = obj(v, f);
-  return { cmd: str(o.cmd, f), exit: int(o.exit, f), skipped: bool(o.skipped, f) };
+  return {
+    cmd: str(o.cmd, f),
+    exit: int(o.exit, f),
+    skipped: bool(o.skipped, f),
+    // A run file from before defect 56 has none.
+    ...(o.firstExit === undefined ? {} : { firstExit: int(o.firstExit, f) }),
+  };
 }
 
 function task(v: unknown, f: string): RunTask {
@@ -104,6 +110,7 @@ function task(v: unknown, f: string): RunTask {
     // A run file from before AC-66 has none.
     allowedChanges: o.allowedChanges === undefined ? [] : strings(o.allowedChanges, `${f}.allowedChanges`),
     pendingChanges: o.pendingChanges === undefined ? [] : strings(o.pendingChanges, `${f}.pendingChanges`),
+    ...(o.passedChanges === undefined ? {} : { passedChanges: strings(o.passedChanges, `${f}.passedChanges`) }),
     commit: strOrNull(o.commit, `${f}.commit`),
   };
 }

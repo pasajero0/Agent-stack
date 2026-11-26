@@ -330,7 +330,7 @@ describe("defect-causes: the real docs/defects.md", () => {
   const text = readFileSync(new URL("../../docs/defects.md", import.meta.url), "utf8");
   const parsed = parse(text);
 
-  it("causes1 AC-1: header order, kebab-case causes, the mapping, only #56 planned", () => {
+  it("causes1 AC-1: header order, kebab-case causes, the mapping, none planned (#56 has its test)", () => {
     expect(text).toContain("| # | Date | Defect | Found by | Class | Cause | Escaped? | Closed by | Test |\n|---|---|---|---|---|---|---|---|---|\n");
     const kebab = /^[a-z0-9]+(-[a-z0-9]+)*$/;
     for (const r of parsed.rows) expect(r.cause, `row ${r.n}`).toMatch(kebab);
@@ -342,7 +342,8 @@ describe("defect-causes: the real docs/defects.md", () => {
       expect(row?.cause, `row ${n}`).toBe(want.get(n));
     }
     const planned = parsed.rows.filter((r) => (r.n ?? 0) <= 57 && /^planned/i.test(r.test));
-    expect(planned.map((r) => [r.n, r.test])).toEqual([[56, "planned: 0.5.3"]]);
+    expect(planned.map((r) => [r.n, r.test])).toEqual([]);
+    expect(parsed.rows.find((r) => r.n === 56)?.test).toBe("tests/run/engine-check-rerun.test.ts");
   });
 
   it("causes1 AC-2: the Cause paragraph follows the Found by paragraph", () => {

@@ -36,6 +36,8 @@ export interface CheckResult {
   cmd: string;
   exit: number;
   skipped: boolean;
+  /** The exit of the first run when the check was red, then green on the one rerun (defect 56). */
+  firstExit?: number;
 }
 
 export interface RunTask {
@@ -50,6 +52,8 @@ export interface RunTask {
   allowedChanges: string[];
   /** The changes gate:limit (tests changed) listed; `a` allows exactly these (AC-66). */
   pendingChanges: string[];
+  /** Test runner config changes that only list new test files and passed without a stop (defect 58). */
+  passedChanges?: string[];
   /** sha, `"empty"` for an empty diff, or null before the commit. */
   commit: string | null;
 }

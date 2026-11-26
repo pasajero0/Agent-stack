@@ -812,6 +812,24 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     exists at the base has changed, THEN THE SYSTEM SHALL go to gate:limit, reason "tests changed", and list each
     change: `deleted test file a.test.ts`, `a.test.ts: assertions 12 → 10`, `changed check config vitest.config.ts
     (now 1a2b3c4)`, `deleted check config jest.config.js`. The run file keeps the list.
+  - One change of a check config does not stop the run: a test runner config (`vitest.config.*`,
+    `vitest.workspace.*`, `jest.config.*`, `playwright.config.*`) that only lists new test files. The line diff
+    against the task's base removes no line. Each added line, after trimming spaces and one trailing comma, is one
+    quoted string. That string holds no glob character (`* ? [ ] { } !`), is the path of a test file (`testGlobs`,
+    relative to the config's folder), did not exist at the base and is a regular file now. Each added line lands
+    in a list that selects test files, and the list must be written one entry per line directly under its
+    opening line. The driver walks up from the added line one line at a time. Every line it passes is a list
+    entry: trimmed and without one trailing comma, exactly one quoted string. The first other line is the
+    opening line, and the whole trimmed line is `include: [`, `exclude: [`, `testMatch: [`, `testIgnore: [` or
+    `testPathIgnorePatterns: [`, or a top-level `const NAME = [` whose every other use is directly
+    `include: NAME` or `exclude: NAME`. If the walk meets a comment, a blank line, a spread, a nested bracket,
+    an opening line with any other text (`test: { include: [`, `], setupFiles: [`) or the top of the file, the
+    change stops. A list that runs code
+    (`setupFiles`, `globalSetup`, `globalTeardown`, `setupFilesAfterEnv`, `reporters`, an array in a function
+    call) always stops: its file runs before every test and can replace `expect`. Gate:accept shows one
+    line per such config: `test config change passed: vitest.config.ts lists new test file(s) tests/b.test.ts`.
+    CI workflows, linters and `pnpm-workspace.yaml` always stop: a new CI step can run any command, one that
+    removes tests too, so code cannot judge it.
   - The same holds for a package manifest: a script of the base changed or removed, a dependency entry added or
     changed, a check setting added, changed or removed, or a manifest that is no longer valid JSON. The lines:
     `changed script test in package.json (now: node --test || true)`, `deleted script lint in package.json`, `new
@@ -1163,6 +1181,10 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-26 — AC-66 (defect 58): a test runner config that only lists new test files no longer stops the run;
+  gate:accept shows it. A test that only adds its own file to a list cannot weaken a check that existed. Only a
+  list that selects test files passes; a list that runs code (`setupFiles`, `globalSetup`) stops. The list must
+  be written one entry per line directly under its opening line; no bracket counting.
 - 2026-11-25 — AC-5, AC-35, AC-36, AC-37, AC-38, state table (the rows that start a task run, AC-85's row, "any
   infrastructure failure"), run file `next` values, Terms "Step" and "Run folder", Decisions "Models", Contract
   ("How Claude Code is invoked": role table, `--effort`; Role prompts; Role outputs): scout1. Why: a task run now

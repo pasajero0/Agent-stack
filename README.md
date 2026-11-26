@@ -14,8 +14,8 @@ that drive that workflow. It is stack-agnostic: everything language-specific liv
   approval gates.
 - **What is checked:** regression evals (7 tasks: 5 on known agent failure modes — a weakened test, a test
   conflict, an extra dependency, scope creep, a broken access check — and 2 plain ones; k = 3): 21/21 passed,
-  pass^k = 1, $1.17, on 0.5.2, started from the chat inside the OS sandbox, run of 2026-11-26 —
-  [evals/results/2026-11-26-210528.json](evals/results/2026-11-26-210528.json).
+  pass^k = 1, $1.16, on 0.5.3, started from the chat inside the OS sandbox, run of 2026-11-26 —
+  [evals/results/2026-11-26-220348.json](evals/results/2026-11-26-220348.json).
 
 Read [Limits](#limits--read-before-trusting-it) before you trust it.
 
@@ -210,7 +210,12 @@ criterion, it leaves the test alone: gate `limit` (reason `test-conflict`) shows
 reason, and `r` with your answer retries without counting an attempt. If a task deletes or weakens a test that was
 there at its start (fewer tests or assertions, more skip marks, a changed CI or test config), gate `limit` (reason
 `tests-changed`) lists the changes: `a` allows exactly those, `r` sends the task back, `c` cancels. A weaker
-assertion that keeps the count (`toBe(3)` → `toBeTruthy()`) is not seen.
+assertion that keeps the count (`toBe(3)` → `toBeTruthy()`) is not seen. One change does not stop: a test runner
+config (`vitest.config.*`, `jest.config.*`, …) that only lists the task's new test files in `include`, `exclude`,
+`testMatch`, `testIgnore` or `testPathIgnorePatterns`. The list must be written one entry per line directly
+under its opening line (`include: [`); a comment or a blank line in between stops the run. Gate `accept` shows
+it as `test config change passed: …`.
+A new file in `setupFiles` or `globalSetup` still stops: that file runs before every test.
 
 Before gate `accept`, a task run with more than one task runs every
 task's verify once more and marks a red result.
@@ -252,6 +257,12 @@ Turns per call, attempts per task and the review-loop stop apply whatever the ki
 A call that was killed, or whose result has no cost, counts as unknown cost, and the gates name those calls.
 A check that runs past `checkTimeoutMin` stops the run with exit 1 and counts no attempt: fix what hangs, then
 `--resume`.
+If a check command ends red (a non-zero exit), the driver runs it once more before it decides. If the second
+run is green, the check counts as green, and gate `accept` shows the line
+`check passed on a second run: <command> (first exit <n>)`. If it is red too, the attempt fails with the
+output of the second run. A timeout, an interrupt and an empty command are never run again. The base check
+at the start is not run again. What this can hide: a test that the task itself made unstable can pass on the
+second run. That is why gate `accept` shows the line: read it as "something is unstable".
 
 **Hooks stay on.** Claude is never started with `--bare`, `bypassPermissions` or `disableAllHooks`. Two hooks
 step aside only for a live driver run on the run's own branch: spec-gate (quick mode) and evidence-gate.

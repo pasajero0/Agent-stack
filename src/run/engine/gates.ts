@@ -141,8 +141,11 @@ function acceptCard(ctx: Ctx, final: CheckRun | null): CardInput {
     // A skipped command is named once, in Skipped: below.
     const checks = t.checks.filter((c) => !c.skipped).map((c) => `${c.cmd} → ${c.exit}`).join("; ");
     f.add(`${t.id}: ${commitText(t.commit)}; attempts ${t.attempts}; checks: ${checks || "none"}`);
+    // Defect 56: a check that was green only on its rerun may be unstable; the human sees each one.
+    for (const c of t.checks) if (c.firstExit !== undefined) f.whole(`${t.id} check passed on a second run: ${c.cmd} (first exit ${c.firstExit})`);
     for (const n of t.notes) f.add(`${t.id} note: ${n}`);
     for (const c of t.allowedChanges) f.whole(`${t.id} test change allowed: ${c}`);
+    for (const c of t.passedChanges ?? []) f.whole(`${t.id} ${c}`);
   }
   if (final !== null) {
     const isRed = final.exit !== 0;

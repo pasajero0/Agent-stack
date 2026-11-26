@@ -359,8 +359,9 @@ describe("task mode: base-check, tasks and gate:accept", () => {
         review(),
       ]);
       expect(await resumeRun({ ...r.opts({ gate: ["a", "a"] }) }), text(r)).toBe(0);
-      // start check (1) + checks of attempt 1 (2) + checks of attempt 2 (3); one task, so no final check.
-      expect(readFileSync(join(r.dir, ".git/verify-runs"), "utf8").trim().split("\n")).toHaveLength(3);
+      // start check (1) + red check of attempt 1 (2) + its rerun (3, defect 56) + check of attempt 2 (4);
+      // one task, so no final check.
+      expect(readFileSync(join(r.dir, ".git/verify-runs"), "utf8").trim().split("\n")).toHaveLength(4);
     });
 
     it("v04 AC-63: a start check that times out exits 1 before the implement call (AC-60)", async () => {
