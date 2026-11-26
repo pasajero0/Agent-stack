@@ -15,6 +15,8 @@
   <n>)`. Red again: the attempt fails with the second run's output. A timeout, an interrupt, an empty command
   and the base check are not run again. This can hide a test the task made unstable; the accept line shows it.
 - **Defect log:** #60.
+- **Eval run** on 0.5.3, k = 3, real `claude`, started from the chat inside the OS sandbox: 21/21 passed,
+  pass^3 = 1, $1.16, 5:06 — `evals/results/2026-11-26-220348.json`.
 
 ### Upgrading from 0.5.2
 
