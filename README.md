@@ -318,6 +318,12 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     (checked on macOS, Claude Code 2.1.329). A fix is planned.
   - `dangerouslyDisableSandbox` does not take a command out of the sandbox (checked: the read of `~/.ssh` still
     fails with it).
+  - **Start the driver from a terminal, not from the chat's Bash, when a `Read(...)` deny rule covers the login.**
+    A `Read(...)` deny rule in any settings file reaches the sandbox, also one in your user settings. Seen with
+    `Read(~/Library/Keychains/**)` on macOS: a `claude` started inside the sandbox answers "Not logged in", so
+    `agent-stack run` and the eval runner make no model call. Not checked: a machine without such a rule.
+  - **Temporary files:** Bash writes only under `$TMPDIR` inside the sandbox. A script or a test that writes to
+    `/tmp` by name, or calls a bare `mktemp` on macOS, fails there.
   - **Who wins:** a `false` in user settings, `--settings` or managed settings wins over the project value.
     Loosening entries in the repo's settings files are ignored only when managed settings or `--settings` set
     `allowUnsandboxedCommands: false`. For a lock the repo cannot loosen, put this block in managed settings, or

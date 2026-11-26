@@ -8,6 +8,16 @@
   file next to `tasks.json`.
 - **Hook markers under `$TMPDIR`:** `session-start-context.sh` and `stop-flag-reflect.sh` kept their markers in
   `/tmp/claude-sessions` and `/tmp/.claude-reflect-pending`. Both now use `${TMPDIR:-/tmp}`, the same folder.
+- **Found by turning the sandbox on in this repo:** 11 of the 855 slow tests failed inside it, all from the two
+  points above; now 857 of 857 pass there.
+- **README Limits, two new lines:** temporary files go under `$TMPDIR` only; and a `claude` started from the
+  chat's Bash can be "Not logged in" inside the sandbox, so start `agent-stack run` from a terminal (defect #57,
+  open).
+- **Defect log:** #54–#57.
+
+### Upgrading from 0.5.0
+
+- Run `agent-stack update`: it replaces `.claude/bin/verify` and the two hooks. Nothing to do by hand.
 
 ## 0.5.0 — OS sandbox for Bash
 
