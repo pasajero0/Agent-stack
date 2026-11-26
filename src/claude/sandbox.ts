@@ -50,21 +50,37 @@ export function detectedDomains(packageManager: string, forgeCli: string): strin
   return all.filter((d, i) => all.indexOf(d) === i);
 }
 
+/** Cache folders of each package manager (macOS and Linux): the install writes there, the sandbox blocks it. */
+const CACHE_PATHS: Readonly<Record<string, readonly string[]>> = {
+  npm: ["~/.npm"],
+  pnpm: ["~/Library/pnpm/store", "~/Library/Caches/pnpm", "~/.local/share/pnpm/store", "~/.cache/pnpm"],
+  yarn: ["~/Library/Caches/Yarn", "~/.cache/yarn", "~/.yarn/berry/cache"],
+  bun: ["~/.bun/install/cache"],
+};
+
+/** The `filesystem.allowWrite` paths of the detected package manager; none for any other. */
+export function detectedWritePaths(packageManager: string): string[] {
+  return [...lookup(CACHE_PATHS, packageManager)];
+}
+
 /** The `sandbox` object of `.claude/settings.json`, keys in the Contract order. */
 export interface SandboxBlock {
   enabled: true;
   allowUnsandboxedCommands: false;
   failIfUnavailable: true;
-  filesystem: { denyRead: string[] };
+  filesystem: { denyRead: string[]; allowWrite?: string[] };
   network: { allowedDomains: string[] };
 }
 
-export function buildSandboxBlock(domains: readonly string[]): SandboxBlock {
+export function buildSandboxBlock(domains: readonly string[], writePaths: readonly string[] = []): SandboxBlock {
   return {
     enabled: true,
     allowUnsandboxedCommands: false,
     failIfUnavailable: true,
-    filesystem: { denyRead: [...SECRET_FOLDERS] },
+    filesystem: {
+      denyRead: [...SECRET_FOLDERS],
+      ...(writePaths.length ? { allowWrite: [...writePaths] } : {}),
+    },
     network: { allowedDomains: [...domains] },
   };
 }
@@ -106,10 +122,15 @@ export async function sandboxReadiness(platform: string, exists: Exists): Promis
 export interface GeneratedSandbox {
   denyRead: string[];
   allowedDomains: string[];
+  allowWrite?: string[]; // only when the harness writes any
 }
 
-export function generatedSandbox(domains: readonly string[]): GeneratedSandbox {
-  return { denyRead: [...SECRET_FOLDERS], allowedDomains: [...domains] };
+export function generatedSandbox(domains: readonly string[], writePaths: readonly string[] = []): GeneratedSandbox {
+  return {
+    denyRead: [...SECRET_FOLDERS],
+    allowedDomains: [...domains],
+    ...(writePaths.length ? { allowWrite: [...writePaths] } : {}),
+  };
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -122,7 +143,12 @@ const strings = (v: unknown): string[] =>
 /** The manifest's `generatedSandbox` as read back: each list on its own; not an array → empty; non-strings dropped. */
 export function readGeneratedSandbox(v: unknown): GeneratedSandbox {
   const g = isObject(v) ? v : {};
-  return { denyRead: strings(g.denyRead), allowedDomains: strings(g.allowedDomains) };
+  const allowWrite = strings(g.allowWrite);
+  return {
+    denyRead: strings(g.denyRead),
+    allowedDomains: strings(g.allowedDomains),
+    ...(allowWrite.length ? { allowWrite } : {}),
+  };
 }
 
 /** A sandbox line `update` prints at the end of its report (Contract table "update output"). */
@@ -220,7 +246,8 @@ function mergePlace(
   place: Place,
   harness: readonly string[],
   before: readonly string[],
-  r: MergeReport
+  r: MergeReport,
+  skip: readonly string[] = []
 ): Record<string, unknown> {
   const path = `sandbox.${place}`;
   const listKey = LIST_KEY[place];
@@ -246,11 +273,34 @@ function mergePlace(
     out[listKey] = mergeList(list, written, before, `${path}.${listKey}`, r.entries[place]);
   }
   for (const [k, v] of Object.entries(user)) {
-    if (k === listKey || k === "__proto__") continue;
+    if (k === listKey || k === "__proto__" || skip.includes(k)) continue;
     out[k] = v;
     r.keys[place].push(`${path}.${safeText(k)}`);
   }
   return out;
+}
+
+/**
+ * `sandbox.filesystem.allowWrite`: the harness paths, then the user's (not one the harness wrote last time).
+ * No key when the harness writes none and the user has none.
+ */
+function mergeAllowWrite(user: Record<string, unknown>, harness: readonly string[], before: readonly string[],
+  fs: Record<string, unknown>, r: MergeReport): void {
+  const old = isObject(user.filesystem) ? user.filesystem.allowWrite : undefined;
+  const path = "sandbox.filesystem.allowWrite";
+  if (!harness.length && old === undefined) return;
+  if (!harness.length) {
+    // The harness writes none: the user's key stays as theirs, minus what the harness wrote last time.
+    const kept = Array.isArray(old) ? old.filter((v) => !(typeof v === "string" && before.includes(v))) : old;
+    if (Array.isArray(kept) && !kept.length && Array.isArray(old) && old.length) return;
+    fs.allowWrite = kept;
+    r.keys.filesystem.push(path);
+  } else if (Array.isArray(old)) {
+    fs.allowWrite = mergeList(old, harness, before, path, r.entries.filesystem);
+  } else {
+    if (old !== undefined) r.replaced.lists.push(replaced(path, "a list"));
+    fs.allowWrite = [...harness];
+  }
 }
 
 /**
@@ -298,7 +348,10 @@ export function mergeSandbox(
     r.switches.push(`sandbox.${key}: ${safeValue(v)}`);
     r.warnings.push(`sandbox.${key} is ${safeValue(v)} in .claude/settings.json: ${SWITCH_WARNINGS[key]!}`);
   }
-  out.filesystem = mergePlace(user, "filesystem", harness.filesystem.denyRead, before.denyRead, r);
+  const writes = harness.filesystem.allowWrite ?? [];
+  const fsOut = mergePlace(user, "filesystem", harness.filesystem.denyRead, before.denyRead, r, ["allowWrite"]);
+  mergeAllowWrite(user, writes, before.allowWrite ?? [], fsOut, r);
+  out.filesystem = fsOut;
   out.network = mergePlace(user, "network", harness.network.allowedDomains, before.allowedDomains, r);
   for (const [k, v] of Object.entries(user)) {
     if (Object.hasOwn(out, k) || k === "__proto__") continue;
@@ -328,9 +381,16 @@ export function builtDomains(settings: string): string[] {
   return strings(isObject(network) ? network.allowedDomains : undefined);
 }
 
+/** The `filesystem.allowWrite` paths of a built settings.json. */
+export function builtWritePaths(settings: string): string[] {
+  const s = JSON.parse(settings) as Record<string, unknown>;
+  return isObject(s.sandbox) && isObject(s.sandbox.filesystem) ? strings(s.sandbox.filesystem.allowWrite) : [];
+}
+
 /** A built settings.json with its sandbox block rebuilt for `domains`; the key keeps its place. */
 export function withDomains(settings: string, domains: readonly string[]): string {
   const s = JSON.parse(settings) as Record<string, unknown>;
-  s.sandbox = buildSandboxBlock(domains);
+  const old = isObject(s.sandbox) && isObject(s.sandbox.filesystem) ? s.sandbox.filesystem.allowWrite : undefined;
+  s.sandbox = buildSandboxBlock(domains, strings(old));
   return JSON.stringify(s, null, 2) + "\n";
 }

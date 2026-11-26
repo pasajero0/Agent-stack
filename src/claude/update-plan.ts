@@ -4,7 +4,7 @@ import { join, dirname, posix, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GeneratedFile, UpdatePlan } from "./types.js";
 import { HOOKS_BLOCK, hookScript } from "./hooks-block.js";
-import { builtDomains, domainSource, generatedSandbox, mergeSandbox, readGeneratedSandbox, withDomains } from "./sandbox.js";
+import { builtDomains, builtWritePaths, domainSource, generatedSandbox, mergeSandbox, readGeneratedSandbox, withDomains } from "./sandbox.js";
 import type { GeneratedSandbox } from "./sandbox.js";
 
 export type { UpdatePlan } from "./types.js";
@@ -328,8 +328,9 @@ export function planUpdate(
       continue;
     }
     if (f.path === SETTINGS) {
+      const writes = builtWritePaths(f.content);
       f = { ...f, content: withDomains(f.content, source.domains) };
-      nextSandbox = generatedSandbox(source.domains);
+      nextSandbox = generatedSandbox(source.domains, writes);
     }
     if (f.path === SETTINGS && existsSync(full)) {
       const raw = readFileSync(full, "utf-8");

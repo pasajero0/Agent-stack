@@ -167,6 +167,12 @@ first in the order below, then the user's other keys in their order on disk. For
         "~/.npmrc",
         "~/.config/gcloud",
         "~/.azure"
+      ],
+      "allowWrite": [
+        "~/Library/pnpm/store",
+        "~/Library/Caches/pnpm",
+        "~/.local/share/pnpm/store",
+        "~/.cache/pnpm"
       ]
     },
     "network": {
@@ -178,6 +184,12 @@ first in the order below, then the user's other keys in their order on disk. For
     }
   },
 ```
+
+- `allowWrite` (Q1) is the cache folders of the detected package manager, so an install does not fail with EPERM.
+  npm: `~/.npm`. pnpm: the four paths above. yarn: `~/Library/Caches/Yarn`, `~/.cache/yarn`, `~/.yarn/berry/cache`.
+  bun: `~/.bun/install/cache`. Any other package manager: no `allowWrite` key. `update` adds the missing paths,
+  keeps the user's entries, and drops a path the manifest's `generatedSandbox.allowWrite` has and the harness no
+  longer writes. `generatedSandbox.allowWrite` is in the manifest only when the harness writes any.
 
 - `denyRead` is the secret folders, always in this order. On `update`, a removed secret folder is left out
   (AC-18); the others keep this order.
@@ -446,8 +458,8 @@ the machine.
   platforms.
 - `generate` and `update` make 0 network calls for the sandbox. They start at most 2 more processes on Linux (the
   same two lookups) and 0 on other platforms. `update` reads `gates.json` at most once more than today.
-- The sandbox block adds at most 25 lines to the generated `settings.json` (`JSON.stringify(…, null, 2)`) for a
-  domain list of 3 (the Contract example is exactly 25 lines).
+- The sandbox block adds at most 31 lines to the generated `settings.json` (`JSON.stringify(…, null, 2)`) for a
+  domain list of 3 (the Contract example, with its pnpm `allowWrite`, is exactly 31 lines; 25 without it).
 
 ## Out of scope
 

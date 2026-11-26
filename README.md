@@ -292,6 +292,12 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
   - **Network:** for Bash, only the listed domains are reached without a question. The list is `gates.json` →
     `sandbox.allowedDomains`. WebFetch is not limited by it. Node's built-in `fetch` does not use the sandbox
     proxy, so it fails even for a listed domain. Set `NODE_USE_ENV_PROXY=1` for it (checked on Node 22.21).
+  - **Package cache:** Bash may write to the cache folders of the detected package manager, so an install does
+    not fail with EPERM. npm: `~/.npm`. pnpm: `~/Library/pnpm/store`, `~/Library/Caches/pnpm`,
+    `~/.local/share/pnpm/store`, `~/.cache/pnpm`. yarn: `~/Library/Caches/Yarn`, `~/.cache/yarn`,
+    `~/.yarn/berry/cache`. bun: `~/.bun/install/cache`. Any other package manager gets no write path.
+    The list is `sandbox.filesystem.allowWrite` in `.claude/settings.json`; `update` adds missing paths and
+    keeps yours.
   - **Secret folders:** Bash cannot read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`, `~/.netrc`,
     `~/.npmrc`, `~/.config/gcloud` and `~/.azure`. The Read tool is not covered; guard-file still handles it.
     `~/.config/gh` stays readable on purpose, so `gh` keeps its token. Git over SSH fails inside the sandbox,
