@@ -15,6 +15,7 @@ const SECRETS = [
   "~/.npmrc",
   "~/.config/gcloud",
   "~/.azure",
+  "~/.config/gh",
 ];
 
 // The Contract block for a pnpm repo with a GitHub remote, as it stands inside settings.json.
@@ -32,7 +33,8 @@ const CONTRACT_BLOCK = `  "sandbox": {
         "~/.netrc",
         "~/.npmrc",
         "~/.config/gcloud",
-        "~/.azure"
+        "~/.azure",
+        "~/.config/gh"
       ],
       "denyWrite": [
         "./.claude/gates.json",
@@ -67,9 +69,9 @@ function sandboxLines(settings: string): string[] {
 }
 
 describe("sandbox1: the generated sandbox block", () => {
-  it("sandbox1 AC-1: settings.json holds the exact 36-line Contract block for pnpm + gh", () => {
+  it("sandbox1 AC-1: settings.json holds the exact 37-line Contract block for pnpm + gh", () => {
     const lines = sandboxLines(content(TS_PARAMS, ".claude/settings.json"));
-    expect(lines).toHaveLength(36);
+    expect(lines).toHaveLength(37);
     expect(lines.join("\n")).toBe(CONTRACT_BLOCK);
   });
 
@@ -98,6 +100,14 @@ describe("sandbox1: the generated sandbox block", () => {
       filesystem: { denyRead: SECRETS, denyWrite: ["./.claude/gates.json", "./.claude/bin", "./CLAUDE.md"] },
       network: { allowedDomains: ["a.com"] },
     });
+  });
+
+  it("Q1: the built block and generate hold ~/.config/gh as the last denyRead entry", () => {
+    expect(buildSandboxBlock([]).filesystem.denyRead.at(-1)).toBe("~/.config/gh");
+    const s = JSON.parse(content(TS_PARAMS, ".claude/settings.json"));
+    expect(s.sandbox.filesystem.denyRead.at(-1)).toBe("~/.config/gh");
+    const m = JSON.parse(content(TS_PARAMS, ".claude/.harness.json"));
+    expect(m.generatedSandbox.denyRead.at(-1)).toBe("~/.config/gh");
   });
 
   it("sandbox1 AC-2: gates.json has sandbox.allowedDomains right before routing", () => {

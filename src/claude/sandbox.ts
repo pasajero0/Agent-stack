@@ -6,7 +6,11 @@
 import { readFileSync } from "node:fs";
 import chalk from "chalk";
 
-/** Folders Bash may not read inside the sandbox, in the Contract order. Not `~/.config/gh`: `gh pr view` needs it. */
+/**
+ * Folders Bash may not read inside the sandbox, in the Contract order. `~/.config/gh` is last: github.com is an
+ * allowed domain, so gh's login would let Bash send data out. With it closed, gh is not logged in inside the
+ * sandbox; a user who wants gh there removes it from denyRead by hand (update keeps it removed and warns).
+ */
 export const SECRET_FOLDERS: readonly string[] = [
   "~/.ssh",
   "~/.aws",
@@ -17,6 +21,7 @@ export const SECRET_FOLDERS: readonly string[] = [
   "~/.npmrc",
   "~/.config/gcloud",
   "~/.azure",
+  "~/.config/gh",
 ];
 
 /**

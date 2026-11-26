@@ -322,8 +322,11 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     The list is `sandbox.filesystem.allowWrite` in `.claude/settings.json`; `update` adds missing paths and
     keeps yours.
   - **Secret folders:** Bash cannot read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`, `~/.netrc`,
-    `~/.npmrc`, `~/.config/gcloud` and `~/.azure`. The Read tool is not covered; guard-file still handles it.
-    `~/.config/gh` stays readable on purpose, so `gh` keeps its token. Git over SSH fails inside the sandbox,
+    `~/.npmrc`, `~/.config/gcloud`, `~/.azure` and `~/.config/gh`. The Read tool is not covered; guard-file
+    still handles it. Bash cannot read `~/.config/gh`, so gh is not logged in inside the sandbox and git over
+    HTTPS to a private GitHub repo may fail. To use gh from the agent's Bash,
+    remove "~/.config/gh" from sandbox.filesystem.denyRead in `.claude/settings.json` (`update` keeps it removed and warns). What stays
+    open: github.com and the package registry are still reachable without a login. Git over SSH fails inside the sandbox,
     because `~/.ssh` is unreadable. If you remove a secret folder from `denyRead`, `update` keeps it removed and
     warns on each run.
   - **No `Read(...)` deny rules:** with the sandbox on, Claude Code applies them to Bash too, so a command

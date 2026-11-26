@@ -9,6 +9,13 @@
   older version and keeps your own denyWrite entries after them. If you remove one of the three entries, `update`
   keeps it removed and prints one warning line for it on each run. `generate` and `update` still write these
   places: you run them from a terminal, outside the sandbox. Not yet checked by a live probe.
+- **Bash cannot read gh's login inside the sandbox:** `~/.config/gh` is now the last entry of the secret folders,
+  so the generated `sandbox.filesystem.denyRead` holds it. Before, a text the agent read could make Bash send data
+  out through github.com with your GitHub login. Inside the sandbox, gh now answers that it is not logged in, and
+  git over HTTPS to a private GitHub repo may fail. `update` adds the entry to a settings.json of an older version
+  and records it in `generatedSandbox.denyRead`. To use gh from the agent's Bash, remove `"~/.config/gh"` from
+  `sandbox.filesystem.denyRead` by hand: `update` keeps it removed and prints one warning line for it on each run.
+  The allowed domains and the `permissions.allow` entries for gh stay as they were.
 - **The channels past the OS sandbox are closed by default:** the generated `.claude/settings.json` now has
   `permissions.deny` with `mcp__claude-in-chrome__*` (the Claude in Chrome tools), and `permissions.ask` with
   `WebFetch` and `mcp__*` (every MCP tool). A deny rule blocks in every permission mode; an ask rule asks also

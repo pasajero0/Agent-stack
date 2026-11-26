@@ -257,6 +257,29 @@ describe("sandbox1: removed secret folders", () => {
   });
 });
 
+describe("Q1: ~/.config/gh in the secret folders", () => {
+  it("Q1: update adds ~/.config/gh to a settings.json written before this change and records it", async () => {
+    manifestWith({ denyRead: without("~/.config/gh"), denyWrite: [...HARNESS_WRITE_PATHS], allowedDomains: detected });
+    write("settings.json", settingsWith({ ...buildSandboxBlock(detected), filesystem: { denyRead: without("~/.config/gh") } }));
+    await updateCommand();
+    expect(denyRead()).toEqual([...without("~/.config/gh"), "~/.config/gh"]);
+    expect((manifestSandbox().denyRead as string[]).at(-1)).toBe("~/.config/gh");
+    expect(readableLines()).toEqual([]);
+  });
+
+  it("Q1: a user who removed ~/.config/gh keeps it removed and gets the warning line on each run", async () => {
+    write("settings.json", settingsWith({ ...buildSandboxBlock(detected), filesystem: { denyRead: without("~/.config/gh") } }));
+    await updateCommand();
+    expect(denyRead()).toEqual(without("~/.config/gh"));
+    expect(readableLines()).toEqual([readable("~/.config/gh")]);
+    capture();
+    await updateCommand();
+    expect(denyRead()).toEqual(without("~/.config/gh"));
+    expect(readableLines()).toEqual([readable("~/.config/gh")]);
+    expect(manifestSandbox().denyRead).toEqual([...SECRET_FOLDERS]);
+  });
+});
+
 describe("sandbox1: a second update", () => {
   it("sandbox1 AC-17: twice in a row → the same settings.json and manifest, the same lines minus replaced", async () => {
     gatesDomains(undefined); // the add line
