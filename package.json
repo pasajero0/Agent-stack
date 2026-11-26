@@ -21,6 +21,7 @@
     "test:slow": "vitest run --project slow",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "defects": "node scripts/defect-causes.mjs",
     "prepare": "husky || true",
     "prepublishOnly": "pnpm build && pnpm typecheck && pnpm test"
   },

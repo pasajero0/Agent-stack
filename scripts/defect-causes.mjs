@@ -3,7 +3,14 @@
 // parseLog(text) -> { rows, errors, noTable }. It reads the first table with those columns and stops at the
 // first line after it that does not start with `|`. Each problem is one stderr-ready line.
 
-const COLUMNS = ["#", "Date", "Cause", "Test"];
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The repo root, from this script's own path (scripts/ is one level below it).
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+const COLUMNS =["#", "Date", "Cause", "Test"];
 
 // Split one table line into trimmed cells; `\|` stays in the cell as `|`.
 function splitRow(line) {
@@ -84,4 +91,89 @@ export function parseLog(text) {
     if (seen.get(n) > 1) errors.push(`defect-causes: row ${n}: # is used by another row`);
   }
   return { rows, errors, noTable: false };
+}
+
+const isPlanned = (test) => /^planned/i.test(test);
+const isTested = (test) => test !== "—" && !isPlanned(test);
+
+// Count rows by cause: [{ cause, count, last, tested, planned, rows }], most rows first, then cause by `<`.
+export function countCauses(rows) {
+  const by = new Map();
+  for (const r of rows) {
+    let e = by.get(r.cause);
+    if (!e) {
+      e = { cause: r.cause, count: 0, last: "", tested: 0, planned: 0, rows: [], lastN: -Infinity };
+      by.set(r.cause, e);
+    }
+    e.count++;
+    if (r.n > e.lastN) {
+      e.lastN = r.n;
+      e.last = r.date;
+    }
+    if (isTested(r.test)) e.tested++;
+    else if (isPlanned(r.test)) e.planned++;
+    e.rows.push(r.n);
+  }
+  return [...by.values()]
+    .map(({ lastN, ...e }) => ({ ...e, rows: e.rows.sort((a, b) => a - b) }))
+    .sort((a, b) => b.count - a.count || (a.cause < b.cause ? -1 : a.cause > b.cause ? 1 : 0));
+}
+
+// A failing cause: 3 or more rows, no tested row, no planned check.
+export const failingCauses = (counts) => counts.filter((c) => c.count >= 3 && c.tested === 0 && c.planned === 0);
+
+const USAGE = "usage: node scripts/defect-causes.mjs [--check] [--file <path>]";
+const DEFAULT_PATH = "docs/defects.md";
+
+function table(counts) {
+  const head = ["cause", "count", "last", "tested", "planned", "rows"];
+  const right = [false, true, false, true, true, false];
+  const body = counts.map((c) => [c.cause, String(c.count), c.last, String(c.tested), String(c.planned), c.rows.join(",")]);
+  const all = [head, ...body];
+  const widths = head.map((_, i) => Math.max(...all.map((r) => r[i].length)));
+  return all.map((r) => r.map((v, i) => (right[i] ? v.padStart(widths[i]) : v.padEnd(widths[i]))).join("  ").trimEnd());
+}
+
+// main(argv, readFile) -> { stdout, stderr, code }; argv excludes node and the script path.
+export function main(argv, readFile) {
+  let check = false;
+  let file = null;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--check") check = true;
+    else if (a === "--file") {
+      if (i + 1 >= argv.length) return { stdout: "", stderr: "defect-causes: --file needs a path\n", code: 2 };
+      file = argv[++i];
+    } else {
+      return { stdout: "", stderr: `defect-causes: unknown option ${a}\n${USAGE}\n`, code: 2 };
+    }
+  }
+  const shown = file ?? DEFAULT_PATH;
+  let text;
+  try {
+    text = readFile(file ?? join(ROOT, DEFAULT_PATH));
+  } catch {
+    return { stdout: "", stderr: `defect-causes: cannot read ${shown}\n`, code: 2 };
+  }
+  const parsed = parseLog(text);
+  if (parsed.noTable) {
+    return { stdout: "", stderr: `defect-causes: no table with the columns #, Date, Cause and Test in ${shown}\n`, code: 2 };
+  }
+  if (parsed.errors.length > 0) return { stdout: "", stderr: parsed.errors.map((e) => `${e}\n`).join(""), code: 2 };
+
+  const counts = countCauses(parsed.rows);
+  const out = table(counts);
+  if (!check) return { stdout: out.join("\n") + "\n", stderr: "", code: 0 };
+  const failing = failingCauses(counts);
+  if (failing.length === 0) return { stdout: [...out, "defect-causes: check ok"].join("\n") + "\n", stderr: "", code: 0 };
+  const err = failing.map((c) => `defect-causes: ${c.cause} has ${c.count} rows and no test or planned check (rows ${c.rows.join(",")})\n`);
+  return { stdout: out.join("\n") + "\n", stderr: err.join(""), code: 1 };
+}
+
+// Run only as the entry script.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const r = main(process.argv.slice(2), (p) => readFileSync(p, "utf8"));
+  process.stdout.write(r.stdout);
+  process.stderr.write(r.stderr);
+  process.exitCode = r.code;
 }
