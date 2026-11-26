@@ -26,7 +26,7 @@ export const SECRET_FOLDERS: readonly string[] = [
  */
 export const HARNESS_WRITE_PATHS: readonly string[] = ["./.claude/gates.json", "./.claude/bin", "./CLAUDE.md"];
 
-const NPM =["registry.npmjs.org"];
+const NPM = ["registry.npmjs.org"];
 const PYPI = ["pypi.org", "files.pythonhosted.org"];
 
 /** Registry domains of each package manager (`HarnessParams.packageManager`). */
@@ -226,7 +226,7 @@ interface MergeReport {
   keys: Record<"sandbox" | Place, string[]>; // other keys of each object place
   entries: Record<Place, string[]>; // denyRead, then allowedDomains entries
   warnings: string[];
-  replaced: Record<"objects" | "lists", string[]>; // the five places: the objects first, then the lists
+  replaced: Record<"objects" | "lists", string[]>; // the six places: the objects first, then the lists
   readable: string[]; // removed secret folders, in the secret folders' order (AC-18)
   writable: string[]; // removed harness write paths, in their order
 }

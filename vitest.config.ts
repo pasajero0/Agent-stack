@@ -21,6 +21,7 @@ const SLOW = [
   "tests/claude/sandbox-merge.test.ts",
   "tests/claude/sandbox-lists.test.ts",
   "tests/claude/sandbox-tools.test.ts",
+  "tests/claude/sandbox-deny-write.test.ts",
 ];
 
 export default defineConfig({

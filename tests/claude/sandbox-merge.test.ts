@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { generateCommand } from "../../src/commands/generate.js";
 import { updateCommand } from "../../src/commands/update.js";
 import { buildSandboxBlock, HARNESS_WRITE_PATHS, SECRET_FOLDERS } from "../../src/claude/sandbox.js";
+import { pinPlatform } from "./pin-platform.js";
 
 const DENY_WRITE = [...HARNESS_WRITE_PATHS];
-import { pinPlatform } from "./pin-platform.js";
 
 pinPlatform(); // the warnings these tests compare must not depend on the machine (Linux without socat)
 
