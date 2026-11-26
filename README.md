@@ -356,6 +356,11 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     environment can put it into the run's `calls/` record (the token makes model requests only, for a year);
     Linux is not handled; the driver finds the outer sandbox by asking the OS, and
     `AGENT_STACK_OUTER_SANDBOX=0` skips that check. A driver started from a terminal works as before.
+    Why the token is not masked: Claude Code can replace a credential with a placeholder for sandboxed
+    commands. But it accepts that setting only from user or managed settings or the `--settings` flag,
+    not from a project's settings. The setting is experimental, and nobody checked that a nested `claude` works
+    with a placeholder. So the harness does not set it, and the limit above stays: a command a call starts can read the
+    token, and the token makes model requests only.
   - **Temporary files:** Bash writes only under `$TMPDIR` inside the sandbox. A script or a test that writes to
     `/tmp` by name, or calls a bare `mktemp` on macOS, fails there.
   - **Who wins:** a `false` in user settings, `--settings` or managed settings wins over the project value.
@@ -367,6 +372,11 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
   - **Linux and WSL2:** the sandbox needs `bwrap` and `socat`. Without them every Bash command fails
     (`failIfUnavailable`). `generate` and `update` warn when one is missing. `agent-stack detect` reports whether
     they are found, not whether the sandbox starts.
+  - **Linux:** every probe of the sandbox (reading the secret folders, the domain list, the places Bash cannot
+    write) was run on macOS only. On Linux the sandbox uses bubblewrap and socat. `generate` and `update` say
+    when one is missing. CI installs them and runs the tests there, but no live probe of the sandbox itself has
+    run on Linux. Known differences from the Claude Code documentation: in sandbox path lists, only a trailing
+    `"/**"` wildcard works on Linux. An `allowWrite` entry for a path that does not exist yet has no effect there.
   - **Native Windows:** the sandbox is not documented there, so Bash commands most likely fail. Use WSL2.
 - **Hooks fail open** when they crash. Stop hooks can only nudge once per turn (`stop_hook_active`).
 - `verify` runs commands from an agent-written plan; it is not allow-listed and refuses commands guard-bash

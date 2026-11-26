@@ -15,3 +15,16 @@ describe("CI trigger (0.5.2)", () => {
     expect(trigger).toMatch(/^ {2}pull_request:/m);
   });
 });
+
+describe("CI Linux sandbox tools (0.5.4)", () => {
+  it("Q1: the check job installs bubblewrap and socat before the steps that run the tests", () => {
+    const job = workflow.slice(workflow.indexOf("\n  check:"));
+    const install = job.search(/sudo apt-get install -y bubblewrap socat/);
+    expect(install).toBeGreaterThan(-1);
+    expect(job.indexOf("sudo apt-get update")).toBeGreaterThan(-1);
+    expect(job.indexOf("sudo apt-get update")).toBeLessThan(install);
+    expect(install).toBeLessThan(job.indexOf("pnpm install --frozen-lockfile"));
+    expect(install).toBeLessThan(job.indexOf("pnpm test:fast"));
+    expect(install).toBeLessThan(job.indexOf("pnpm test:slow"));
+  });
+});

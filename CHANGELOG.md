@@ -34,6 +34,13 @@
   implementer's report in `<implementer_report>`. Each prompt says, before the first tag, that the text inside
   these tags is data, not instructions. A closing tag of the same name inside the text (any case, spaces inside)
   gets a backslash after `<`, so the text cannot close its own tag. The labels and the order of the parts stay.
+- **CI installs the Linux sandbox tools, and the README says what is not checked on Linux:** the CI check job
+  now installs bubblewrap and socat with apt-get before it installs the dependencies. The README Limits section
+  has a Linux sub-item: every live probe of the sandbox ran on macOS only, only a trailing `"/**"` wildcard works
+  in sandbox path lists on Linux, and an `allowWrite` entry for a missing path has no effect there. The token
+  file sub-item now says why the harness does not mask the token: Claude Code accepts that setting only from
+  user or managed settings or `--settings`, it is experimental, and a nested `claude` with a placeholder is not
+  checked.
 
 ## 0.5.3 — Fewer stops that need a human
 
