@@ -41,7 +41,8 @@
   without one (−29% time, −38% cost); the scout call cost $0.008. The scout stays.
 - **Eval run** on 0.5.0, k = 3, real `claude`, the OS sandbox on in every try: 21/21 passed, pass^3 = 1, $1.67,
   6:18 (0.4.8: $1.29, 6:01). The cost rose in every task by a few cents a try; the cause is not measured.
-  Results: `evals/results/2026-11-26-112823.json`.
+  Results: `evals/results/2026-11-26-112823.json`. A second run after the two fixes from the live check gave
+  the same: 21/21, pass^3 = 1, $1.67, 5:37 — `evals/results/2026-11-26-174744.json`.
 - **Defect log:** #49–#51 (orphaned test workers after implement, tests with hard time limits on a loaded
   machine, a bare retry after BLOCKED).
 
