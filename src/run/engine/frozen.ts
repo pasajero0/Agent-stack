@@ -67,43 +67,49 @@ const isTestRunnerConfig = (path: string): boolean => TEST_RUNNER_CONFIGS.some((
 const QUOTED = /^(?:"([^"\\]*)"|'([^'\\]*)'|`([^`\\$]*)`)$/;
 const GLOB_CHARS = /[*?[\]{}!]/;
 
-/** Keys whose list selects test files; a list under any other key (setupFiles, globalSetup, …) runs code. */
-const OPENS_TEST_LIST = /^(?:include|exclude|testMatch|testIgnore|testPathIgnorePatterns)\s*:\s*\[$/;
-/** A top-level `const NAME = [`. */
-const OPENS_CONST_LIST = /^const\s+([A-Za-z_$][\w$]*)\s*=\s*\[$/;
+/** The text of a list entry line: trimmed and without one trailing comma, exactly one quoted string. Else undefined. */
+function entry(line: string): string | undefined {
+  let t = line.trim();
+  if (t.endsWith(",")) t = t.slice(0, -1).trimEnd();
+  const m = QUOTED.exec(t);
+  return m === null ? undefined : (m[1] ?? m[2] ?? m[3]);
+}
+
+/** Opening lines of a list that selects test files, the whole trimmed line; a list under any other key runs code. */
+const OPENS_TEST_LIST = /^(?:include|exclude|testMatch|testIgnore|testPathIgnorePatterns): \[$/;
+/** A top-level `const NAME = [`, the whole line. */
+const OPENS_CONST_LIST = /^const ([A-Za-z_$][\w$]*) = \[$/;
 
 const escaped = (s: string): string => s.replace(/[$]/g, "\\$&");
 
 /**
- * Whether the line at `at` lands in a list that selects test files: the nearest line above it that opens an
- * array still open at `at` is `include: [` (or exclude, testMatch, testIgnore, testPathIgnorePatterns), or a
- * top-level `const NAME = [` whose every other use is directly `include: NAME` or `exclude: NAME`.
- * Line-based on purpose: no parser for every config language. Brackets in strings or comments can make it find
- * a wrong opening line; then that line fits neither form and the change stops, or the base already held it.
+ * Whether the line at `at` lands in a list that selects test files. Walk up one line at a time: every line passed
+ * is a list entry (`entry`); the first other line is the opening line, and the whole trimmed line is
+ * `include: [` (or exclude, testMatch, testIgnore, testPathIgnorePatterns), or a top-level `const NAME = [`
+ * whose every other use is directly `include: NAME` or `exclude: NAME`. A comment, a blank line, a spread, a
+ * nested bracket, any other opening line or the top of the file: false. Line-based on purpose: no parser for
+ * every config language, so the list must be written one entry per line directly under its opening line.
  */
 function selectsTests(lines: string[], at: number): boolean {
-  let depth = 0;
-  for (let k = at - 1; k >= 0; k--) {
-    const line = lines[k] ?? "";
-    depth += (line.match(/\]/g) ?? []).length - (line.match(/\[/g) ?? []).length;
-    if (depth >= 0) continue;
-    const t = line.trim();
-    if (OPENS_TEST_LIST.test(t)) return true;
-    const m = line.startsWith("const") ? OPENS_CONST_LIST.exec(t) : null;
-    if (m?.[1] === undefined) return false;
-    const name = escaped(m[1]);
-    const rest = lines.filter((_, j) => j !== k).join("\n");
-    const uses = (rest.match(new RegExp(`(?<![\\w$])${name}(?![\\w$])`, "g")) ?? []).length;
-    const asList = (rest.match(new RegExp(`(?<![\\w$])(?:include|exclude)\\s*:\\s*${name}(?=[ \\t]*(?:[,}]|$))`, "gm")) ?? []).length;
-    return uses > 0 && uses === asList;
-  }
-  return false;
+  let k = at - 1;
+  while (k >= 0 && entry(lines[k] ?? "") !== undefined) k--;
+  if (k < 0) return false;
+  const line = lines[k] ?? "";
+  const t = line.trim();
+  if (OPENS_TEST_LIST.test(t)) return true;
+  const m = line.startsWith("const") ? OPENS_CONST_LIST.exec(t) : null;
+  if (m?.[1] === undefined) return false;
+  const name = escaped(m[1]);
+  const rest = lines.filter((_, j) => j !== k).join("\n");
+  const uses = (rest.match(new RegExp(`(?<![\\w$])${name}(?![\\w$])`, "g")) ?? []).length;
+  const asList = (rest.match(new RegExp(`(?<![\\w$])(?:include|exclude)\\s*:\\s*${name}(?=[ \\t]*(?:[,}]|$))`, "gm")) ?? []).length;
+  return uses > 0 && uses === asList;
 }
 
 /**
  * The new test files a test runner config at `path` lists, when its change since `base` only adds them: no
- * base line removed, and every added line lands in a list that selects test files (selectsTests) and, trimmed
- * and without one trailing comma, is one quoted path with no glob character, of a test file that did not exist
+ * base line removed, and every added line lands in a list that selects test files (selectsTests) and is one
+ * list entry (`entry`): a quoted path with no glob character, of a test file that did not exist
  * at the base and is a regular file now. Null otherwise. Paths in a config are relative to its folder.
  */
 function listsNewTests(dir: string, base: string, path: string, testGlobs: string[]): string[] | null {
@@ -121,10 +127,7 @@ function listsNewTests(dir: string, base: string, path: string, testGlobs: strin
   const files: string[] = [];
   for (const at of added) {
     if (!selectsTests(now, at)) return null;
-    let t = (now[at] ?? "").trim();
-    if (t.endsWith(",")) t = t.slice(0, -1).trimEnd();
-    const m = QUOTED.exec(t);
-    const s = m === null ? undefined : (m[1] ?? m[2] ?? m[3]);
+    const s = entry(now[at] ?? "");
     if (s === undefined || s === "" || GLOB_CHARS.test(s) || isAbsolute(s)) return null;
     const p = posix.normalize(posix.join(posix.dirname(path), s));
     if (p === ".." || p.startsWith("../")) return null;

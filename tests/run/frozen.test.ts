@@ -294,6 +294,41 @@ describe("a test runner config that lists new test files only (Q1, defect 58)", 
     stopped(dir, base);
   });
 
+  it('Q1: a base line "], setupFiles: [" above the added line stops', () => {
+    const config = (extra: string): string =>
+      `export default {\n  test: {\n    include: [\n      "tests/x.test.ts",\n    ], setupFiles: [\n      "tests/a.test.ts",\n${extra}    ],\n  },\n};\n`;
+    const { dir, base } = listed(config(""), config('      "tests/b.test.ts",\n'));
+    stopped(dir, base);
+  });
+
+  it("Q1: a comment line between the opening line and the added line stops", () => {
+    const config = (extra: string): string =>
+      `export default {\n  test: {\n    include: [\n      // the slow ones\n      "tests/a.test.ts",\n${extra}    ],\n  },\n};\n`;
+    const { dir, base } = listed(config(""), config('      "tests/b.test.ts",\n'));
+    stopped(dir, base);
+  });
+
+  it('Q1: an opening line "test: { include: [" stops (text before the key)', () => {
+    const config = (extra: string): string =>
+      `export default {\n  test: { include: [\n      "tests/a.test.ts",\n${extra}    ],\n  },\n};\n`;
+    const { dir, base } = listed(config(""), config('      "tests/b.test.ts",\n'));
+    stopped(dir, base);
+  });
+
+  it("Q1: a blank line between the opening line and the added line stops", () => {
+    const config = (extra: string): string =>
+      `export default {\n  test: {\n    include: [\n\n      "tests/a.test.ts",\n${extra}    ],\n  },\n};\n`;
+    const { dir, base } = listed(config(""), config('      "tests/b.test.ts",\n'));
+    stopped(dir, base);
+  });
+
+  it("Q1: a plain include list passes", () => {
+    const config = (extra: string): string => `export default {\n  test: {\n    include: [\n      "tests/a.test.ts",\n${extra}    ],\n  },\n};\n`;
+    const { dir, base } = listed(config(""), config('      "tests/b.test.ts",\n'));
+    expect(testChanges(dir, base, GLOBS)).toEqual([]);
+    expect(passedConfigChanges(dir, base, GLOBS)).toEqual(passed);
+  });
+
   /** This repo's vitest.config.ts shape: a top-level const list, used as `uses`. */
   const constList = (uses: string, extra: string): string =>
     `const SLOW = [\n  "tests/a.test.ts",\n${extra}];\n\nexport default {\n  test: {\n${uses}  },\n};\n`;

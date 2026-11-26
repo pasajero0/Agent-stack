@@ -212,7 +212,9 @@ there at its start (fewer tests or assertions, more skip marks, a changed CI or 
 `tests-changed`) lists the changes: `a` allows exactly those, `r` sends the task back, `c` cancels. A weaker
 assertion that keeps the count (`toBe(3)` → `toBeTruthy()`) is not seen. One change does not stop: a test runner
 config (`vitest.config.*`, `jest.config.*`, …) that only lists the task's new test files in `include`, `exclude`,
-`testMatch`, `testIgnore` or `testPathIgnorePatterns`. Gate `accept` shows it as `test config change passed: …`.
+`testMatch`, `testIgnore` or `testPathIgnorePatterns`. The list must be written one entry per line directly
+under its opening line (`include: [`); a comment or a blank line in between stops the run. Gate `accept` shows
+it as `test config change passed: …`.
 A new file in `setupFiles` or `globalSetup` still stops: that file runs before every test.
 
 Before gate `accept`, a task run with more than one task runs every
