@@ -286,3 +286,79 @@ describe("defect-causes countCauses and main", () => {
     expect(pkg.scripts.defects).toBe("node scripts/defect-causes.mjs");
   });
 });
+
+// Contract → "Causes of the existing rows" (causes1 spec), hardcoded.
+const CAUSE_ROWS: Record<string, number[]> = {
+  "rule-in-two-places": [8, 15, 16, 18, 19, 20, 27, 34, 41],
+  "test-depends-on-machine": [6, 13, 45, 52, 53],
+  "driver-counts-unrelated-red": [43, 50, 56],
+  "harness-part-not-tested-with-sandbox": [54, 55, 57],
+  "dependency-change-unguarded": [1, 3],
+  "platform-not-checked-live": [10, 12],
+  "conclusion-from-partial-read": [22, 44],
+  "test-passes-for-wrong-reason": [23, 30],
+  "block-hits-legitimate-input": [24, 40],
+  "retry-takes-no-comment": [39, 51],
+  "task-can-edit-check-config": [2],
+  "commit-not-gated-on-test": [4],
+  "merge-method-not-enforced": [5],
+  "answer-reaches-wrong-gate": [7],
+  "skill-text-not-run-live": [9],
+  "instruction-names-no-repo": [11],
+  "driver-run-under-monitor": [14],
+  "staged-files-survive-refused-commit": [17],
+  "repo-config-incomplete": [21],
+  "hook-bypassed-through-bash": [25],
+  "stage-read-from-branch-only": [26],
+  "outside-input-unchecked": [28],
+  "answer-dropped-silently": [29],
+  "zero-tests-read-as-pass": [31],
+  "message-misleads": [32],
+  "implementer-writes-files-through-bash": [33],
+  "size-limit-invites-squeezing": [35],
+  "child-process-without-timeout": [36],
+  "check-timeout-stops-run": [37],
+  "answer-states-unchecked-fact": [38],
+  "watch-redraws-into-scrollback": [42],
+  "new-config-key-breaks-old-run": [46],
+  "implementer-runs-full-suite": [47],
+  "evals-run-before-version-bump": [48],
+  "child-processes-outlive-call": [49],
+};
+
+describe("defect-causes: the real docs/defects.md", () => {
+  const text = readFileSync(new URL("../../docs/defects.md", import.meta.url), "utf8");
+  const parsed = parse(text);
+
+  it("causes1 AC-1: header order, kebab-case causes, the mapping, only #56 planned", () => {
+    expect(text).toContain("| # | Date | Defect | Found by | Class | Cause | Escaped? | Closed by | Test |\n|---|---|---|---|---|---|---|---|---|\n");
+    const kebab = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+    for (const r of parsed.rows) expect(r.cause, `row ${r.n}`).toMatch(kebab);
+    const want = new Map<number, string>();
+    for (const [cause, rows] of Object.entries(CAUSE_ROWS)) for (const n of rows) want.set(n, cause);
+    expect(want.size).toBe(57);
+    for (let n = 1; n <= 57; n++) {
+      const row = parsed.rows.find((r) => r.n === n);
+      expect(row?.cause, `row ${n}`).toBe(want.get(n));
+    }
+    const planned = parsed.rows.filter((r) => (r.n ?? 0) <= 57 && /^planned/i.test(r.test));
+    expect(planned.map((r) => [r.n, r.test])).toEqual([[56, "planned: 0.5.3"]]);
+  });
+
+  it("causes1 AC-2: the Cause paragraph follows the Found by paragraph", () => {
+    const paras = text.split(/\n\s*\n/);
+    const i = paras.findIndex((p) => p.startsWith("**Found by:**"));
+    expect(i).toBeGreaterThan(-1);
+    const p = paras[i + 1] ?? "";
+    expect(p.startsWith("**Cause:**")).toBe(true);
+    expect(p).toContain("pnpm defects");
+    expect(p).toContain("docs/GLOSSARY.md");
+  });
+
+  it("causes1 AC-17: the real file parses with no errors and every cause is set", () => {
+    expect(parsed.noTable).toBe(false);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows.length).toBeGreaterThanOrEqual(57);
+    for (const r of parsed.rows) expect(r.cause, `row ${r.n}`).not.toBe("");
+  });
+});
