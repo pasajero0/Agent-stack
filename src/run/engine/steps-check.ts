@@ -4,7 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { verifyTail, type CheckRun } from "../checks.js";
+import { verifyFailing, verifyTail, type CheckRun } from "../checks.js";
 import { commitPaths, diffLines, git, headSha, normaliseHeader, taskDiffPaths } from "../git.js";
 import { reviewPrompt } from "../prompts.js";
 import { blockingCount, isBlocking, parseReview, type ReviewOutput } from "../schemas.js";
@@ -15,10 +15,15 @@ import { lastImplement, START_NOTE } from "./steps-implement.js";
 import { baseOf, failAttempt, taskOf, timedOutError, toLimit } from "./task-core.js";
 import { taskNext, type StepEvent } from "./transitions.js";
 
+/** Defect 60: the failing lines come from the whole output (the whole verify.log for a task's verify), the tail as before. */
 function checkFeedback(ctx: Ctx, item: CheckItem, r: CheckRun): string {
   const stage = ctx.run.stage;
-  const tail = item.label === "verify" && stage ? verifyTail(ctx.projectDir, stage) || r.tail : r.tail;
-  return `Check failed: \`${r.cmd}\` exited ${r.exit}. Last lines of its output:\n${tail}`;
+  const logTail = item.label === "verify" && stage ? verifyTail(ctx.projectDir, stage) : "";
+  const tail = logTail || r.tail;
+  const failing = logTail && stage ? verifyFailing(ctx.projectDir, stage) : (r.failing ?? "");
+  const head = `Check failed: \`${r.cmd}\` exited ${r.exit}.`;
+  if (failing === "") return `${head} Last lines of its output:\n${tail}`;
+  return `${head}\nFailing tests (from the whole output):\n${failing}\nLast lines of its output:\n${tail}`;
 }
 
 /**

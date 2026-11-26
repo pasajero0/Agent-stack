@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.4 — unreleased
+
+- **The feedback of a failed check names the failing tests (defect #60):** the driver now takes the lines that
+  name failing tests from the whole output of a red check, not only from its last 50 lines. A line counts when,
+  after colour codes are removed, it starts with `FAIL`, `×`, `✗`, `not ok` or `--- FAIL`. The feedback shows
+  them under `Failing tests (from the whole output):`, before the tail: in order, without repeats, at most 40
+  lines of at most 300 characters, with the count of dropped lines. For a task's verify, the driver reads the
+  whole `verify.log`. Output with no such line gives the same feedback as before.
+
 ## 0.5.3 — Fewer stops that need a human
 
 - **A test runner config that lists new test files does not stop the run (defect #58, partly):** the driver no

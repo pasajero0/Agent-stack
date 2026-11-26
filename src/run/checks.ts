@@ -6,9 +6,38 @@ import type { CheckResult } from "./types.js";
 
 const TAIL_LINES = 50;
 
+/** Defect 60: limits of the failing lines kept from the whole output. Constants, no config key. */
+const FAILING_MAX_LINES = 40;
+const FAILING_MAX_CHARS = 300;
+/** Line starts (after spaces) that test runners print for a failure: vitest/jest, vitest marks, TAP, go test. */
+const FAILURE_MARKERS: readonly string[] = ["FAIL", "×", "✗", "not ok", "--- FAIL"];
+/** ANSI escape sequences (colour codes); built from a string so the escape character stays visible. */
+const ANSI = new RegExp("\\u001b\\[[0-9;?]*[ -/]*[@-~]", "g");
+
+/**
+ * The lines of `text` that name failing tests (defect 60): ANSI colour codes removed, in order, exact repeats
+ * dropped, at most FAILING_MAX_LINES lines of at most FAILING_MAX_CHARS characters, then how many were dropped.
+ * Empty when no line matches.
+ */
+export function failingLines(text: string): string {
+  const seen = new Set<string>();
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(ANSI, "").replace(/\r$/, "");
+    const start = line.trimStart();
+    if (FAILURE_MARKERS.some((m) => start.startsWith(m))) seen.add(line.slice(0, FAILING_MAX_CHARS));
+  }
+  const all = [...seen];
+  const kept = all.slice(0, FAILING_MAX_LINES);
+  const dropped = all.length - kept.length;
+  if (dropped > 0) kept.push(`(${dropped} more failing lines not shown)`);
+  return kept.join("\n");
+}
+
 /** A check result plus the last lines of its output. */
 export interface CheckRun extends CheckResult {
   tail: string;
+  /** Defect 60: the lines that name failing tests, from the whole output; set only for a red check. */
+  failing?: string;
   /** Set when the signal stopped the check: the step is interrupted, not red. */
   aborted?: boolean;
   /** Set when the check ran past its limit: the environment's fault, not a red check (AC-60). */
@@ -54,7 +83,9 @@ export function runCheck(cmd: string, cwd: string, timeoutMs: number, signal?: A
       signal?.removeEventListener("abort", onAbort);
       const text = extra ? (out ? `${out}\n${extra}` : extra) : out;
       const flag = stopped === "aborted" ? { aborted: true } : stopped === "timeout" ? { timedOut: true } : {};
-      resolve({ cmd, exit, skipped: false, tail: lastLines(text), ...flag });
+      // Defect 60: only a red check keeps failing lines; a timed-out or aborted check is unchanged.
+      const failing = stopped === null && exit !== 0 ? failingLines(text) : "";
+      resolve({ cmd, exit, skipped: false, tail: lastLines(text), ...flag, ...(failing ? { failing } : {}) });
     };
     child.on("error", (e) => finish(1, e.message));
     child.on("close", (code) => {
@@ -70,6 +101,13 @@ export function verifyTail(projectDir: string, stage: string): string {
   const log = join(projectDir, ".claude", "tmp", stage, "verify.log");
   if (!existsSync(log)) return "";
   return lastLines(readFileSync(log, "utf8"));
+}
+
+/** Failing lines of the whole `.claude/tmp/<stage>/verify.log` (defect 60); empty when there is no log. */
+export function verifyFailing(projectDir: string, stage: string): string {
+  const log = join(projectDir, ".claude", "tmp", stage, "verify.log");
+  if (!existsSync(log)) return "";
+  return failingLines(readFileSync(log, "utf8"));
 }
 
 /** Bash `case` glob semantics: `*` matches `/` too. */
