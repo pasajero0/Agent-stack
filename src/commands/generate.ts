@@ -1,11 +1,20 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { emitHarness, RoutingTemplateError } from "../claude/harness.js";
+import { missingSandboxTools, toolsLine } from "../claude/sandbox.js";
 import { banner, log } from "../utils/logger.js";
+import { commandExists } from "../utils/shell.js";
 import { printNextSteps } from "./next-steps.js";
 
-/** `templatesDir` is a test seam: where the harness templates are read from. */
-export async function generateCommand(options: { force?: boolean; templatesDir?: string } = {}): Promise<void> {
+/** `templatesDir`, `platform` and `exists` are test seams: where templates are read from, and the tools check. */
+export async function generateCommand(
+  options: {
+    force?: boolean;
+    templatesDir?: string;
+    platform?: string;
+    exists?: (cmd: string) => Promise<boolean>;
+  } = {}
+): Promise<void> {
   banner();
 
   const projectDir = process.cwd();
@@ -29,5 +38,7 @@ export async function generateCommand(options: { force?: boolean; templatesDir?:
 
   console.log();
   log.success(`Generated ${files.length} harness file(s).`);
+  const missing = await missingSandboxTools(options.platform ?? process.platform, options.exists ?? commandExists);
+  if (missing.length > 0) log.warn(toolsLine(missing));
   printNextSteps();
 }

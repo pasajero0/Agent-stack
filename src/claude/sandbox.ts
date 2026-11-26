@@ -81,6 +81,14 @@ export async function missingSandboxTools(platform: string, exists: Exists): Pro
   return missing;
 }
 
+/** The "tools" line of `generate` and `update` (Contract); `missing` is not empty. */
+export function toolsLine(missing: readonly string[]): string {
+  return (
+    `missing ${missing.join(", ")} on PATH: every Bash command fails, because sandbox.failIfUnavailable is true. ` +
+    "Install bubblewrap and socat, then run agent-stack detect."
+  );
+}
+
 /** The status part of the `detect` sandbox line (after the padded name). */
 export async function sandboxReadiness(platform: string, exists: Exists): Promise<string> {
   if (platform === "darwin") return chalk.green("✔ built in (macOS Seatbelt)");

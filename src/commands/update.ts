@@ -9,11 +9,19 @@ import {
   writeHarnessFiles,
   type UpdatePlan,
 } from "../claude/harness.js";
+import { missingSandboxTools, toolsLine } from "../claude/sandbox.js";
 import { banner, log } from "../utils/logger.js";
+import { commandExists } from "../utils/shell.js";
 
-/** `templatesDir` is a test seam: where the harness templates are read from. */
+/** `templatesDir`, `platform` and `exists` are test seams: where templates are read from, and the tools check. */
 export async function updateCommand(
-  options: { dryRun?: boolean; force?: boolean; templatesDir?: string } = {}
+  options: {
+    dryRun?: boolean;
+    force?: boolean;
+    templatesDir?: string;
+    platform?: string;
+    exists?: (cmd: string) => Promise<boolean>;
+  } = {}
 ): Promise<void> {
   banner();
 
@@ -34,6 +42,7 @@ export async function updateCommand(
   }
   const plan = planUpdate(projectDir, built, { force: options.force });
   const keys = plan.routingKeysAdded;
+  const missing = await missingSandboxTools(options.platform ?? process.platform, options.exists ?? commandExists);
 
   if (options.dryRun) {
     log.step("Harness update preview (dry run):");
@@ -50,7 +59,7 @@ export async function updateCommand(
       )
     );
     plan.edited.forEach((p) => console.log(`  = ${p} (you changed it — kept; --force overwrites)`));
-    reportExtras(plan);
+    reportExtras(plan, missing);
     console.log();
     log.dim(`  ${plan.unchanged} unchanged. rules/ and tmp/ are preserved (not emitter-owned).`);
     return;
@@ -77,10 +86,10 @@ export async function updateCommand(
           : ".")
   );
   plan.edited.forEach((p) => log.dim(`  kept ${p} — you changed it since it was deployed; --force overwrites`));
-  reportExtras(plan);
+  reportExtras(plan, missing);
 }
 
-function reportExtras(plan: UpdatePlan): void {
+function reportExtras(plan: UpdatePlan, missingTools: readonly string[]): void {
   plan.customHooks.forEach((h) => log.dim(`  kept your hook in settings.json — ${h}`));
   plan.customSettings.forEach((s) => log.dim(`  kept your setting in settings.json — ${s}`));
   plan.retiredHooks.forEach((h) =>
@@ -101,4 +110,5 @@ function reportExtras(plan: UpdatePlan): void {
     log.warn(".claude/settings.json is not valid JSON, so it was left as is. Fix it, then run update again.");
   }
   plan.sandboxLines.forEach((l) => (l.kind === "warn" ? log.warn(l.text) : log.dim(l.text)));
+  if (missingTools.length > 0) log.warn(toolsLine(missingTools));
 }
