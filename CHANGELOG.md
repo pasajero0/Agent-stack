@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.2 — unreleased
+## 0.5.2 — The driver starts from the chat inside the sandbox
 
 - **CI runs on release branches:** the workflow also runs on every commit sent to `release/**` and `hotfix/**`.
 - **Defects log has a `Cause` column:** every row in `docs/defects.md` names its cause. `pnpm defects` counts the
@@ -12,6 +12,15 @@
   `~/.config/agent-stack/claude-token` (made once with `claude setup-token`) and runs with its own sandbox off;
   the outer sandbox holds the call's processes. With no token the driver stops and names the command to run.
   A driver started from a terminal works as before. See README → Limits.
+- **Checked:** the evals started from the chat inside the sandbox pass (see the eval line below); the run that
+  made the `Cause` column was started and driven from the chat with the sandbox on.
+- **Defect log:** #58, #59.
+
+### Upgrading from 0.5.1
+
+- To start `agent-stack run` from a chat with the sandbox on (macOS): run `claude setup-token` in a terminal once
+  and save its output to `~/.config/agent-stack/claude-token` (`chmod 600`). One token serves every project on
+  the machine. Nothing to do if you start the driver from a terminal.
 
 ## 0.5.1 — Temp files inside the sandbox
 

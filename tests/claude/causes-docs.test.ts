@@ -70,7 +70,7 @@ describe("causes1 docs", () => {
   });
 
   it("causes1 AC-21: CHANGELOG 0.5.2 names the Cause column, pnpm defects and --check in one bullet", () => {
-    const e = section(read("CHANGELOG.md"), "## 0.5.2 — unreleased");
+    const e = section(read("CHANGELOG.md"), "## 0.5.2 — The driver starts from the chat inside the sandbox");
     expect(e).not.toBe("");
     const hit = bullets(e).filter((b) => b.includes("`Cause` column") && b.includes("pnpm defects"));
     expect(hit).toHaveLength(1);
