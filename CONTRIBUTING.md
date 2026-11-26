@@ -90,7 +90,8 @@ not when it is fixed.
 
 - **Classes:** `dup` (a rule written in several places drifted), `unverified` (an assumption about the platform or
   the model, not checked live), `slip` (an execution error: a command, an order, a wording), `design` (a hole in
-  the design), `process` (release, review or communication).
+  the design), `env` (a test's result depends on the machine it runs on: the OS, installed tools, the load, files
+  that are not in git), `process` (release, review or communication).
 - **A fixed defect gets a regression test**, unless it is a slip with nothing to test; then the row says `—`.
 - **A class that repeats gets a check, not more text.** When the same class shows up again, add a test, a hook or
   a driver check that catches it.
