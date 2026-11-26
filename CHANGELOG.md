@@ -14,6 +14,8 @@
   chat's Bash can be "Not logged in" inside the sandbox, so start `agent-stack run` from a terminal (defect #57,
   open).
 - **Defect log:** #54–#57.
+- **Eval run** on 0.5.1, k = 3, real `claude`, started from a terminal, the OS sandbox on in every try: 21/21
+  passed, pass^3 = 1, $1.63, 5:41 — `evals/results/2026-11-26-190628.json`.
 
 ### Upgrading from 0.5.0
 
