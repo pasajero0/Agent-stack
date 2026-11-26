@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { generateCommand } from "../../src/commands/generate.js";
 import { updateCommand } from "../../src/commands/update.js";
 import { buildSandboxBlock, SECRET_FOLDERS } from "../../src/claude/sandbox.js";
+import { pinPlatform } from "./pin-platform.js";
+
+pinPlatform(); // the warnings these tests compare must not depend on the machine (Linux without socat)
 
 // The Contract's `update` lines (docs/specs/sandbox1/SPEC.md).
 const KEPT = "  kept your setting in settings.json — ";

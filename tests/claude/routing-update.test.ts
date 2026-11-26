@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateCommand } from "../../src/commands/generate.js";
 import { updateCommand } from "../../src/commands/update.js";
+import { pinPlatform } from "./pin-platform.js";
+
+pinPlatform(); // the warnings these tests compare must not depend on the machine (Linux without socat)
 
 const SHIPPED = join(__dirname, "..", "..", "templates", "claude");
 const DEFAULT_ROUTING = JSON.parse(readFileSync(join(SHIPPED, "_routing.json"), "utf-8"));
