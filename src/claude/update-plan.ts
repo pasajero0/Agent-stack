@@ -4,7 +4,7 @@ import { join, dirname, posix, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GeneratedFile, UpdatePlan } from "./types.js";
 import { HOOKS_BLOCK, hookScript } from "./hooks-block.js";
-import { builtDomains, domainSource, generatedSandbox, readGeneratedSandbox, withDomains } from "./sandbox.js";
+import { builtDomains, domainSource, generatedSandbox, mergeSandbox, readGeneratedSandbox, withDomains } from "./sandbox.js";
 import type { GeneratedSandbox } from "./sandbox.js";
 
 export type { UpdatePlan } from "./types.js";
@@ -343,10 +343,12 @@ export function planUpdate(
         continue;
       }
       const settings = keepUserSettings(raw, merged.content, before.generatedAllow);
-      plan.customSettings = settings.kept;
-      f = { ...f, content: settings.content };
+      const sandbox = mergeSandbox(raw, settings.content, before.generatedSandbox);
+      plan.customSettings = [...settings.kept, ...sandbox.kept];
+      plan.sandboxLines = sandbox.lines;
+      f = { ...f, content: sandbox.content };
     }
-    if (f.path === SETTINGS && source.line) plan.sandboxLines.push(source.line);
+    if (f.path === SETTINGS && source.line) plan.sandboxLines.unshift(source.line); // the Contract order
     if (tracked(f.path)) {
       const deployed = recorded?.[f.path];
       const onDisk = existsSync(full) ? readFileSync(full, "utf-8") : null;

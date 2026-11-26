@@ -161,6 +161,147 @@ export function domainSource(
   return { domains: list.filter((_, i) => keys.indexOf(keys[i]!) === i), line: null };
 }
 
+/** Safe text (Terms): each control, line/paragraph separator and bidi character → `?`. */
+const UNSAFE = new RegExp("[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]", "g");
+export const safeText = (s: string): string => s.replace(UNSAFE, "?");
+const safeValue = (v: unknown): string => safeText(JSON.stringify(v));
+
+const SWITCH_WARNINGS: Readonly<Record<string, string>> = {
+  enabled: "Bash runs without the sandbox",
+  allowUnsandboxedCommands: "the model can run a command outside the sandbox",
+  failIfUnavailable: "Bash runs without the sandbox when the sandbox cannot start",
+};
+
+const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/** What the merge reports, kept apart so `customSettings` and the lines follow the Contract order. */
+interface MergeReport {
+  switches: string[];
+  keys: Record<"sandbox" | Place, string[]>; // other keys of each object place
+  entries: Record<Place, string[]>; // denyRead, then allowedDomains entries
+  warnings: string[];
+  replaced: Record<"objects" | "lists", string[]>; // the five places: the objects first, then the lists
+}
+
+type Place = "filesystem" | "network";
+const LIST_KEY = { filesystem: "denyRead", network: "allowedDomains" } as const;
+
+const replaced = (path: string, what: "an object" | "a list"): string =>
+  `replaced ${path} in .claude/settings.json: it was not ${what}`;
+
+/** A list place: the harness entries, then the user's (no entry twice; not one the harness wrote last time). */
+function mergeList(user: readonly unknown[], harness: readonly string[], before: readonly string[], path: string,
+  out: string[]): unknown[] {
+  const list: unknown[] = [...harness];
+  for (const v of user) {
+    if (list.some((x) => sameJson(x, v))) continue;
+    if (typeof v === "string" && before.includes(v)) continue; // ours last time, not now (AC-14)
+    list.push(v);
+    out.push(`${path}: ${typeof v === "string" ? safeText(v) : safeValue(v)}`);
+  }
+  return list;
+}
+
+/**
+ * An object place (`sandbox.filesystem` or `sandbox.network`) with its one list. Absent → the harness value;
+ * not an object → the harness value and a "replaced" line; else the list merged, then the user's other keys.
+ */
+function mergePlace(
+  userSandbox: Record<string, unknown>,
+  place: Place,
+  harness: readonly string[],
+  before: readonly string[],
+  r: MergeReport
+): Record<string, unknown> {
+  const path = `sandbox.${place}`;
+  const listKey = LIST_KEY[place];
+  const user = userSandbox[place];
+  if (!Object.hasOwn(userSandbox, place)) return { [listKey]: [...harness] };
+  if (!isObject(user)) {
+    r.replaced.objects.push(replaced(path, "an object"));
+    return { [listKey]: [...harness] };
+  }
+  const out: Record<string, unknown> = {};
+  const list = user[listKey];
+  if (!Object.hasOwn(user, listKey)) out[listKey] = [...harness];
+  else if (!Array.isArray(list)) {
+    r.replaced.lists.push(replaced(`${path}.${listKey}`, "a list"));
+    out[listKey] = [...harness];
+  } else out[listKey] = mergeList(list, harness, before, `${path}.${listKey}`, r.entries[place]);
+  for (const [k, v] of Object.entries(user)) {
+    if (k === listKey || k === "__proto__") continue;
+    out[k] = v;
+    r.keys[place].push(`${path}.${safeText(k)}`);
+  }
+  return out;
+}
+
+/**
+ * Merge the user's `sandbox` object of settings.json one level deeper (Model table): the user's weaker switch
+ * and other keys stay, list entries are added after the harness entries. `merged` is settings.json as the
+ * other merges left it (its `sandbox` is the harness block); `existing` is the settings.json on disk.
+ * `kept` goes after today's `customSettings`; `lines` are printed with the other sandbox lines.
+ */
+export function mergeSandbox(
+  existing: string,
+  merged: string,
+  before: GeneratedSandbox
+): { content: string; kept: string[]; lines: SandboxLine[] } {
+  const none = { content: merged, kept: [], lines: [] };
+  let old: unknown;
+  try {
+    old = JSON.parse(existing);
+  } catch {
+    return none;
+  }
+  if (!isObject(old) || !Object.hasOwn(old, "sandbox")) return none;
+  const next = JSON.parse(merged) as Record<string, unknown>;
+  const harness = next.sandbox as SandboxBlock; // `merged` comes from buildSettings: its shape is known
+  const user = old.sandbox;
+  const warn = (text: string): SandboxLine => ({ kind: "warn", text });
+  if (!isObject(user)) {
+    return { content: merged, kept: [], lines: [warn(replaced("sandbox", "an object"))] };
+  }
+  const r: MergeReport = {
+    switches: [],
+    keys: { sandbox: [], filesystem: [], network: [] },
+    entries: { filesystem: [], network: [] },
+    warnings: [],
+    replaced: { objects: [], lists: [] },
+  };
+  const out: Record<string, unknown> = {};
+  for (const key of ["enabled", "allowUnsandboxedCommands", "failIfUnavailable"] as const) {
+    const v = user[key];
+    if (!Object.hasOwn(user, key) || v === harness[key]) {
+      out[key] = harness[key];
+      continue;
+    }
+    out[key] = v; // a weaker value: the user wins, with a warning
+    r.switches.push(`sandbox.${key}: ${safeValue(v)}`);
+    r.warnings.push(`sandbox.${key} is ${safeValue(v)} in .claude/settings.json: ${SWITCH_WARNINGS[key]!}`);
+  }
+  out.filesystem = mergePlace(user, "filesystem", harness.filesystem.denyRead, before.denyRead, r);
+  out.network = mergePlace(user, "network", harness.network.allowedDomains, before.allowedDomains, r);
+  for (const [k, v] of Object.entries(user)) {
+    if (Object.hasOwn(out, k) || k === "__proto__") continue;
+    out[k] = v;
+    r.keys.sandbox.push(`sandbox.${safeText(k)}`);
+  }
+  next.sandbox = out;
+  return {
+    content: JSON.stringify(next, null, 2) + "\n",
+    kept: [
+      ...r.switches,
+      ...r.keys.sandbox,
+      ...r.keys.filesystem,
+      ...r.keys.network,
+      ...r.entries.filesystem,
+      ...r.entries.network,
+    ],
+    lines: [...r.warnings, ...r.replaced.objects, ...r.replaced.lists].map(warn),
+  };
+}
+
 /** The detected domain list inside a built settings.json (`buildSettings` output). */
 export function builtDomains(settings: string): string[] {
   const s: unknown = JSON.parse(settings);
