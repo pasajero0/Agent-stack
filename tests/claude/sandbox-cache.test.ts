@@ -21,7 +21,7 @@ describe("Q1: sandbox filesystem.allowWrite", () => {
     expect(buildSandboxBlock([], detectedWritePaths("uv")).filesystem).not.toHaveProperty("allowWrite");
   });
   it("Q1: withDomains keeps the allowWrite of the built block", () => {
-    const out = JSON.parse(withDomains(settings(["~/.npm"]), ["b.com"])) as ReturnType<typeof JSON.parse>;
+    const out = JSON.parse(withDomains(settings(["~/.npm"]), ["b.com"]));
     expect(out.sandbox.filesystem.allowWrite).toEqual(["~/.npm"]);
     expect(out.sandbox.network.allowedDomains).toEqual(["b.com"]);
   });
@@ -34,5 +34,17 @@ describe("Q1: sandbox filesystem.allowWrite", () => {
     const existing = JSON.stringify({ sandbox: { filesystem: { denyRead: [] } } });
     const out = JSON.parse(mergeSandbox(existing, settings(["~/.npm"]), BEFORE).content);
     expect(out.sandbox.filesystem.allowWrite).toEqual(["~/.npm"]);
+  });
+  it("Q1: update drops the old harness paths when the package manager changes", () => {
+    const pnpm = detectedWritePaths("pnpm");
+    const existing = JSON.stringify({ sandbox: { filesystem: { denyRead: [], allowWrite: [...pnpm, "/tmp/x"] } } });
+    const out = JSON.parse(mergeSandbox(existing, settings(["~/.npm"]), { ...BEFORE, allowWrite: pnpm }).content);
+    expect(out.sandbox.filesystem.allowWrite).toEqual(["~/.npm", "/tmp/x"]);
+  });
+  it("Q1: update writes no allowWrite key when the harness writes none and the user has only old harness paths", () => {
+    const pnpm = detectedWritePaths("pnpm");
+    const existing = JSON.stringify({ sandbox: { filesystem: { denyRead: [], allowWrite: pnpm } } });
+    const out = JSON.parse(mergeSandbox(existing, settings([]), { ...BEFORE, allowWrite: pnpm }).content);
+    expect(out.sandbox.filesystem).not.toHaveProperty("allowWrite");
   });
 });
