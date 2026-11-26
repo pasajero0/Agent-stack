@@ -318,10 +318,16 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     (checked on macOS, Claude Code 2.1.329). A fix is planned.
   - `dangerouslyDisableSandbox` does not take a command out of the sandbox (checked: the read of `~/.ssh` still
     fails with it).
-  - **Start the driver from a terminal, not from the chat's Bash, when a `Read(...)` deny rule covers the login.**
-    A `Read(...)` deny rule in any settings file reaches the sandbox, also one in your user settings. Seen with
-    `Read(~/Library/Keychains/**)` on macOS: a `claude` started inside the sandbox answers "Not logged in", so
-    `agent-stack run` and the eval runner make no model call. Not checked: a machine without such a rule.
+  - **The driver started from the chat's Bash (macOS) needs a token file.** Inside the sandbox a `claude` cannot
+    read the login (the sandbox hides the keychain) and cannot start its own sandbox (macOS refuses a sandbox
+    inside a sandbox). So `agent-stack run`, when it finds itself inside a sandbox, gives each call the token from
+    `~/.config/agent-stack/claude-token` and turns that call's own sandbox off; the outer sandbox still holds
+    every process the call starts. Make the file once: run `claude setup-token` in a terminal and save its output
+    there (`chmod 600`). Without the file the driver stops and says so. Limits: Bash in the repo can read that
+    file, and every process a call starts has the token in its environment, so a command that prints the
+    environment can put it into the run's `calls/` record (the token makes model requests only, for a year);
+    Linux is not handled; the driver finds the outer sandbox by asking the OS, and
+    `AGENT_STACK_OUTER_SANDBOX=0` skips that check. A driver started from a terminal works as before.
   - **Temporary files:** Bash writes only under `$TMPDIR` inside the sandbox. A script or a test that writes to
     `/tmp` by name, or calls a bare `mktemp` on macOS, fails there.
   - **Who wins:** a `false` in user settings, `--settings` or managed settings wins over the project value.

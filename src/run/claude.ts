@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
 import { lineSplitter, toolLines } from "./engine/progress.js";
+import { insideOuterSandbox, NO_TOKEN_MESSAGE, outerSandboxEnv } from "./outer-sandbox.js";
 import type { Role } from "./types.js";
 
 export type Model = "opus" | "sonnet" | "haiku";
@@ -55,6 +56,10 @@ export interface CallIo {
   signal?: AbortSignal;
   /** Called with one line per tool the role starts, while the call runs (AC-78). */
   onTool?: (line: string) => void;
+  /** The driver runs inside an OS sandbox; unset = ask the OS (`insideOuterSandbox`). Tests set it. */
+  outerSandbox?: boolean;
+  /** The home folder that holds the token file; unset = the user's. Tests set it. */
+  home?: string;
 }
 
 /** What a call may load besides the repo (AC-58): the project's MCP config, and the user CLAUDE.md to exclude. */
@@ -63,6 +68,11 @@ export interface CallScope {
   mcpConfig: string;
   /** Absolute path of the user-level CLAUDE.md, passed in `claudeMdExcludes`. */
   userClaudeMd: string;
+  /**
+   * The driver runs inside an OS sandbox: the call's own sandbox is turned off, because macOS refuses a sandbox
+   * inside a sandbox and every Bash command of the call would fail. The outer sandbox holds the call's processes.
+   */
+  outerSandbox?: boolean;
 }
 
 const NO_MCP = '{"mcpServers":{}}';
@@ -164,7 +174,10 @@ export function buildArgs(spec: CallSpec, scope: CallScope): string[] {
     "--setting-sources",
     "project,local",
     "--settings",
-    JSON.stringify({ claudeMdExcludes: [scope.userClaudeMd] }),
+    JSON.stringify({
+      claudeMdExcludes: [scope.userClaudeMd],
+      ...(scope.outerSandbox === true ? { sandbox: { enabled: false } } : {}),
+    }),
   ];
   if (spec.budgetUsd !== null) args.push("--max-budget-usd", String(spec.budgetUsd));
   if (spec.role === "implement") {
@@ -272,11 +285,16 @@ function killGroup(pid: number | undefined, killChild: () => void): void {
 export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcome> {
   const bin = io.env?.["AGENT_STACK_CLAUDE"] ?? process.env["AGENT_STACK_CLAUDE"] ?? "claude";
   const configDir = io.env?.["CLAUDE_CONFIG_DIR"] ?? process.env["CLAUDE_CONFIG_DIR"];
-  const args = buildArgs(spec, callScope(io.cwd, homedir(), configDir));
+  const merged = { ...process.env, ...io.env };
+  const outerSandbox = io.outerSandbox ?? insideOuterSandbox(merged);
+  const home = io.home ?? homedir();
+  const tokenEnv = outerSandbox ? outerSandboxEnv(merged, home) : {};
+  if (tokenEnv === null) return { kind: "infra", message: NO_TOKEN_MESSAGE, costUsd: null };
+  const args = buildArgs(spec, { ...callScope(io.cwd, home, configDir), ...(outerSandbox ? { outerSandbox } : {}) });
   const sub = execa(bin, args, {
     cwd: io.cwd,
     input: io.prompt,
-    env: { ...io.env, ...PROJECT_ONLY_ENV, AGENT_STACK_RUN: io.runId },
+    env: { ...io.env, ...tokenEnv, ...PROJECT_ONLY_ENV, AGENT_STACK_RUN: io.runId },
     detached: true,
     reject: false,
     stripFinalNewline: false,

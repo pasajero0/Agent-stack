@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2 — unreleased
+
+- **The driver and the evals start from the chat with the sandbox on (macOS, defect #57):** inside an OS sandbox
+  a `claude` child could not read the login ("Not logged in") and could not start its own sandbox. The driver now
+  asks the OS whether it runs inside a sandbox. If it does, each call gets the token from
+  `~/.config/agent-stack/claude-token` (made once with `claude setup-token`) and runs with its own sandbox off;
+  the outer sandbox holds the call's processes. With no token the driver stops and names the command to run.
+  A driver started from a terminal works as before. See README → Limits.
+
 ## 0.5.1 — Temp files inside the sandbox
 
 - **`verify` records the result again (macOS, run by the agent in Bash):** `.claude/bin/verify` made its temp

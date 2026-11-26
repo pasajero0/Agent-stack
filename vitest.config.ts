@@ -25,6 +25,8 @@ const SLOW = [
 export default defineConfig({
   test: {
     globals: true,
+    // The tests must not depend on the machine: no probe for an outer OS sandbox, no token file (defect #57).
+    env: { AGENT_STACK_OUTER_SANDBOX: "0" },
     workspace: [
       {
         extends: true,
