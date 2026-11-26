@@ -3,6 +3,8 @@
  * and the sandbox block the harness writes into `.claude/settings.json`. The only place in `src/` that holds them.
  */
 
+import chalk from "chalk";
+
 /** Folders Bash may not read inside the sandbox, in the Contract order. Not `~/.config/gh`: `gh pr view` needs it. */
 export const SECRET_FOLDERS: readonly string[] = [
   "~/.ssh",
@@ -64,6 +66,31 @@ export function buildSandboxBlock(domains: readonly string[]): SandboxBlock {
     filesystem: { denyRead: [...SECRET_FOLDERS] },
     network: { allowedDomains: [...domains] },
   };
+}
+
+type Exists = (cmd: string) => Promise<boolean>;
+
+/** On `linux`, the sandbox tools not found on `PATH` (`bwrap` first). Empty elsewhere; `exists` is not called. */
+export async function missingSandboxTools(platform: string, exists: Exists): Promise<string[]> {
+  if (platform !== "linux") return [];
+  const missing: string[] = [];
+  for (const tool of ["bwrap", "socat"]) {
+    if (!(await exists(tool))) missing.push(tool);
+  }
+  return missing;
+}
+
+/** The status part of the `detect` sandbox line (after the padded name). */
+export async function sandboxReadiness(platform: string, exists: Exists): Promise<string> {
+  if (platform === "darwin") return chalk.green("✔ built in (macOS Seatbelt)");
+  if (platform !== "linux") {
+    return chalk.dim(`? not checked on ${platform} — see Claude Code's sandbox docs`);
+  }
+  const missing = await missingSandboxTools(platform, exists);
+  if (missing.length === 0) return chalk.green("✔ found bwrap, socat");
+  return chalk.red(
+    `✖ missing ${missing.join(", ")} — Bash commands will fail; install bubblewrap and socat`,
+  );
 }
 
 /** The manifest's `generatedSandbox`: the lists the harness wrote, without the user's entries. */
