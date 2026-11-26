@@ -5,7 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, posix } from "node:path";
 import { globMatch } from "../checks.js";
 import { existsOnRef, git, taskDiffPaths } from "../git.js";
 import type { RunTask } from "../types.js";
@@ -53,6 +53,56 @@ function kindOf(path: string): "gone" | "file" | "other" {
 
 function isCheckConfig(path: string): boolean {
   return CHECK_CONFIGS.some((g) => globMatch(g, g.includes("/") ? path : basename(path)));
+}
+
+/**
+ * Test runner configs, the only check configs whose change can pass as "adds new test files only". Not CI
+ * workflows: a new step can run any command, one that removes tests too, so code cannot judge it.
+ */
+const TEST_RUNNER_CONFIGS: readonly string[] = ["vitest.config.*", "vitest.workspace.*", "jest.config.*", "playwright.config.*"];
+
+const isTestRunnerConfig = (path: string): boolean => TEST_RUNNER_CONFIGS.some((g) => globMatch(g, basename(path)));
+
+/** One quoted string, no escapes; its text, or null. */
+const QUOTED = /^(?:"([^"\\]*)"|'([^'\\]*)'|`([^`\\$]*)`)$/;
+const GLOB_CHARS = /[*?[\]{}!]/;
+
+/**
+ * The new test files a test runner config at `path` lists, when its change since `base` only adds them: no
+ * base line removed, and every added line, trimmed and without one trailing comma, is one quoted path with no
+ * glob character, of a test file that did not exist at the base and is a regular file now. Null otherwise.
+ * Paths in a config are relative to its folder.
+ */
+function listsNewTests(dir: string, base: string, path: string, testGlobs: string[]): string[] | null {
+  if (!isTestRunnerConfig(path) || kindOf(join(dir, path)) !== "file") return null;
+  const before = git(dir, ["show", `${base}:${path}`]).stdout.split("\n");
+  const now = readFileSync(join(dir, path), "utf8").split("\n");
+  // No base line removed: the base lines are a subsequence of the lines now; the others are added.
+  const added: string[] = [];
+  let i = 0;
+  for (const line of now) {
+    if (i < before.length && line === before[i]) i++;
+    else added.push(line);
+  }
+  if (i < before.length || added.length === 0) return null;
+  const files: string[] = [];
+  for (const line of added) {
+    let t = line.trim();
+    if (t.endsWith(",")) t = t.slice(0, -1).trimEnd();
+    const m = QUOTED.exec(t);
+    const s = m === null ? undefined : (m[1] ?? m[2] ?? m[3]);
+    if (s === undefined || s === "" || GLOB_CHARS.test(s) || isAbsolute(s)) return null;
+    const p = posix.normalize(posix.join(posix.dirname(path), s));
+    if (p === ".." || p.startsWith("../")) return null;
+    if (!isTestFile(testGlobs, p) || existsOnRef(dir, base, p) || kindOf(join(dir, p)) !== "file") return null;
+    files.push(p);
+  }
+  return files;
+}
+
+/** The check configs at the base the task changed, with the new test files the ones that only add them list. */
+function changedConfigs(dir: string, base: string, testGlobs: string[], paths: string[]): { path: string; files: string[] | null }[] {
+  return paths.filter(isCheckConfig).map((p) => ({ path: p, files: listsNewTests(dir, base, p, testGlobs) }));
 }
 
 /** The dependency entries of a package manifest, as key paths. */
@@ -183,8 +233,9 @@ export function testChanges(dir: string, base: string, testGlobs: string[]): str
     // A binary fixture is not counted.
     if (!before.includes("\0") && !now.includes("\0")) out.push(...weakened(named(p), before, now));
   }
-  for (const p of paths) {
-    if (!isCheckConfig(p)) continue;
+  for (const { path: p, files } of changedConfigs(dir, base, testGlobs, paths)) {
+    // A test runner config that only lists new test files cannot weaken a check that existed (defect 58).
+    if (files !== null) continue;
     // Keyed by content: a later edit of an allowed config is a new change (AC-66).
     if (kindOf(join(dir, p)) === "gone") out.push(`deleted check config ${named(p)}`);
     else out.push(`changed check config ${named(p)} (now ${git(dir, ["hash-object", "--", p]).stdout.trim().slice(0, 7)})`);
@@ -193,10 +244,26 @@ export function testChanges(dir: string, base: string, testGlobs: string[]): str
   return out;
 }
 
+/**
+ * The test runner configs whose change since `base` only lists new test files, one line per config for the
+ * human: testChanges reports them as nothing (defect 58).
+ */
+export function passedConfigChanges(dir: string, base: string, testGlobs: string[]): string[] {
+  const paths = taskDiffPaths(dir, base).filter((p) => isTestRunnerConfig(p) && existsOnRef(dir, base, p));
+  return changedConfigs(dir, base, testGlobs, paths).flatMap(({ path, files }) =>
+    files === null ? [] : [`test config change passed: ${named(path)} lists new test file(s) ${files.map(named).join(", ")}`],
+  );
+}
+
 /** The task's changes the human has not allowed (AC-66). */
 export function newChanges(dir: string, task: RunTask, testGlobs: string[]): string[] {
   if (task.taskBase === null) return [];
   return testChanges(dir, task.taskBase, testGlobs).filter((c) => !task.allowedChanges.includes(c));
+}
+
+/** The task's test runner config changes that passed without a stop (defect 58). */
+export function newPassedChanges(dir: string, task: RunTask, testGlobs: string[]): string[] {
+  return task.taskBase === null ? [] : passedConfigChanges(dir, task.taskBase, testGlobs);
 }
 
 /** The feedback and gate text for the changes (AC-66). */

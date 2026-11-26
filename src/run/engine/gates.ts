@@ -143,6 +143,7 @@ function acceptCard(ctx: Ctx, final: CheckRun | null): CardInput {
     f.add(`${t.id}: ${commitText(t.commit)}; attempts ${t.attempts}; checks: ${checks || "none"}`);
     for (const n of t.notes) f.add(`${t.id} note: ${n}`);
     for (const c of t.allowedChanges) f.whole(`${t.id} test change allowed: ${c}`);
+    for (const c of t.passedChanges ?? []) f.whole(`${t.id} ${c}`);
   }
   if (final !== null) {
     const isRed = final.exit !== 0;

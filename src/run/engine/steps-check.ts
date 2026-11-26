@@ -10,7 +10,7 @@ import { reviewPrompt } from "../prompts.js";
 import { blockingCount, isBlocking, parseReview, type ReviewOutput } from "../schemas.js";
 import { judgeCall } from "./call.js";
 import { driverCheck, Interrupted, type CheckItem, type Ctx, type StepHandler } from "./context.js";
-import { newChanges, testChangesText } from "./frozen.js";
+import { newChanges, newPassedChanges, testChangesText } from "./frozen.js";
 import { lastImplement, START_NOTE } from "./steps-implement.js";
 import { baseOf, failAttempt, taskOf, timedOutError, toLimit } from "./task-core.js";
 import { taskNext, type StepEvent } from "./transitions.js";
@@ -30,6 +30,10 @@ export const checks: StepHandler = async (ctx, id) => {
     task.lastFeedback = testChangesText(task.pendingChanges);
     return toLimit(ctx, "tests-changed", taskNext("checks", task.id));
   }
+  // Defect 58: a test runner config that only lists new test files passes; the human sees it at gate:accept.
+  const passed = newPassedChanges(ctx.projectDir, task, ctx.cfg.testGlobs);
+  if (passed.length > 0) task.passedChanges = passed;
+  else delete task.passedChanges;
   const info = ctx.mode.taskInfo(ctx, task.id);
   const items = ctx.mode.checkItems(ctx, task, info);
   const runs: CheckRun[] = [];

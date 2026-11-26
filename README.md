@@ -210,7 +210,9 @@ criterion, it leaves the test alone: gate `limit` (reason `test-conflict`) shows
 reason, and `r` with your answer retries without counting an attempt. If a task deletes or weakens a test that was
 there at its start (fewer tests or assertions, more skip marks, a changed CI or test config), gate `limit` (reason
 `tests-changed`) lists the changes: `a` allows exactly those, `r` sends the task back, `c` cancels. A weaker
-assertion that keeps the count (`toBe(3)` → `toBeTruthy()`) is not seen.
+assertion that keeps the count (`toBe(3)` → `toBeTruthy()`) is not seen. One change does not stop: a test runner
+config (`vitest.config.*`, `jest.config.*`, …) that only lists the task's new test files. Gate `accept` shows it
+as `test config change passed: …`.
 
 Before gate `accept`, a task run with more than one task runs every
 task's verify once more and marks a red result.

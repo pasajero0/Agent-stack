@@ -266,6 +266,30 @@ describe("quick mode: attempts, review and the fuse", () => {
     expect(text(r)).toContain("test change allowed: deleted test file tests/readme.test.ts");
   });
 
+  it("Q1: a test runner config that lists a new test file does not stop; gate:accept shows the line", async () => {
+    const r = repo();
+    write(r.dir, "vitest.config.ts", 'export default {\n  test: {\n    include: [\n      "tests/a.test.ts",\n    ],\n  },\n};\n');
+    write(r.dir, "tests/a.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n});\n');
+    git(r.dir, "add", "-A");
+    git(r.dir, "commit", "-q", "-m", "test: config");
+    r.script([
+      impl({
+        writes: {
+          "vitest.config.ts": 'export default {\n  test: {\n    include: [\n      "tests/a.test.ts",\n      "tests/b.test.ts",\n    ],\n  },\n};\n',
+          "tests/b.test.ts": 'it("b", () => {\n  expect(1).toBe(1);\n});\n',
+        },
+      }),
+    ]);
+    const code = await startRun({ ...r.opts({ gate: ["a"] }), mode: "quick", description: DESC });
+    expect(code, text(r)).toBe(0);
+    const run = r.run();
+    expect(run.status).toBe("finished");
+    expect(run.limitReason).toBeNull();
+    expect(run.tasks[0]?.allowedChanges).toEqual([]);
+    expect(run.tasks[0]?.passedChanges).toEqual(["test config change passed: vitest.config.ts lists new test file(s) tests/b.test.ts"]);
+    expect(text(r)).toContain("Q1 test config change passed: vitest.config.ts lists new test file(s) tests/b.test.ts");
+  });
+
   it("v04 AC-66: a allows only the changes listed; one made while the gate waited stops again", async () => {
     const r = repo();
     write(r.dir, "tests/a.test.ts", 'it("a", () => {\n  expect(1).toBe(1);\n});\n');

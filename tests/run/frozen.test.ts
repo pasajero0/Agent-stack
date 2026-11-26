@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { cleanupProjects, git, write } from "../hooks/fixture.js";
-import { testChanges } from "../../src/run/engine/frozen.js";
+import { passedConfigChanges, testChanges } from "../../src/run/engine/frozen.js";
 import { repo, sh } from "./engine-fixture.js";
 
 afterEach(() => cleanupProjects());
@@ -170,5 +170,92 @@ describe("frozen tests and check configs (AC-66)", () => {
     write(dir, "tests/a.test.ts/x.txt", "x\n");
     write(dir, "tests/blob.bin", "b\0\n");
     expect(testChanges(dir, base, GLOBS)).toEqual(["replaced test file tests/a.test.ts"]);
+  });
+});
+
+describe("a test runner config that lists new test files only (Q1, defect 58)", () => {
+  const CONFIG = 'export default {\n  test: {\n    include: [\n      "tests/a.test.ts",\n    ],\n  },\n};\n';
+  /** CONFIG with `lines` added after the listed test file. */
+  const withLines = (...lines: string[]): string => CONFIG.replace('"tests/a.test.ts",\n', `"tests/a.test.ts",\n${lines.map((l) => `${l}\n`).join("")}`);
+  const start = (): { dir: string; base: string } => based({ "vitest.config.ts": CONFIG, "tests/a.test.ts": JS });
+  const stopped = (dir: string, base: string): void => {
+    const now = sh(dir, "hash-object", "--", "vitest.config.ts").slice(0, 7);
+    expect(testChanges(dir, base, GLOBS)).toEqual([`changed check config vitest.config.ts (now ${now})`]);
+    expect(passedConfigChanges(dir, base, GLOBS)).toEqual([]);
+  };
+
+  it("Q1: a new test file path added to a list passes without a change and is reported as passed", () => {
+    const { dir, base } = start();
+    write(dir, "vitest.config.ts", withLines('      "tests/b.test.ts",', "      'tests/c.test.ts'"));
+    write(dir, "tests/b.test.ts", JS);
+    write(dir, "tests/c.test.ts", JS);
+    expect(testChanges(dir, base, GLOBS)).toEqual([]);
+    expect(passedConfigChanges(dir, base, GLOBS)).toEqual(["test config change passed: vitest.config.ts lists new test file(s) tests/b.test.ts, tests/c.test.ts"]);
+  });
+
+  it("Q1: a nested config lists paths relative to its folder", () => {
+    const { dir, base } = based({ "pkg/web/vitest.config.ts": CONFIG, "pkg/web/tests/a.test.ts": JS });
+    write(dir, "pkg/web/vitest.config.ts", withLines('      "tests/b.test.ts",'));
+    write(dir, "pkg/web/tests/b.test.ts", JS);
+    expect(testChanges(dir, base, GLOBS)).toEqual([]);
+    expect(passedConfigChanges(dir, base, GLOBS)).toEqual(["test config change passed: pkg/web/vitest.config.ts lists new test file(s) pkg/web/tests/b.test.ts"]);
+  });
+
+  it("Q1: a removed line stops", () => {
+    const { dir, base } = start();
+    write(dir, "vitest.config.ts", withLines('      "tests/b.test.ts",').replace('      "tests/a.test.ts",\n', ""));
+    write(dir, "tests/b.test.ts", JS);
+    stopped(dir, base);
+  });
+
+  it("Q1: a changed line stops", () => {
+    const { dir, base } = start();
+    write(dir, "vitest.config.ts", withLines('      "tests/b.test.ts",').replace("include", "exclude"));
+    write(dir, "tests/b.test.ts", JS);
+    stopped(dir, base);
+  });
+
+  it("Q1: a glob stops", () => {
+    const { dir, base } = start();
+    write(dir, "vitest.config.ts", withLines('      "tests/*.test.ts",'));
+    write(dir, "tests/b.test.ts", JS);
+    stopped(dir, base);
+  });
+
+  it("Q1: a path that existed at the base stops", () => {
+    const { dir, base } = based({ "vitest.config.ts": CONFIG, "tests/a.test.ts": JS, "tests/old.test.ts": JS });
+    write(dir, "vitest.config.ts", withLines('      "tests/old.test.ts",'));
+    stopped(dir, base);
+  });
+
+  it("Q1: a path that does not exist stops", () => {
+    const { dir, base } = start();
+    write(dir, "vitest.config.ts", withLines('      "tests/b.test.ts",'));
+    stopped(dir, base);
+  });
+
+  it("Q1: a path that is not a test file stops", () => {
+    const { dir, base } = start();
+    write(dir, "vitest.config.ts", withLines('      "src/b.ts",'));
+    write(dir, "src/b.ts", "export const b = 1;\n");
+    stopped(dir, base);
+  });
+
+  it("Q1: a line that is not one quoted string stops", () => {
+    const { dir, base } = start();
+    write(dir, "vitest.config.ts", withLines('      "tests/b.test.ts", "tests/c.test.ts",', "      bail: 1,"));
+    write(dir, "tests/b.test.ts", JS);
+    write(dir, "tests/c.test.ts", JS);
+    stopped(dir, base);
+  });
+
+  it("Q1: the same addition in .github/workflows stops", () => {
+    const yml = "on: push\njobs:\n  t:\n    steps:\n      - run: pnpm test\n";
+    const { dir, base } = based({ ".github/workflows/ci.yml": yml });
+    write(dir, ".github/workflows/ci.yml", `${yml}      "tests/b.test.ts",\n`);
+    write(dir, "tests/b.test.ts", JS);
+    const now = sh(dir, "hash-object", "--", ".github/workflows/ci.yml").slice(0, 7);
+    expect(testChanges(dir, base, GLOBS)).toEqual([`changed check config .github/workflows/ci.yml (now ${now})`]);
+    expect(passedConfigChanges(dir, base, GLOBS)).toEqual([]);
   });
 });
