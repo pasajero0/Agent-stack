@@ -16,6 +16,7 @@ const SLOW = [
   "tests/run/timing.test.ts",
   "tests/run/watch.test.ts",
   "tests/eval/**/*.test.ts",
+  "tests/scripts/defect-causes-cli.test.ts",
   "tests/claude/sandbox-update.test.ts",
   "tests/claude/sandbox-merge.test.ts",
   "tests/claude/sandbox-lists.test.ts",

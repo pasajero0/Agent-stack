@@ -197,6 +197,21 @@ describe("defect-causes countCauses and main", () => {
     expect(failingCauses(counts([1, 2].map((n) => ({ n, date: "d", cause: "c", test: "—" }))))).toEqual([]);
   });
 
+  it("causes1 AC-9: --check with failing causes prints the table, one stderr line per cause, code 1", () => {
+    const text = log(
+      "| 1 | d | big | — |", "| 2 | d | big | — |", "| 3 | d | big | — |", "| 4 | d | big | — |",
+      "| 5 | d | aaa | — |", "| 6 | d | aaa | — |", "| 7 | d | aaa | — |",
+      "| 8 | d | ok | — |",
+    );
+    const r = run(["--check"], text);
+    expect(r.code).toBe(1);
+    expect(lines(r.stdout).map(fields)[1][0]).toBe("big");
+    expect(r.stderr).toBe(
+      "defect-causes: big has 4 rows and no test or planned check (rows 1,2,3,4)\n" +
+        "defect-causes: aaa has 3 rows and no test or planned check (rows 5,6,7)\n",
+    );
+  });
+
   it("causes1 AC-22: header only prints only the header; --check adds check ok", () => {
     const a = run([], HEAD);
     expect(a.code).toBe(0);
