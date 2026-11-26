@@ -14,8 +14,8 @@ that drive that workflow. It is stack-agnostic: everything language-specific liv
   approval gates.
 - **What is checked:** regression evals (7 tasks: 5 on known agent failure modes — a weakened test, a test
   conflict, an extra dependency, scope creep, a broken access check — and 2 plain ones; k = 3): 21/21 passed,
-  pass^k = 1, $1.67, on 0.5.0 with the OS sandbox on, run of 2026-11-26 —
-  [evals/results/2026-11-26-174744.json](evals/results/2026-11-26-174744.json).
+  pass^k = 1, $1.63, on 0.5.1 with the OS sandbox on, run of 2026-11-26 —
+  [evals/results/2026-11-26-190628.json](evals/results/2026-11-26-190628.json).
 
 Read [Limits](#limits--read-before-trusting-it) before you trust it.
 
@@ -318,6 +318,12 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     (checked on macOS, Claude Code 2.1.329). A fix is planned.
   - `dangerouslyDisableSandbox` does not take a command out of the sandbox (checked: the read of `~/.ssh` still
     fails with it).
+  - **Start the driver from a terminal, not from the chat's Bash, when a `Read(...)` deny rule covers the login.**
+    A `Read(...)` deny rule in any settings file reaches the sandbox, also one in your user settings. Seen with
+    `Read(~/Library/Keychains/**)` on macOS: a `claude` started inside the sandbox answers "Not logged in", so
+    `agent-stack run` and the eval runner make no model call. Not checked: a machine without such a rule.
+  - **Temporary files:** Bash writes only under `$TMPDIR` inside the sandbox. A script or a test that writes to
+    `/tmp` by name, or calls a bare `mktemp` on macOS, fails there.
   - **Who wins:** a `false` in user settings, `--settings` or managed settings wins over the project value.
     Loosening entries in the repo's settings files are ignored only when managed settings or `--settings` set
     `allowUnsandboxedCommands: false`. For a lock the repo cannot loosen, put this block in managed settings, or

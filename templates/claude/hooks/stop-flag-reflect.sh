@@ -5,7 +5,10 @@ set -euo pipefail
 
 input=$(cat)
 session_id=$(echo "$input" | jq -r '.session_id // "unknown"')
-marker="/tmp/claude-sessions/$session_id.start"
+# Same folder as session-start-context.sh; the OS sandbox lets Bash write only under $TMPDIR.
+tmpbase="${TMPDIR:-/tmp}"
+tmpbase="${tmpbase%/}"
+marker="$tmpbase/claude-sessions/$session_id.start"
 [ -f "$marker" ] || exit 0
 
 # Self-derive the auto-memory dir slug from the session cwd (every "/" → "-").
@@ -17,7 +20,7 @@ MEM="$HOME/.claude/projects/${slug}/memory"
 
 # -quit stops at first match → ~few ms even if memory has many files
 if find "$MEM" -maxdepth 1 -name '*.md' -newer "$marker" -print -quit 2>/dev/null | grep -q .; then
-  touch /tmp/.claude-reflect-pending
+  touch "$tmpbase/.claude-reflect-pending"
 fi
 
 # Do NOT remove the marker — Stop fires on every turn within the same session.

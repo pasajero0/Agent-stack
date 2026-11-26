@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.1 — Temp files inside the sandbox
+
+- **`verify` records the result again (macOS, run by the agent in Bash):** `.claude/bin/verify` made its temp
+  file with a bare `mktemp`. On macOS that ignores `$TMPDIR`, so inside the OS sandbox it failed, `tasks.json`
+  was not updated, and `verify` printed "0/N tasks passing" for tasks that had passed. It now writes the temp
+  file next to `tasks.json`.
+- **Hook markers under `$TMPDIR`:** `session-start-context.sh` and `stop-flag-reflect.sh` kept their markers in
+  `/tmp/claude-sessions` and `/tmp/.claude-reflect-pending`. Both now use `${TMPDIR:-/tmp}`, the same folder.
+- **Found by turning the sandbox on in this repo:** 11 of the 855 slow tests failed inside it, all from the two
+  points above; now 857 of 857 pass there.
+- **README Limits, two new lines:** temporary files go under `$TMPDIR` only; and a `claude` started from the
+  chat's Bash can be "Not logged in" inside the sandbox, so start `agent-stack run` from a terminal (defect #57,
+  open).
+- **Defect log:** #54–#57.
+- **Eval run** on 0.5.1, k = 3, real `claude`, started from a terminal, the OS sandbox on in every try: 21/21
+  passed, pass^3 = 1, $1.63, 5:41 — `evals/results/2026-11-26-190628.json`.
+
+### Upgrading from 0.5.0
+
+- Run `agent-stack update`: it replaces `.claude/bin/verify` and the two hooks. Nothing to do by hand.
+
 ## 0.5.0 — OS sandbox for Bash
 
 - **Sandbox block in `settings.json`:** `generate` writes a `sandbox` object into `.claude/settings.json`. It
