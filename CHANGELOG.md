@@ -2,6 +2,9 @@
 
 ## 0.5.2 — unreleased
 
+- **Defects log has a `Cause` column:** every row in `docs/defects.md` names its cause. `pnpm defects` counts the
+  rows by cause, and `pnpm defects --check` runs in CI after `pnpm test:fast`. The rule is in
+  `docs/GLOSSARY.md` → Cause.
 - **The driver and the evals start from the chat with the sandbox on (macOS, defect #57):** inside an OS sandbox
   a `claude` child could not read the login ("Not logged in") and could not start its own sandbox. The driver now
   asks the OS whether it runs inside a sandbox. If it does, each call gets the token from

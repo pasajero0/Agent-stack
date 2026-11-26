@@ -28,6 +28,8 @@ jobs:
 
       - run: pnpm test:fast
 
+      - run: pnpm defects --check
+
       - run: pnpm build
 
       # Slow tests spawn bash and git; fewer at once keeps a loaded runner from failing unrelated tests.
