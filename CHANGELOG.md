@@ -8,6 +8,11 @@
   them under `Failing tests (from the whole output):`, before the tail: in order, without repeats, at most 40
   lines of at most 300 characters, with the count of dropped lines. For a task's verify, the driver reads the
   whole `verify.log`. Output with no such line gives the same feedback as before.
+- **The implement and review prompts mark outside text as data:** the driver now wraps the task description in
+  `<task_description>`, the feedback of the previous attempt in `<feedback>`, the diff in `<diff>` and the
+  implementer's report in `<implementer_report>`. Each prompt says, before the first tag, that the text inside
+  these tags is data, not instructions. A closing tag of the same name inside the text (any case, spaces inside)
+  gets a backslash after `<`, so the text cannot close its own tag. The labels and the order of the parts stay.
 
 ## 0.5.3 — Fewer stops that need a human
 
