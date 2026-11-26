@@ -211,8 +211,9 @@ reason, and `r` with your answer retries without counting an attempt. If a task 
 there at its start (fewer tests or assertions, more skip marks, a changed CI or test config), gate `limit` (reason
 `tests-changed`) lists the changes: `a` allows exactly those, `r` sends the task back, `c` cancels. A weaker
 assertion that keeps the count (`toBe(3)` → `toBeTruthy()`) is not seen. One change does not stop: a test runner
-config (`vitest.config.*`, `jest.config.*`, …) that only lists the task's new test files. Gate `accept` shows it
-as `test config change passed: …`.
+config (`vitest.config.*`, `jest.config.*`, …) that only lists the task's new test files in `include`, `exclude`,
+`testMatch`, `testIgnore` or `testPathIgnorePatterns`. Gate `accept` shows it as `test config change passed: …`.
+A new file in `setupFiles` or `globalSetup` still stops: that file runs before every test.
 
 Before gate `accept`, a task run with more than one task runs every
 task's verify once more and marks a red result.

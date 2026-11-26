@@ -241,11 +241,80 @@ describe("a test runner config that lists new test files only (Q1, defect 58)", 
     stopped(dir, base);
   });
 
-  it("Q1: a line that is not one quoted string stops", () => {
+  it("Q1: a line with two quoted strings stops", () => {
     const { dir, base } = start();
-    write(dir, "vitest.config.ts", withLines('      "tests/b.test.ts", "tests/c.test.ts",', "      bail: 1,"));
+    write(dir, "vitest.config.ts", withLines('      "tests/b.test.ts", "tests/c.test.ts",'));
     write(dir, "tests/b.test.ts", JS);
     write(dir, "tests/c.test.ts", JS);
+    stopped(dir, base);
+  });
+
+  it("Q1: a line that is not a string stops", () => {
+    const { dir, base } = start();
+    write(dir, "vitest.config.ts", withLines("      bail: 1,"));
+    stopped(dir, base);
+  });
+
+  /** A config whose list under `key` holds tests/a.test.ts, and the same config with tests/b.test.ts added to it. */
+  const keyed = (key: string): [string, string] => {
+    const config = (extra: string): string =>
+      `export default {\n  test: {\n    include: [\n      "tests/x.test.ts",\n    ],\n    ${key}: [\n      "tests/a.test.ts",\n${extra}    ],\n  },\n};\n`;
+    return [config(""), config('      "tests/b.test.ts",\n')];
+  };
+  /** Base `before`, now `after` with tests/b.test.ts new: testChanges stops or passes. */
+  const listed = (before: string, after: string): { dir: string; base: string } => {
+    const { dir, base } = based({ "vitest.config.ts": before, "tests/a.test.ts": JS });
+    write(dir, "vitest.config.ts", after);
+    write(dir, "tests/b.test.ts", JS);
+    return { dir, base };
+  };
+  const passed = ["test config change passed: vitest.config.ts lists new test file(s) tests/b.test.ts"];
+
+  it("Q1: a line added under setupFiles stops", () => {
+    const { dir, base } = listed(...keyed("setupFiles"));
+    stopped(dir, base);
+  });
+
+  it("Q1: a line added under globalSetup stops", () => {
+    const { dir, base } = listed(...keyed("globalSetup"));
+    stopped(dir, base);
+  });
+
+  it("Q1: a line added under include passes, also below a closed list of another key", () => {
+    const [before, after] = keyed("include");
+    const { dir, base } = listed(before.replace("include: [\n      \"tests/x", "setupFiles: [\n      \"tests/x"), after.replace("include: [\n      \"tests/x", "setupFiles: [\n      \"tests/x"));
+    expect(testChanges(dir, base, GLOBS)).toEqual([]);
+    expect(passedConfigChanges(dir, base, GLOBS)).toEqual(passed);
+  });
+
+  it("Q1: a line added in an object closed inside setupFiles stops", () => {
+    const config = (extra: string): string =>
+      `export default {\n  test: {\n    setupFiles: [\n      {\n        include: [\n          "tests/x.test.ts",\n        ],\n      },\n${extra}    ],\n  },\n};\n`;
+    const { dir, base } = listed(config(""), config('      "tests/b.test.ts",\n'));
+    stopped(dir, base);
+  });
+
+  /** This repo's vitest.config.ts shape: a top-level const list, used as `uses`. */
+  const constList = (uses: string, extra: string): string =>
+    `const SLOW = [\n  "tests/a.test.ts",\n${extra}];\n\nexport default {\n  test: {\n${uses}  },\n};\n`;
+  const B = '  "tests/b.test.ts",\n';
+
+  it("Q1: a line added in a const list used only as include and exclude passes", () => {
+    const uses = '    workspace: [\n      { test: { name: "fast", include: ["tests/**/*.test.ts"], exclude: SLOW } },\n      { test: { name: "slow", include: SLOW, pool: "forks" } },\n    ],\n';
+    const { dir, base } = listed(constList(uses, ""), constList(uses, B));
+    expect(testChanges(dir, base, GLOBS)).toEqual([]);
+    expect(passedConfigChanges(dir, base, GLOBS)).toEqual(passed);
+  });
+
+  it("Q1: a line added in a const list that is also spread into setupFiles stops", () => {
+    const uses = "    include: SLOW,\n    setupFiles: [...SLOW],\n";
+    const { dir, base } = listed(constList(uses, ""), constList(uses, B));
+    stopped(dir, base);
+  });
+
+  it("Q1: a line added in a const list that is never used stops", () => {
+    const uses = '    include: ["tests/**/*.test.ts"],\n';
+    const { dir, base } = listed(constList(uses, ""), constList(uses, B));
     stopped(dir, base);
   });
 

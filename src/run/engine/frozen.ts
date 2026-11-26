@@ -67,27 +67,61 @@ const isTestRunnerConfig = (path: string): boolean => TEST_RUNNER_CONFIGS.some((
 const QUOTED = /^(?:"([^"\\]*)"|'([^'\\]*)'|`([^`\\$]*)`)$/;
 const GLOB_CHARS = /[*?[\]{}!]/;
 
+/** Keys whose list selects test files; a list under any other key (setupFiles, globalSetup, …) runs code. */
+const OPENS_TEST_LIST = /^(?:include|exclude|testMatch|testIgnore|testPathIgnorePatterns)\s*:\s*\[$/;
+/** A top-level `const NAME = [`. */
+const OPENS_CONST_LIST = /^const\s+([A-Za-z_$][\w$]*)\s*=\s*\[$/;
+
+const escaped = (s: string): string => s.replace(/[$]/g, "\\$&");
+
+/**
+ * Whether the line at `at` lands in a list that selects test files: the nearest line above it that opens an
+ * array still open at `at` is `include: [` (or exclude, testMatch, testIgnore, testPathIgnorePatterns), or a
+ * top-level `const NAME = [` whose every other use is directly `include: NAME` or `exclude: NAME`.
+ * Line-based on purpose: no parser for every config language. Brackets in strings or comments can make it find
+ * a wrong opening line; then that line fits neither form and the change stops, or the base already held it.
+ */
+function selectsTests(lines: string[], at: number): boolean {
+  let depth = 0;
+  for (let k = at - 1; k >= 0; k--) {
+    const line = lines[k] ?? "";
+    depth += (line.match(/\]/g) ?? []).length - (line.match(/\[/g) ?? []).length;
+    if (depth >= 0) continue;
+    const t = line.trim();
+    if (OPENS_TEST_LIST.test(t)) return true;
+    const m = line.startsWith("const") ? OPENS_CONST_LIST.exec(t) : null;
+    if (m?.[1] === undefined) return false;
+    const name = escaped(m[1]);
+    const rest = lines.filter((_, j) => j !== k).join("\n");
+    const uses = (rest.match(new RegExp(`(?<![\\w$])${name}(?![\\w$])`, "g")) ?? []).length;
+    const asList = (rest.match(new RegExp(`(?<![\\w$])(?:include|exclude)\\s*:\\s*${name}(?=[ \\t]*(?:[,}]|$))`, "gm")) ?? []).length;
+    return uses > 0 && uses === asList;
+  }
+  return false;
+}
+
 /**
  * The new test files a test runner config at `path` lists, when its change since `base` only adds them: no
- * base line removed, and every added line, trimmed and without one trailing comma, is one quoted path with no
- * glob character, of a test file that did not exist at the base and is a regular file now. Null otherwise.
- * Paths in a config are relative to its folder.
+ * base line removed, and every added line lands in a list that selects test files (selectsTests) and, trimmed
+ * and without one trailing comma, is one quoted path with no glob character, of a test file that did not exist
+ * at the base and is a regular file now. Null otherwise. Paths in a config are relative to its folder.
  */
 function listsNewTests(dir: string, base: string, path: string, testGlobs: string[]): string[] | null {
   if (!isTestRunnerConfig(path) || kindOf(join(dir, path)) !== "file") return null;
   const before = git(dir, ["show", `${base}:${path}`]).stdout.split("\n");
   const now = readFileSync(join(dir, path), "utf8").split("\n");
   // No base line removed: the base lines are a subsequence of the lines now; the others are added.
-  const added: string[] = [];
+  const added: number[] = [];
   let i = 0;
-  for (const line of now) {
+  for (const [at, line] of now.entries()) {
     if (i < before.length && line === before[i]) i++;
-    else added.push(line);
+    else added.push(at);
   }
   if (i < before.length || added.length === 0) return null;
   const files: string[] = [];
-  for (const line of added) {
-    let t = line.trim();
+  for (const at of added) {
+    if (!selectsTests(now, at)) return null;
+    let t = (now[at] ?? "").trim();
     if (t.endsWith(",")) t = t.slice(0, -1).trimEnd();
     const m = QUOTED.exec(t);
     const s = m === null ? undefined : (m[1] ?? m[2] ?? m[3]);

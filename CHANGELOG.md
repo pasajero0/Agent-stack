@@ -4,8 +4,10 @@
 
 - **A test runner config that lists new test files does not stop the run (defect #58, partly):** the driver no
   longer stops at `tests-changed` when a task only adds paths of its own new test files to `vitest.config.*`,
-  `vitest.workspace.*`, `jest.config.*` or `playwright.config.*`. Gate:accept shows one line per config:
-  `test config change passed: <path> lists new test file(s) <paths>`. Any other change stops as before; CI
+  `vitest.workspace.*`, `jest.config.*` or `playwright.config.*`, in a list that selects test files (`include`,
+  `exclude`, `testMatch`, `testIgnore`, `testPathIgnorePatterns`, or a `const` list used only as `include` or
+  `exclude`). Gate:accept shows one line per config: `test config change passed: <path> lists new test file(s)
+  <paths>`. Any other change stops as before: a list that runs code (`setupFiles`, `globalSetup`, …), CI
   workflows, linters and `pnpm-workspace.yaml` always stop. See docs/specs/v04/SPEC.md → AC-66.
 
 ## 0.5.2 — The driver starts from the chat inside the sandbox

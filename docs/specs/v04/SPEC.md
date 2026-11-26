@@ -816,7 +816,12 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     `vitest.workspace.*`, `jest.config.*`, `playwright.config.*`) that only lists new test files. The line diff
     against the task's base removes no line. Each added line, after trimming spaces and one trailing comma, is one
     quoted string. That string holds no glob character (`* ? [ ] { } !`), is the path of a test file (`testGlobs`,
-    relative to the config's folder), did not exist at the base and is a regular file now. Gate:accept shows one
+    relative to the config's folder), did not exist at the base and is a regular file now. Each added line lands
+    in a list that selects test files: the nearest line above it that opens an array still open there is
+    `include: [`, `exclude: [`, `testMatch: [`, `testIgnore: [` or `testPathIgnorePatterns: [`, or a top-level
+    `const NAME = [` whose every other use is directly `include: NAME` or `exclude: NAME`. A list that runs code
+    (`setupFiles`, `globalSetup`, `globalTeardown`, `setupFilesAfterEnv`, `reporters`, an array in a function
+    call) always stops: its file runs before every test and can replace `expect`. Gate:accept shows one
     line per such config: `test config change passed: vitest.config.ts lists new test file(s) tests/b.test.ts`.
     CI workflows, linters and `pnpm-workspace.yaml` always stop: a new CI step can run any command, one that
     removes tests too, so code cannot judge it.
@@ -1172,7 +1177,8 @@ Manual check, once, with the real `claude` on a scratch repo:
 ## Changes
 
 - 2026-11-26 — AC-66 (defect 58): a test runner config that only lists new test files no longer stops the run;
-  gate:accept shows it. A test that only adds its own file to a list cannot weaken a check that existed.
+  gate:accept shows it. A test that only adds its own file to a list cannot weaken a check that existed. Only a
+  list that selects test files passes; a list that runs code (`setupFiles`, `globalSetup`) stops.
 - 2026-11-25 — AC-5, AC-35, AC-36, AC-37, AC-38, state table (the rows that start a task run, AC-85's row, "any
   infrastructure failure"), run file `next` values, Terms "Step" and "Run folder", Decisions "Models", Contract
   ("How Claude Code is invoked": role table, `--effort`; Role prompts; Role outputs): scout1. Why: a task run now
