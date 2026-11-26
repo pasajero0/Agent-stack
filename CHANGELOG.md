@@ -16,6 +16,17 @@
   are found. On Linux, `generate` and `update` warn when one is missing.
 - **README Limits:** "Blocklists, not a sandbox" is now "Blocklists for the tools", and a new bullet "OS sandbox
   (Bash only)" says what the sandbox covers and what it does not. Spec: `docs/specs/sandbox1/SPEC.md`.
+- **Audit of Claude Code's own controls** (sandbox, protected paths, auto mode, `updatedToolOutput`,
+  fail-closed hooks, worktrees): the input of the 0.5 security work. Kept outside the repo, with the doc URLs.
+- **Slow test group:** the four sandbox test files and `tests/run/scout-prompts.test.ts` start git and move to
+  `SLOW`, as CONTRIBUTING asks.
+- **The scout pays off:** the first spec step with a scout took 20:46 and $5.71, against 29:13 and about $9.15
+  without one (−29% time, −38% cost); the scout call cost $0.008. The scout stays.
+- **Eval run** on 0.5.0, k = 3, real `claude`, the OS sandbox on in every try: 21/21 passed, pass^3 = 1, $1.67,
+  6:18 (0.4.8: $1.29, 6:01). The cost rose in every task by a few cents a try; the cause is not measured.
+  Results: `evals/results/2026-11-26-112823.json`.
+- **Defect log:** #49–#51 (orphaned test workers after implement, tests with hard time limits on a loaded
+  machine, a bare retry after BLOCKED).
 
 ### Upgrading from 0.4.8
 
