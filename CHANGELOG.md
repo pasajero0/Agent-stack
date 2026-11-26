@@ -21,6 +21,18 @@
   package failed with MODULE_NOT_FOUND). `generate` no longer writes them. The guard-file hook now denies the
   Read tool, and Grep on such a path, for `protectedGlobs`, `node_modules/` and `coverage/`. `update` leaves
   `settings.local.json` alone, but warns and lists the `Read(...)` lines to remove by hand.
+- **Package cache is writable:** the sandbox block gets `filesystem.allowWrite` with the cache folders of the
+  detected package manager (npm, pnpm, yarn or bun; the paths are in README Limits). Without it an install inside
+  the sandbox failed with EPERM on the cache. `update` adds missing paths, keeps yours, and removes a path it
+  wrote earlier when the package manager changes. Any other package manager gets no write path yet.
+- **Live check with the real `claude`** (macOS, Claude Code 2.1.329 and 2.1.332). It found the two
+  defects above, which the tests and the eval run did not see: the eval tasks have no dependencies. Passed: Bash
+  cannot read `~/.ssh`; an unlisted domain is refused and a listed one answers; Bash cannot write
+  `.claude/settings*.json`, `.claude/hooks/`, `.claude/agents/`, `.git/hooks/`, `~/.zshrc` or `~/.gitconfig`;
+  `dangerouslyDisableSandbox` does not leave the sandbox; an install, a `require` of the installed package and
+  `npm ci` work; the Read tool is denied in `node_modules/`. Gaps, now in README Limits: Bash can write
+  `.claude/gates.json`, `.claude/bin/` and `CLAUDE.md`; in auto mode the model can open a host for one command
+  without a question to you; Node's `fetch` needs `NODE_USE_ENV_PROXY=1`. Not checked: Linux.
 - **Audit of Claude Code's own controls** (sandbox, protected paths, auto mode, `updatedToolOutput`,
   fail-closed hooks, worktrees): the input of the 0.5 security work. Kept outside the repo, with the doc URLs.
 - **Slow test group:** the four sandbox test files and `tests/run/scout-prompts.test.ts` start git and move to
@@ -35,6 +47,10 @@
 
 ### Upgrading from 0.4.8
 
+- **By hand, after `agent-stack update`:** remove the `Read(...)` deny rules from `.claude/settings.local.json`.
+  `update` lists the lines. Until you do, Bash inside the sandbox cannot read `node_modules`, the lockfile or
+  build output, so tests and builds that need them fail. The guard-file hook now keeps the Read tool away from
+  these paths.
 - Run `agent-stack update`: it adds the sandbox block to `settings.json`. The domain list comes from
   `gates.json` → `sandbox.allowedDomains`, or the detected list when that key is missing. `update` does not add
   the key to `gates.json`; it prints a line that says to add it.

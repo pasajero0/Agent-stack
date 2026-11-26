@@ -301,13 +301,23 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     keeps yours.
   - **Secret folders:** Bash cannot read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`, `~/.netrc`,
     `~/.npmrc`, `~/.config/gcloud` and `~/.azure`. The Read tool is not covered; guard-file still handles it.
+    `~/.config/gh` stays readable on purpose, so `gh` keeps its token. Git over SSH fails inside the sandbox,
+    because `~/.ssh` is unreadable. If you remove a secret folder from `denyRead`, `update` keeps it removed and
+    warns on each run.
   - **No `Read(...)` deny rules:** with the sandbox on, Claude Code applies them to Bash too, so a command
     could not read `node_modules`, the lockfile or build output. guard-file denies the Read tool (and Grep
     on such a path) for `gates.json` → `protectedGlobs`, `node_modules/` and `coverage/`. Bash can still
     read these. `update` warns when `settings.local.json` still has such rules; remove them by hand.
-    `~/.config/gh` stays readable on purpose, so `gh` keeps its token. Git over SSH fails inside the sandbox,
-    because `~/.ssh` is unreadable. If you remove a secret folder from `denyRead`, `update` keeps it removed and
-    warns on each run.
+  - **The domain list is not a hard limit in every permission mode.** The model can pass a list of hosts with
+    one Bash command. In the default mode Claude Code asks you. In auto mode its classifier decides and you are
+    not asked. With `bypassPermissions` the host is reached without a question. The hard lock is
+    `sandbox.network.allowManagedDomainsOnly`, and it works in managed settings only.
+  - **Harness files Bash can still write:** `.claude/gates.json`, `.claude/bin/` and `CLAUDE.md`. guard-file
+    stops the Edit and Write tools there, not a script run through Bash. The sandbox does deny Bash writes to
+    `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/`, `.claude/agents/` and `.git/hooks/`
+    (checked on macOS, Claude Code 2.1.329). A fix is planned.
+  - `dangerouslyDisableSandbox` does not take a command out of the sandbox (checked: the read of `~/.ssh` still
+    fails with it).
   - **Who wins:** a `false` in user settings, `--settings` or managed settings wins over the project value.
     Loosening entries in the repo's settings files are ignored only when managed settings or `--settings` set
     `allowUnsandboxedCommands: false`. For a lock the repo cannot loosen, put this block in managed settings, or
