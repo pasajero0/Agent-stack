@@ -9,6 +9,11 @@
   `exclude`), written one entry per line directly under its opening line. Gate:accept shows one line per config: `test config change passed: <path> lists new test file(s)
   <paths>`. Any other change stops as before: a list that runs code (`setupFiles`, `globalSetup`, …), CI
   workflows, linters and `pnpm-workspace.yaml` always stop. See docs/specs/v04/SPEC.md → AC-66.
+- **A red check runs once more before it fails the attempt (defects #43, #50, #56):** if a check command ends
+  with a non-zero exit, the driver runs it a second time. Green on the second run: the task goes on, the task's
+  check record keeps the first exit, and gate:accept shows `check passed on a second run: <command> (first exit
+  <n>)`. Red again: the attempt fails with the second run's output. A timeout, an interrupt, an empty command
+  and the base check are not run again. This can hide a test the task made unstable; the accept line shows it.
 
 ## 0.5.2 — The driver starts from the chat inside the sandbox
 

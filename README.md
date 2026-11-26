@@ -257,6 +257,12 @@ Turns per call, attempts per task and the review-loop stop apply whatever the ki
 A call that was killed, or whose result has no cost, counts as unknown cost, and the gates name those calls.
 A check that runs past `checkTimeoutMin` stops the run with exit 1 and counts no attempt: fix what hangs, then
 `--resume`.
+If a check command ends red (a non-zero exit), the driver runs it once more before it decides. If the second
+run is green, the check counts as green, and gate `accept` shows the line
+`check passed on a second run: <command> (first exit <n>)`. If it is red too, the attempt fails with the
+output of the second run. A timeout, an interrupt and an empty command are never run again. The base check
+at the start is not run again. What this can hide: a test that the task itself made unstable can pass on the
+second run. That is why gate `accept` shows the line: read it as "something is unstable".
 
 **Hooks stay on.** Claude is never started with `--bare`, `bypassPermissions` or `disableAllHooks`. Two hooks
 step aside only for a live driver run on the run's own branch: spec-gate (quick mode) and evidence-gate.

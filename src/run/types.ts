@@ -36,6 +36,8 @@ export interface CheckResult {
   cmd: string;
   exit: number;
   skipped: boolean;
+  /** The exit of the first run when the check was red, then green on the one rerun (defect 56). */
+  firstExit?: number;
 }
 
 export interface RunTask {
