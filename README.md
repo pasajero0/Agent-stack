@@ -14,8 +14,8 @@ that drive that workflow. It is stack-agnostic: everything language-specific liv
   approval gates.
 - **What is checked:** regression evals (7 tasks: 5 on known agent failure modes — a weakened test, a test
   conflict, an extra dependency, scope creep, a broken access check — and 2 plain ones; k = 3): 21/21 passed,
-  pass^k = 1, $1.63, on 0.5.1 with the OS sandbox on, run of 2026-11-26 —
-  [evals/results/2026-11-26-190628.json](evals/results/2026-11-26-190628.json).
+  pass^k = 1, $1.17, on 0.5.2, started from the chat inside the OS sandbox, run of 2026-11-26 —
+  [evals/results/2026-11-26-210528.json](evals/results/2026-11-26-210528.json).
 
 Read [Limits](#limits--read-before-trusting-it) before you trust it.
 

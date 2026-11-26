@@ -15,6 +15,8 @@
 - **Checked:** the evals started from the chat inside the sandbox pass (see the eval line below); the run that
   made the `Cause` column was started and driven from the chat with the sandbox on.
 - **Defect log:** #58, #59.
+- **Eval run** on 0.5.2, k = 3, real `claude`, started from the chat inside the OS sandbox: 21/21 passed,
+  pass^3 = 1, $1.17, 5:25 — `evals/results/2026-11-26-210528.json`.
 
 ### Upgrading from 0.5.1
 
