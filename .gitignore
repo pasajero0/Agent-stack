@@ -1,4 +1,6 @@
 node_modules/
+# A link to another checkout's node_modules is a file to git, not a folder.
+node_modules
 dist/
 *.tsbuildinfo
 .DS_Store

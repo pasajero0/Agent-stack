@@ -321,7 +321,8 @@
     // Tasks: essentials in the row, details on click.
     var costs = s.tasks.filter(function (t) { return t.done && t.cost > 0; }).map(function (t) { return t.cost; }).sort(function (a, b) { return a - b; });
     var median = costs.length ? costs[Math.floor((costs.length - 1) / 2)] : 0;
-    html.push('<table><colgroup><col style="width:20px"><col style="width:24px"><col style="width:44px"><col>' +
+    // No table before the plan exists: its head with no rows is empty space.
+    if (s.tasks.length) html.push('<table><colgroup><col style="width:20px"><col style="width:24px"><col style="width:44px"><col>' +
       '<col style="width:130px"><col style="width:64px"><col style="width:64px"><col style="width:64px"></colgroup><thead><tr>' + w.head.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>');
     s.tasks.forEach(function (t) {
       var rows = s.steps.filter(function (r) { return endsWithId(r.step, t.id); });
@@ -355,10 +356,10 @@
           '</div></td></tr>');
       }
     });
-    html.push('</tbody></table>');
+    if (s.tasks.length) html.push('</tbody></table>');
 
     if (running || s.actions.length) {
-      html.push('<div class="actions"><b>' + esc(w.now) + ':</b> <span class="mono">' + esc(s.step) + '</span> ' + mmss(s.stepSec) +
+      html.push('<div class="actions' + (s.tasks.length ? '' : ' big') + '"><b>' + esc(w.now) + ':</b> <span class="mono">' + esc(s.step) + '</span> ' + mmss(s.stepSec) +
         (s.model ? ' · <span class="mono">' + esc(s.model) + '</span>' : '') +
         '<div class="muted">' + esc(w.what[s.step.split(':')[0]] || (s.step.indexOf('gate:') === 0 ? w.what.gate : '')) + '</div>' +
         (s.actions.length === 0 && s.nowLast && s.nowLast.indexOf('step ') !== 0 ? '<div class="mono muted">' + esc(s.nowLast) + '</div>' : '') + '</div>');

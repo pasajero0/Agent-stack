@@ -397,7 +397,8 @@ async function load($: Engine, last: Snap | null): Promise<Snap | null> {
       checksFailed: arr(st.checks).some(c => obj(c).skipped !== true && num(obj(c).exit) !== 0),
       feedback: str(st.lastFeedback).slice(0, 8000),
       notes: arr(st.notes).map(x => (typeof x === 'string' ? x : str(obj(x).text) || JSON.stringify(x))),
-      model: modelByTask.get(tid) ?? '',
+      // A call record exists only after the call ends; until then the planned model, from gates.json → routing.
+      model: modelByTask.get(tid) ?? str(obj(obj(gates.routing)[str(t.tier)])[str(t.complexity)]).replace('·', ' · '),
       cost: costByTask.get(tid) ?? 0,
       denials: denialsByTask.get(tid) ?? [],
       commit,
