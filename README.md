@@ -136,6 +136,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `codeBy` | `"driver"`: only a live `agent-stack run` call may edit code; a chat runs the work with `/drive`. Default `"anyone"`. Optional, not in the seed |
 | `specFlow` | how a human approves a spec: `"merge"` (default, for a team: the spec branch is merged into the base branch) or `"branch"` (one person: spec, plan and code in the current branch; the driver's gate:spec-approve is the approval, a later spec change is approved again). Optional, not in the seed |
 | `language` | the operator chat's language: `{ "chat": "ru", "terms": "en" }`; both default to `en`. Optional, not in the seed |
+| `sandbox` | `allowedDomains`: the domains Bash may reach inside the OS sandbox. `generate` seeds it from detection (the package manager's registry, plus `github.com` and `api.github.com` for GitHub); `update` reads it and writes it into `settings.json`. An empty list means Bash has no network. To add a domain, edit the list, then run `update` |
 | `layers` | architecture boundaries, empty until an ADR sets them: `[{"name": "domain stays pure", "files": ["src/domain/*"], "forbid": ["infra/"], "adr": "docs/adr/0003-layers.md"}]` |
 
 **Default doc layout for a monorepo** (workspaces — pnpm, npm/yarn, `go.work`, Cargo — or an `apps/` or
@@ -278,12 +279,33 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 
 ## Limits — read before trusting it
 
-- **Blocklists, not a sandbox.** Guards catch an agent's mistakes, not a determined bypass: a file written
+- **Blocklists for the tools.** Guards catch an agent's mistakes, not a determined bypass: a file written
   through Bash (`sed -i`, `>`) skips the Edit/Write gates, and command matching is regex-based (known false
   positive: `git push` quoted inside another command's argument is blocked, and so is a heredoc that writes a
   file containing `git push` or another package manager's command. Use the Edit or Write tool for such a file.
   The guard does not skip heredoc text, because a heredoc fed to a shell runs it). Put the same checks in CI
   for anything that must hold.
+- **OS sandbox (Bash only).** The generated `.claude/settings.json` turns on Claude Code's OS sandbox (the
+  sandbox block).
+  - It covers Bash and its child processes only. Read, Edit, Write, WebFetch, WebSearch, MCP servers and hooks
+    run outside it.
+  - **Network:** for Bash, only the listed domains are reached without a question. The list is `gates.json` →
+    `sandbox.allowedDomains`. WebFetch is not limited by it.
+  - **Secret folders:** Bash cannot read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`, `~/.netrc`,
+    `~/.npmrc`, `~/.config/gcloud` and `~/.azure`. The Read tool is not covered; guard-file still handles it.
+    `~/.config/gh` stays readable on purpose, so `gh` keeps its token. Git over SSH fails inside the sandbox,
+    because `~/.ssh` is unreadable. If you remove a secret folder from `denyRead`, `update` keeps it removed and
+    warns on each run.
+  - **Who wins:** a `false` in user settings, `--settings` or managed settings wins over the project value.
+    Loosening entries in the repo's settings files are ignored only when managed settings or `--settings` set
+    `allowUnsandboxedCommands: false`. For a lock the repo cannot loosen, put this block in managed settings, or
+    pass it with `--settings`:
+    `{"sandbox": {"enabled": true, "failIfUnavailable": true, "allowUnsandboxedCommands": false}}`.
+  - `sandbox.excludedCommands` runs a command outside the sandbox.
+  - **Linux and WSL2:** the sandbox needs `bwrap` and `socat`. Without them every Bash command fails
+    (`failIfUnavailable`). `generate` and `update` warn when one is missing. `agent-stack detect` reports whether
+    they are found, not whether the sandbox starts.
+  - **Native Windows:** the sandbox is not documented there, so Bash commands most likely fail. Use WSL2.
 - **Hooks fail open** when they crash. Stop hooks can only nudge once per turn (`stop_hook_active`).
 - `verify` runs commands from an agent-written plan; it is not allow-listed and refuses commands guard-bash
   would block. Review the plan table before implementation starts.
@@ -295,7 +317,6 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 - **Secrets:** reading an env file or a private key (Read, Grep, or `cat`/`grep`/`source` in Bash) asks first,
   but a command that does not name the file (`cat $(ls -a | grep env)`, a script) is not caught.
 - **Known gaps** (security review of 0.3, fixes planned):
-  - the network is not restricted (`curl`, `gh gist`, WebFetch) — turn on Claude Code's `/sandbox`;
   - irreversible commands (`rm -rf`, `git reset --hard`) are left to Claude Code's own permission prompt;
   - tool results (web pages, MCP output) are not checked for injected instructions;
   - agent prompts, skills, CI workflows and `package.json` scripts are editable without a prompt. A bare install or

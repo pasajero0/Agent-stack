@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.5.0 — OS sandbox for Bash
+
+- **Sandbox block in `settings.json`:** `generate` writes a `sandbox` object into `.claude/settings.json`. It
+  turns on Claude Code's OS sandbox for Bash (`enabled`), stops the model from retrying a command outside it
+  (`allowUnsandboxedCommands: false`) and stops Bash when the sandbox cannot start (`failIfUnavailable: true`).
+  It also makes nine secret folders unreadable for Bash (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`,
+  `~/.netrc`, `~/.npmrc`, `~/.config/gcloud`, `~/.azure`), and lets Bash reach only the listed domains.
+- **Domain list in `gates.json`:** a new key `sandbox.allowedDomains`. `generate` seeds it with the detected
+  package manager's registry, plus `github.com` and `api.github.com` when the forge is GitHub.
+- **`update` merges the sandbox block** one level deeper: a switch you set wins, your other keys and list entries
+  are kept, and a wrong-typed object or list is replaced with a warning. The manifest records the generated lists
+  (`generatedSandbox`).
+- **`agent-stack detect`** prints an `OS sandbox` line: built in on macOS; on Linux, whether `bwrap` and `socat`
+  are found. On Linux, `generate` and `update` warn when one is missing.
+- **README Limits:** "Blocklists, not a sandbox" is now "Blocklists for the tools", and a new bullet "OS sandbox
+  (Bash only)" says what the sandbox covers and what it does not. Spec: `docs/specs/sandbox1/SPEC.md`.
+
+### Upgrading from 0.4.8
+
+- Run `agent-stack update`: it adds the sandbox block to `settings.json`. The domain list comes from
+  `gates.json` → `sandbox.allowedDomains`, or the detected list when that key is missing. `update` does not add
+  the key to `gates.json`; it prints a line that says to add it.
+- Bash now reaches only the listed domains. To add a domain, add it to `gates.json` → `sandbox.allowedDomains`,
+  then run `update`.
+- On Linux and WSL2, install `bwrap` (bubblewrap) and `socat` first, or Bash commands fail. On native Windows,
+  Bash commands most likely fail; use WSL2.
+- Git over SSH in Bash fails, because `~/.ssh` is unreadable inside the sandbox. `git push` stays manual.
+- A switch you set yourself (`enabled`, `allowUnsandboxedCommands`, `failIfUnavailable`) is kept, with a warning
+  when it is weaker. A secret folder you removed from `denyRead` stays removed, with a warning on each `update`.
+
 ## 0.4.8 — effort by task size and a scout call
 
 - **Routing block in `gates.json`:** the driver now picks the model and the effort of each call from the tier and
