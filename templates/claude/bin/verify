@@ -81,7 +81,8 @@ while IFS= read -r id; do
   pass=false
   [ "$rc" -eq 0 ] && pass=true
   if [ "$dry" -eq 0 ]; then
-    tmp=$(mktemp)
+    # Next to tasks.json, not mktemp: inside the OS sandbox bare mktemp ignores $TMPDIR on macOS and fails.
+    tmp="$tasks.tmp.$$"
     jq --arg id "$id" --argjson pass "$pass" '
       .tasks |= map(if .id == $id
         then .passes = $pass | .fails = ((.fails // 0) + (if $pass then 0 else 1 end))

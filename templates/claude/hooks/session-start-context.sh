@@ -14,12 +14,15 @@ session_id=$(echo "$input" | jq -r '.session_id // "unknown"')
 cwd=$(echo "$input" | jq -r '.cwd // "."')
 src=$(echo "$input" | jq -r '.source // "startup"')
 
-mkdir -p /tmp/claude-sessions
-# Sweep stale markers (>24h) so /tmp doesn't grow forever
-find /tmp/claude-sessions -maxdepth 1 -type f -name '*.start' -mtime +1 -delete 2>/dev/null || true
+# Same folder as stop-flag-reflect.sh; the OS sandbox lets Bash write only under $TMPDIR.
+tmpbase="${TMPDIR:-/tmp}"
+tmpbase="${tmpbase%/}"
+mkdir -p "$tmpbase/claude-sessions"
+# Sweep stale markers (>24h) so the folder doesn't grow forever
+find "$tmpbase/claude-sessions" -maxdepth 1 -type f -name '*.start' -mtime +1 -delete 2>/dev/null || true
 
 # Always write a fresh marker for this session — Stop hook compares memory mtimes against it
-touch "/tmp/claude-sessions/$session_id.start"
+touch "$tmpbase/claude-sessions/$session_id.start"
 
 # Heavy git context: only on a truly new context window
 case "$src" in
@@ -114,10 +117,10 @@ if [ -n "$broken" ]; then
 fi
 
 # Pending /reflect notice — always (cheap), regardless of source
-if [ -f /tmp/.claude-reflect-pending ]; then
+if [ -f "$tmpbase/.claude-reflect-pending" ]; then
   echo "💡 Memory was modified in the previous session — consider running \`/reflect\` to consolidate."
   echo
-  rm -f /tmp/.claude-reflect-pending
+  rm -f "$tmpbase/.claude-reflect-pending"
 fi
 
 exit 0
