@@ -84,7 +84,11 @@ describe("sandbox1: the domain source on update", () => {
     expect(Object.keys(settings)).toEqual(["$schema", "permissions", "sandbox", "hooks", "env"]);
     expect(settings.sandbox).toEqual(buildSandboxBlock(["a.com", "b.com"]));
     expect(settings.env).toEqual({ FOO: "1" });
-    expect(manifestSandbox()).toEqual({ denyRead: buildSandboxBlock([]).filesystem.denyRead, allowedDomains: ["a.com", "b.com"] });
+    expect(manifestSandbox()).toEqual({
+      denyRead: buildSandboxBlock([]).filesystem.denyRead,
+      denyWrite: buildSandboxBlock([]).filesystem.denyWrite,
+      allowedDomains: ["a.com", "b.com"],
+    });
     expect(count(ADD.trim())).toBe(0);
     expect(count(BAD)).toBe(0);
   });

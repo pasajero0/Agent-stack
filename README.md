@@ -334,10 +334,13 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     one Bash command. In the default mode Claude Code asks you. In auto mode its classifier decides and you are
     not asked. With `bypassPermissions` the host is reached without a question. The hard lock is
     `sandbox.network.allowManagedDomainsOnly`, and it works in managed settings only.
-  - **Harness files Bash can still write:** `.claude/gates.json`, `.claude/bin/` and `CLAUDE.md`. guard-file
-    stops the Edit and Write tools there, not a script run through Bash. The sandbox does deny Bash writes to
-    `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/`, `.claude/agents/` and `.git/hooks/`
-    (checked on macOS, Claude Code 2.1.329). A fix is planned.
+  - **Harness files Bash cannot write:** `.claude/gates.json`, `.claude/bin/` and `CLAUDE.md`. guard-file stops
+    the Edit and Write tools there; `sandbox.filesystem.denyWrite` in `.claude/settings.json` stops a script run
+    through Bash. The Claude Code documentation confirms denyWrite for folders. It does not say whether a single
+    file path works, and on Linux a path that does not exist yet may have no effect. This rule is not yet checked
+    by a live probe. The sandbox already denies Bash writes to `.claude/settings.json`,
+    `.claude/settings.local.json`, `.claude/hooks/`, `.claude/agents/` and `.git/hooks/` (checked on macOS,
+    Claude Code 2.1.329).
   - `dangerouslyDisableSandbox` does not take a command out of the sandbox (checked: the read of `~/.ssh` still
     fails with it).
   - **The driver started from the chat's Bash (macOS) needs a token file.** Inside the sandbox a `claude` cannot

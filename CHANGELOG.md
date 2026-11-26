@@ -2,6 +2,13 @@
 
 ## 0.5.4 — unreleased
 
+- **Bash cannot write the harness files inside the sandbox:** the generated `.claude/settings.json` now has
+  `sandbox.filesystem.denyWrite` with `./.claude/gates.json`, `./.claude/bin` and `./CLAUDE.md`. Before, guard-file
+  stopped only the Edit and Write tools there, so a script run through Bash could weaken the pipeline's rules.
+  The manifest records the entries in `generatedSandbox.denyWrite`. `update` adds them to a settings.json of an
+  older version and keeps your own denyWrite entries after them. If you remove one of the three entries, `update`
+  keeps it removed and prints one warning line for it on each run. `generate` and `update` still write these
+  places: you run them from a terminal, outside the sandbox. Not yet checked by a live probe.
 - **The channels past the OS sandbox are closed by default:** the generated `.claude/settings.json` now has
   `permissions.deny` with `mcp__claude-in-chrome__*` (the Claude in Chrome tools), and `permissions.ask` with
   `WebFetch` and `mcp__*` (every MCP tool). A deny rule blocks in every permission mode; an ask rule asks also

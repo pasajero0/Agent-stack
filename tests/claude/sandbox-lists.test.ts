@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateCommand } from "../../src/commands/generate.js";
 import { updateCommand } from "../../src/commands/update.js";
-import { buildSandboxBlock, SECRET_FOLDERS } from "../../src/claude/sandbox.js";
+import { buildSandboxBlock, HARNESS_WRITE_PATHS, SECRET_FOLDERS } from "../../src/claude/sandbox.js";
 import { pinPlatform } from "./pin-platform.js";
 
 pinPlatform(); // the warnings these tests compare must not depend on the machine (Linux without socat)
@@ -127,7 +127,11 @@ describe("sandbox1: entries the harness wrote last time", () => {
     expect(denyRead()).toEqual([...SECRET_FOLDERS, "~/.foo"]);
     expect(allowedDomains()).toEqual([...detected, "mine.com"]);
     expect(sandboxKept()).toEqual(["sandbox.filesystem.denyRead: ~/.foo", "sandbox.network.allowedDomains: mine.com"]);
-    expect(manifestSandbox()).toEqual({ denyRead: [...SECRET_FOLDERS], allowedDomains: detected });
+    expect(manifestSandbox()).toEqual({
+      denyRead: [...SECRET_FOLDERS],
+      denyWrite: [...HARNESS_WRITE_PATHS],
+      allowedDomains: detected,
+    });
     expect(readableLines()).toEqual([]);
   });
 });
@@ -149,7 +153,11 @@ describe("sandbox1: reading generatedSandbox", () => {
         "sandbox.network.allowedDomains: example.com",
       ]);
       expect(readableLines()).toEqual([]);
-      expect(manifestSandbox()).toEqual({ denyRead: [...SECRET_FOLDERS], allowedDomains: detected });
+      expect(manifestSandbox()).toEqual({
+        denyRead: [...SECRET_FOLDERS],
+        denyWrite: [...HARNESS_WRITE_PATHS],
+        allowedDomains: detected,
+      });
     }
   });
 
