@@ -227,6 +227,32 @@ function readManifest(projectDir: string): Manifest {
 }
 
 const GATES = ".claude/gates.json";
+const LOCAL = ".claude/settings.local.json";
+
+/**
+ * With the OS sandbox on, Claude Code applies `Read(...)` deny rules to Bash too, so a sandboxed command cannot
+ * read node_modules, the lockfile or build output. Older versions wrote such rules; guard-file now does this job.
+ * `update` leaves the file alone and lists the lines to remove by hand.
+ */
+function readDenyWarning(full: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(full, "utf-8"));
+  } catch {
+    return null;
+  }
+  if (!isObject(parsed) || !isObject(parsed.permissions)) return null;
+  const deny = parsed.permissions.deny;
+  if (!Array.isArray(deny)) return null;
+  const rules = deny.filter((r): r is string => typeof r === "string" && /^Read\(/.test(r));
+  if (rules.length === 0) return null;
+  return (
+    `${LOCAL} has Read(...) deny rules. With the OS sandbox on, Claude Code applies them to Bash too, so a ` +
+    `sandboxed command cannot read those paths (a require of an installed package fails with MODULE_NOT_FOUND). ` +
+    `The guard-file hook now protects them for the Read and Grep tools. Remove these lines by hand: ` +
+    rules.join(", ")
+  );
+}
 
 /** The six top-level keys of `routing`, in the order missing ones are added. */
 const ROUTING_KEYS = ["S", "M", "L", "retry", "risky", "scout"];
@@ -294,6 +320,7 @@ export function planUpdate(
     gatesWithRouting: null,
     gatesWarning: null,
     sandboxLines: [],
+    readDenyWarning: null,
   };
   const before = readManifest(projectDir);
   const builtSettings = files.find((f) => f.path === SETTINGS);
@@ -312,6 +339,7 @@ export function planUpdate(
     } else if (SEED_PATHS.has(f.path)) {
       plan.kept.push(f.path);
       if (f.path === GATES) addRouting(full, f.content, plan);
+      if (f.path === LOCAL) plan.readDenyWarning = readDenyWarning(full);
     } else if (readFileSync(full, "utf-8") !== f.content) {
       plan.changed.push(f.path);
       plan.toWrite.push(f);

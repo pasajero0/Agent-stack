@@ -19,7 +19,7 @@ for every language.
 ## Not templated (emitter builds these directly)
 
 - `settings.json` — verbatim hooks block + computed `permissions.allow` (commands + forge CLI).
-- `settings.local.json` — computed `permissions.deny` (generated globs + lockfile). Seed file.
+- `settings.local.json` — your local permissions; no `Read(...)` deny rules (guard-file does that). Seed file.
 - `gates.json` — every stack-specific value the hooks read (`src/claude/gates.ts`). Seed file.
 - `CLAUDE.md` — project body (from detector) + `_normative.md` appended verbatim. Seed file.
 - `CODEMAP.md` — a fixed stub to fill in by hand (it is not generated from the repo tree yet). Seed file.

@@ -94,20 +94,9 @@ function buildSettings(p: HarnessParams): string {
   return JSON.stringify(settings, null, 2) + "\n";
 }
 
-function buildSettingsLocal(p: HarnessParams): string {
-  const generated = p.generatedGlobs ? p.generatedGlobs.split("|") : [];
-  const settings = {
-    permissions: {
-      allow: ["WebSearch"],
-      deny: [
-        // case-glob "*/dist/*" → permission glob "dist/**"
-        ...generated.map((g) => `Read(./**/${g.replace(/^\*\//, "").replace(/\/\*$/, "/**")})`),
-        "Read(./**/coverage/**)",
-        ...(p.lockfile ? [`Read(./**/${p.lockfile})`] : []),
-        "Read(./**/node_modules/**)",
-      ].filter((rule, i, all) => all.indexOf(rule) === i),
-    },
-  };
+function buildSettingsLocal(_p: HarnessParams): string {
+  // No Read(...) deny rules: with the OS sandbox on they would apply to Bash too. guard-file does this job.
+  const settings = { permissions: { allow: ["WebSearch"] } };
   return JSON.stringify(settings, null, 2) + "\n";
 }
 

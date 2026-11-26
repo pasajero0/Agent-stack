@@ -39,7 +39,7 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 .claude/
 ├── gates.json             # every stack-specific value the hooks read — human-edited (yours after generate)
 ├── settings.json          # hook registration + permission allow-list
-├── settings.local.json    # read-deny for build/generated noise (yours after generate)
+├── settings.local.json    # your local permissions (yours after generate); no Read deny rules
 ├── hooks/                 # deterministic shell hooks, run outside the model
 │   ├── guard-bash.sh        # block git push (in any form), foreign package managers; installs (also a bare
 │   │                        #   `pnpm install`: use --frozen-lockfile), download-and-run (npx, dlx, curl | sh)
@@ -301,6 +301,10 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     keeps yours.
   - **Secret folders:** Bash cannot read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`, `~/.netrc`,
     `~/.npmrc`, `~/.config/gcloud` and `~/.azure`. The Read tool is not covered; guard-file still handles it.
+  - **No `Read(...)` deny rules:** with the sandbox on, Claude Code applies them to Bash too, so a command
+    could not read `node_modules`, the lockfile or build output. guard-file denies the Read tool (and Grep
+    on such a path) for `gates.json` → `protectedGlobs`, `node_modules/` and `coverage/`. Bash can still
+    read these. `update` warns when `settings.local.json` still has such rules; remove them by hand.
     `~/.config/gh` stays readable on purpose, so `gh` keeps its token. Git over SSH fails inside the sandbox,
     because `~/.ssh` is unreadable. If you remove a secret folder from `denyRead`, `update` keeps it removed and
     warns on each run.

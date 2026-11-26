@@ -8,6 +8,30 @@ import { cleanupProjects, deployHarness, TS_PARAMS } from "../hooks/fixture.js";
 
 afterAll(cleanupProjects);
 
+describe("settings.local.json Read deny rules", () => {
+  it("Q1: generate writes no Read(...) deny rules", () => {
+    const f = buildHarnessFiles(TS_PARAMS).find((x) => x.path === ".claude/settings.local.json");
+    expect(f?.content).not.toMatch(/Read\(/);
+  });
+
+  it("Q1: update leaves the file and warns with the lines to remove", () => {
+    const dir = deployHarness();
+    const file = join(dir, ".claude/settings.local.json");
+    const mine = JSON.stringify({ permissions: { deny: ["Read(./**/node_modules/**)", "Bash(rm:*)"] } });
+    writeFileSync(file, mine);
+    const plan = planUpdate(dir, buildHarnessFiles(TS_PARAMS));
+    expect(readFileSync(file, "utf-8")).toBe(mine);
+    expect(plan.readDenyWarning).toContain("Read(./**/node_modules/**)");
+    expect(plan.readDenyWarning).not.toContain("Bash(rm:*)");
+    expect(plan.readDenyWarning).toContain("sandbox");
+  });
+
+  it("Q1: no warning when there are no Read rules", () => {
+    const dir = deployHarness();
+    expect(planUpdate(dir, buildHarnessFiles(TS_PARAMS)).readDenyWarning).toBeNull();
+  });
+});
+
 describe("planUpdate", () => {
   it("re-running on an untouched harness changes nothing", () => {
     const dir = deployHarness();

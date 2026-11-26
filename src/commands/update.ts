@@ -109,6 +109,7 @@ function reportExtras(plan: UpdatePlan, missingTools: readonly string[]): void {
   if (plan.settingsUnreadable) {
     log.warn(".claude/settings.json is not valid JSON, so it was left as is. Fix it, then run update again.");
   }
+  if (plan.readDenyWarning) log.warn(plan.readDenyWarning);
   plan.sandboxLines.forEach((l) => (l.kind === "warn" ? log.warn(l.text) : log.dim(l.text)));
   if (missingTools.length > 0) log.warn(toolsLine(missingTools));
 }

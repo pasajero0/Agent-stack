@@ -16,6 +16,11 @@
   are found. On Linux, `generate` and `update` warn when one is missing.
 - **README Limits:** "Blocklists, not a sandbox" is now "Blocklists for the tools", and a new bullet "OS sandbox
   (Bash only)" says what the sandbox covers and what it does not. Spec: `docs/specs/sandbox1/SPEC.md`.
+- **No `Read(...)` deny rules in `settings.local.json`:** with the OS sandbox on, Claude Code applies them to
+  Bash too, so a command could not read `node_modules`, the lockfile or build output (`require` of an installed
+  package failed with MODULE_NOT_FOUND). `generate` no longer writes them. The guard-file hook now denies the
+  Read tool, and Grep on such a path, for `protectedGlobs`, `node_modules/` and `coverage/`. `update` leaves
+  `settings.local.json` alone, but warns and lists the `Read(...)` lines to remove by hand.
 - **Audit of Claude Code's own controls** (sandbox, protected paths, auto mode, `updatedToolOutput`,
   fail-closed hooks, worktrees): the input of the 0.5 security work. Kept outside the repo, with the doc URLs.
 - **Slow test group:** the four sandbox test files and `tests/run/scout-prompts.test.ts` start git and move to

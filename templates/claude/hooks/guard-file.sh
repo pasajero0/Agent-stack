@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse guard — Edit|Write|MultiEdit|NotebookEdit: protects the harness itself, generated + secret
-# files; Read|Grep: asks before reading a file that holds secrets.
+# files; Read|Grep: denies generated files, node_modules and coverage, and asks before reading a file that holds secrets.
 set -euo pipefail
 . "$(dirname "$0")/gates-lib.sh"
 require_jq
@@ -11,9 +11,21 @@ path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.notebo
 [ -z "$path" ] && exit 0
 rel=$(rel_path "$path")
 
-# Reading secrets: whatever lands in the context can leak through any later tool call.
 case "$tool" in
   Read|Grep)
+    # Build output, the lockfile, node_modules, coverage: noise for the model. Denied here, not with Read(...)
+    # rules in settings.local.json — with the OS sandbox on, those would apply to Bash too. node_modules/ and
+    # coverage/ are fixed here; the rest is gates.json → protectedGlobs.
+    deny=0
+    case "$rel" in
+      node_modules|node_modules/*|*/node_modules|*/node_modules/*|coverage|coverage/*|*/coverage|*/coverage/*) deny=1 ;;
+    esac
+    if [ "$deny" = 0 ] && gate_list '.protectedGlobs' | glob_match_any "$rel"; then deny=1; fi
+    if [ "$deny" = 1 ]; then
+      echo "Blocked: $rel is build output, a lockfile, node_modules or coverage — reading it only fills the context. Read the source file instead." >&2
+      exit 2
+    fi
+    # Reading secrets: whatever lands in the context can leak through any later tool call.
     if is_secret_path "$rel"; then
       decide_ask "Reading $rel — it may hold secrets, and what the agent reads can leak. Read the .example copy, or confirm."
     fi

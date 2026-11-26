@@ -51,4 +51,6 @@ export interface UpdatePlan {
   gatesWarning: string | null;
   /** The sandbox lines of the Contract, in its order: printed at the end of the report (sandbox1). */
   sandboxLines: SandboxLine[];
+  /** settings.local.json holds `Read(...)` deny rules (0.5.0 and earlier wrote them): the warning to print. */
+  readDenyWarning: string | null;
 }
