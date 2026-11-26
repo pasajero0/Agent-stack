@@ -2,6 +2,7 @@
 
 ## 0.5.2 — unreleased
 
+- **CI runs on release branches:** the workflow also runs on every commit sent to `release/**` and `hotfix/**`.
 - **Defects log has a `Cause` column:** every row in `docs/defects.md` names its cause. `pnpm defects` counts the
   rows by cause, and `pnpm defects --check` runs in CI after `pnpm test:fast`. The rule is in
   `docs/GLOSSARY.md` → Cause.

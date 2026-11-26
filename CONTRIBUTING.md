@@ -20,6 +20,8 @@ A **hotfix** — an urgent fix of a released version — gets its own branch fro
 `hotfix/<next version>`, e.g. `git switch -c hotfix/0.4.4 v0.4.3`. It holds only the fix (spec change, test,
 code, release commit), one PR, squash, tag. Other work waits for the next release.
 
+CI runs on every commit sent to `main`, `release/**` and `hotfix/**`, and on every pull request.
+
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org): `type(scope): what changed`. The scope is required.
