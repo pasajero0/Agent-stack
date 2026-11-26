@@ -10,6 +10,7 @@ import { log } from "../utils/logger.js";
 import { checkRouting } from "../run/routing.js";
 import { HOOKS_BLOCK } from "./hooks-block.js";
 import { MANIFEST, manifestContent, sha256, tracked } from "./update-plan.js";
+import { buildSandboxBlock, detectedDomains, detectedWritePaths, generatedSandbox } from "./sandbox.js";
 
 // The update planning lives in update-plan.ts; these names stay importable from here.
 export {
@@ -87,25 +88,15 @@ function buildSettings(p: HarnessParams): string {
   const settings = {
     $schema: "https://json.schemastore.org/claude-code-settings.json",
     permissions: { allow },
+    sandbox: buildSandboxBlock(detectedDomains(p.packageManager, p.forgeCli), detectedWritePaths(p.packageManager)),
     hooks: HOOKS_BLOCK,
   };
   return JSON.stringify(settings, null, 2) + "\n";
 }
 
-function buildSettingsLocal(p: HarnessParams): string {
-  const generated = p.generatedGlobs ? p.generatedGlobs.split("|") : [];
-  const settings = {
-    permissions: {
-      allow: ["WebSearch"],
-      deny: [
-        // case-glob "*/dist/*" → permission glob "dist/**"
-        ...generated.map((g) => `Read(./**/${g.replace(/^\*\//, "").replace(/\/\*$/, "/**")})`),
-        "Read(./**/coverage/**)",
-        ...(p.lockfile ? [`Read(./**/${p.lockfile})`] : []),
-        "Read(./**/node_modules/**)",
-      ].filter((rule, i, all) => all.indexOf(rule) === i),
-    },
-  };
+function buildSettingsLocal(_p: HarnessParams): string {
+  // No Read(...) deny rules: with the OS sandbox on they would apply to Bash too. guard-file does this job.
+  const settings = { permissions: { allow: ["WebSearch"] } };
   return JSON.stringify(settings, null, 2) + "\n";
 }
 
@@ -204,7 +195,11 @@ export function buildHarnessFiles(params: HarnessParams, templatesDir?: string):
   const hashes: Record<string, string> = {};
   for (const f of files) if (tracked(f.path)) hashes[f.path] = sha256(f.content);
   const allow = (JSON.parse(buildSettings(params)) as { permissions: { allow: string[] } }).permissions.allow;
-  files.push({ path: MANIFEST, content: manifestContent(params, hashes, allow), action: "create" });
+  const sandbox = generatedSandbox(
+    detectedDomains(params.packageManager, params.forgeCli),
+    detectedWritePaths(params.packageManager)
+  );
+  files.push({ path: MANIFEST, content: manifestContent(params, hashes, allow, sandbox), action: "create" });
 
   return files;
 }

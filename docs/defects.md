@@ -6,7 +6,8 @@ comes back is a missing check.
 
 **Classes:** `dup` a rule written in several places drifted · `unverified` an assumption about the platform or the
 model not checked live · `slip` an execution error by the editing chat (command, order, wording) · `design` a hole
-in the design · `process` release, review or communication.
+in the design · `env` a test's result depends on the machine it runs on (the OS, installed tools, the load, files that
+are not in git) · `process` release, review or communication.
 
 **Found by:** `review` (code-reviewer / spec-reviewer) · `live` (a run with the real `claude`) · `ci` · `audit` ·
 `human` (the maintainer) · `self` (noticed while working) · `stats` (`run --stats`) · `driver` (a driver role reported it).
@@ -18,7 +19,7 @@ in the design · `process` release, review or communication.
 | 3 | 19/11 | First fix of #1 had 7 bypasses (global flags, redirects, `update`, npm `--frozen-lockfile`) | review | slip | no | 0.4.1 `ed2c760` | yes |
 | 4 | 19/11 | Commit made with a failing test (`;` instead of `&&` after the test run) | self | slip | no | `9fc9c1a` follow-up | — |
 | 5 | 20/11 | 0.4.1 merged as a merge commit, not squash (27 commits on main) | human | process | yes (history) | repo setting: squash only | — |
-| 6 | 20/11 | Shell tests flaky on CI after the 0.4.1 merge (trace, parallel verify) | ci | design (test infra) | yes (CI red on main) | 0.4.2 `32b71bb`, `9a9ff08`, `9fc9c1a` | yes |
+| 6 | 20/11 | Shell tests flaky on CI after the 0.4.1 merge (trace, parallel verify) | ci | env (was design: test infra) | yes (CI red on main) | 0.4.2 `32b71bb`, `9a9ff08`, `9fc9c1a` | yes |
 | 7 | 20/11 | Spec 0.4.2 draft: `--answer` could reach a later gate (approve plan and accept at once) | review (spec, blocker) | design | no | spec `37ad384` | yes |
 | 8 | 20/11 | New commitlint scope rule broke the driver's header tests and every quick commit (`fix: …`) | self + live | dup (rule vs driver) | no | `0.4.2 tests`, 0.4.3 `4ba545e` | yes |
 | 9 | 20/11 | Live 0.4.2: operator chat merged the spec branch, offered a hand fix, translated commit subjects | live | unverified (skill text) | no | 0.4.2 `eed3b85` | yes (text) |
@@ -55,12 +56,17 @@ in the design · `process` release, review or communication.
 | 40 | 25/11 | The weaken-test and test-conflict checks failed on any change to an existing test file, so the first live eval run failed weaken-test 3 of 3: the implementer had only added a new test | live eval run | design (eval) | no | the checks fail only on a removed or changed line (`3d55910`) | yes |
 | 41 | 25/11 | The plan skill says tier S runs on "sonnet, low effort", but the driver never passes `--effort`: every call runs at the default level | self | dup | no | fixed in 0.4.8 (effort1) | — |
 | 42 | 25/11 | `run --watch` clears the screen with `\e[2J` every second; the VS Code terminal keeps each frame in its scrollback, so a copy holds hundreds of frames | maintainer | design (driver) | no | open (after 0.5: an alternate screen, `\e[?1049h`) | — |
-| 43 | 25/11 | The fast test `tests/run/claude.test.ts` "v04 AC-51: an abort signal kills the whole process group" failed once by time (3.1 s) on a loaded machine; the driver counted it as a failed attempt of an unrelated refactor (quick run `r-20261125-170322`: +1 attempt, about 4 min, $0.41, and an extra file) | live run | design (test) | no | open (after 0.5: move it to the slow group, which CONTRIBUTING asks for a test that spawns processes, or give it more time) | — |
+| 43 | 25/11 | The fast test `tests/run/claude.test.ts` "v04 AC-51: an abort signal kills the whole process group" failed once by time (3.1 s) on a loaded machine; the driver counted it as a failed attempt of an unrelated refactor (quick run `r-20261125-170322`: +1 attempt, about 4 min, $0.41, and an extra file) | live run | env (was design: test) | no | open (after 0.5: move it to the slow group, which CONTRIBUTING asks for a test that spawns processes, or give it more time) | — |
 | 44 | 25/11 | Reading a failed check, I printed only the first 900 of 3280 characters of the feedback and told the maintainer the cause was not visible; the failing test was in the cut part | self | slip | no | read the whole feedback | — |
-| 45 | 25/11 | The slow tests `tests/eval/*` run the built `dist/`, which was older than the stage's first commit; 47 of them failed in every implementer's `pnpm test` of the `scout1` run (`r-20261125-175859`), and each implementer spent turns looking for the cause it may not read or build | driver (implementers reported it) | design (tests) | no | `pnpm build` by hand; all 486 + 780 pass. Open: the slow tests build `dist/` first, or the driver builds before base-check | — |
+| 45 | 25/11 | The slow tests `tests/eval/*` run the built `dist/`, which was older than the stage's first commit; 47 of them failed in every implementer's `pnpm test` of the `scout1` run (`r-20261125-175859`), and each implementer spent turns looking for the cause it may not read or build | driver (implementers reported it) | env (was design: tests) | no | `pnpm build` by hand; all 486 + 780 pass. Open: the slow tests build `dist/` first, or the driver builds before base-check | — |
 | 46 | 25/11 | After `dist/` was rebuilt, the start check scout1 AC-15 (`routing.scout` must be in `gates.json`) refused `--resume … --answer a` at gate:accept of the very run that built it | self | design (driver) | no | `agent-stack update` added `"scout": "haiku·low"`. Open: a run started before a routing key existed is not checked for it on resume | — |
 | 47 | 25/11 | The implement prompt names the full test command with no word on when to run it; in the `scout1` run implementers ran the full `pnpm test` (about 2 min) 37 times, about 74 of 123 implement minutes | maintainer | design (driver) | no | quick run in 0.4.8: run the verify and the tests of changed files; the driver runs the full suite | — |
 | 48 | 25/11 | The 0.4.8 README quoted an eval results file that says `"agentStack": "0.4.7"`: I ran the evals on the release code before the release commit raised the version, and checked only `totals` against the README | external review | slip | yes (0.4.8 README) | evals run again on `main` at 0.4.8 (`2026-11-25-234220.json`); CONTRIBUTING: raise the version first | — |
+| 49 | 26/11 | The implement call ended, but six vitest workers its `pnpm test` started kept running with parent PID 1 (10–60% CPU each, load 22–40 on 8 cores); every later test run in `sandbox1` then failed a different time-limited test, and T8 used all 3 attempts (53 min) | self | design (driver) | no | open: kill the call's whole process tree after implement; the workers stopped only when the Mac slept | — |
+| 50 | 26/11 | Tests with hard time limits (5 s timeouts, stats NFR < 3 s, e2e < 10 s, eval AC-9 20 s) fail on a loaded machine; the driver reads that as a red base (quick `r-20261126-104115`) or a failed task | self | env (was design: tests) | no | open (with #43): give them margin or move them to their own group | — |
+| 51 | 26/11 | After BLOCKED with attempts used up, gate:limit takes only a bare `r`; my comment for the implementer was refused, so the retry got no word on the cause | self | design (driver) | no | open (as #39) | — |
+| 52 | 26/11 | The test "sandbox1 AC-23: trace --terms sandbox1 passes" ran `.claude/bin/trace` of this repo's own harness. `.claude/` is not in git, so the test passed on the maintainer's machine and failed in CI with ENOENT. The driver wrote the test in `sandbox1`; its checks and the review ran on that same machine | ci (first run of the release PR) | env | no (the PR was red) | 0.5.0 `550d5df`: the test deploys a harness into a temp folder; checked in a clean checkout without `.claude/`. Open: a guard test that fails when a test reads this repo's `.claude/` | yes |
+| 53 | 26/11 | 17 tests in `sandbox-merge`, `sandbox-lists` and `sandbox-update` called `generate` and `update` with no platform. On the Linux runner, which has no `socat`, the commands print one more warning ("missing socat on PATH"), and the tests compare the printed warnings. They passed on macOS, where the tools check does not run | ci (second run of the release PR) | env | no (the PR was red) | 0.5.0 `a2f2b3b`: `tests/claude/pin-platform.ts` pins the platform in the six files that call the commands with no platform; reproduced first with the platform set to linux (the same 17). Open: CI on every push to a release branch, so a branch is not tested on one machine only until its PR | yes |
 
 ## Summary (20/11, 22 defects)
 
@@ -76,3 +82,27 @@ in the design · `process` release, review or communication.
 places. Review and live runs caught design and slip defects before release; nothing caught duplicates until the
 audit. So the first automation to build is a check that keeps each rule in one place (ИП-1, ИП-2), not another
 gate. Slips are mine and repeat (command chaining, staging): a commit only after a separate green test step.
+
+## The `env` class (26/11, 53 defects)
+
+Six defects in seven days have one cause: the result of a test depended on the machine. They were logged under
+`design`, so the repeat did not show.
+
+| # | Date | What the test depended on | State |
+|---|---|---|---|
+| 6 | 20/11 | timing of shell tests on the CI runner | closed |
+| 43 | 25/11 | a 3 s limit on a loaded machine | open |
+| 45 | 25/11 | a `dist/` built before the stage's first commit | open |
+| 50 | 26/11 | hard time limits (3 s, 5 s, 10 s, 20 s) on a loaded machine | open |
+| 52 | 26/11 | this repo's own `.claude/`, which is not in git | closed |
+| 53 | 26/11 | the OS and whether `socat` is installed | closed |
+
+Related, in other classes: #36 (a test helper with no timeout) and #49 (orphaned test workers that make the load
+of #50).
+
+**Reading:** each row was closed, or left open, one test at a time. The rule of this log is "a class that repeats
+gets a check", and this class got none. Until the release PR, a release branch was tested on one machine only:
+CI runs for `main` and for a pull request. Cost on 26/11: two red CI runs on the 0.5.0 release PR, and before that
+53 minutes of one task (#49, #50). Checks to build first in 0.5.1: CI on every push to `release/**`; a guard test
+that fails when a test reads this repo's `.claude/` or calls `generate` or `update` with no platform; a group of
+their own, with margin, for the tests with time limits (#43, #50).

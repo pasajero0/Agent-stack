@@ -14,8 +14,8 @@ that drive that workflow. It is stack-agnostic: everything language-specific liv
   approval gates.
 - **What is checked:** regression evals (7 tasks: 5 on known agent failure modes — a weakened test, a test
   conflict, an extra dependency, scope creep, a broken access check — and 2 plain ones; k = 3): 21/21 passed,
-  pass^k = 1, $1.29, on 0.4.8, run of 2026-11-25 —
-  [evals/results/2026-11-25-234220.json](evals/results/2026-11-25-234220.json).
+  pass^k = 1, $1.67, on 0.5.0 with the OS sandbox on, run of 2026-11-26 —
+  [evals/results/2026-11-26-174744.json](evals/results/2026-11-26-174744.json).
 
 Read [Limits](#limits--read-before-trusting-it) before you trust it.
 
@@ -39,7 +39,7 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 .claude/
 ├── gates.json             # every stack-specific value the hooks read — human-edited (yours after generate)
 ├── settings.json          # hook registration + permission allow-list
-├── settings.local.json    # read-deny for build/generated noise (yours after generate)
+├── settings.local.json    # your local permissions (yours after generate); no Read deny rules
 ├── hooks/                 # deterministic shell hooks, run outside the model
 │   ├── guard-bash.sh        # block git push (in any form), foreign package managers; installs (also a bare
 │   │                        #   `pnpm install`: use --frozen-lockfile), download-and-run (npx, dlx, curl | sh)
@@ -136,6 +136,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `codeBy` | `"driver"`: only a live `agent-stack run` call may edit code; a chat runs the work with `/drive`. Default `"anyone"`. Optional, not in the seed |
 | `specFlow` | how a human approves a spec: `"merge"` (default, for a team: the spec branch is merged into the base branch) or `"branch"` (one person: spec, plan and code in the current branch; the driver's gate:spec-approve is the approval, a later spec change is approved again). Optional, not in the seed |
 | `language` | the operator chat's language: `{ "chat": "ru", "terms": "en" }`; both default to `en`. Optional, not in the seed |
+| `sandbox` | `allowedDomains`: the domains Bash may reach inside the OS sandbox. `generate` seeds it from detection (the package manager's registry, plus `github.com` and `api.github.com` for GitHub); `update` reads it and writes it into `settings.json`. An empty list means Bash has no network. To add a domain, edit the list, then run `update` |
 | `layers` | architecture boundaries, empty until an ADR sets them: `[{"name": "domain stays pure", "files": ["src/domain/*"], "forbid": ["infra/"], "adr": "docs/adr/0003-layers.md"}]` |
 
 **Default doc layout for a monorepo** (workspaces — pnpm, npm/yarn, `go.work`, Cargo — or an `apps/` or
@@ -278,12 +279,55 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 
 ## Limits — read before trusting it
 
-- **Blocklists, not a sandbox.** Guards catch an agent's mistakes, not a determined bypass: a file written
+- **Blocklists for the tools.** Guards catch an agent's mistakes, not a determined bypass: a file written
   through Bash (`sed -i`, `>`) skips the Edit/Write gates, and command matching is regex-based (known false
   positive: `git push` quoted inside another command's argument is blocked, and so is a heredoc that writes a
   file containing `git push` or another package manager's command. Use the Edit or Write tool for such a file.
   The guard does not skip heredoc text, because a heredoc fed to a shell runs it). Put the same checks in CI
   for anything that must hold.
+- **OS sandbox (Bash only).** The generated `.claude/settings.json` turns on Claude Code's OS sandbox (the
+  sandbox block).
+  - It covers Bash and its child processes only. Read, Edit, Write, WebFetch, WebSearch, MCP servers and hooks
+    run outside it.
+  - **Network:** for Bash, only the listed domains are reached without a question. The list is `gates.json` →
+    `sandbox.allowedDomains`. WebFetch is not limited by it. Node's built-in `fetch` does not use the sandbox
+    proxy, so it fails even for a listed domain. Set `NODE_USE_ENV_PROXY=1` for it (checked on Node 22.21).
+  - **Package cache:** Bash may write to the cache folders of the detected package manager, so an install does
+    not fail with EPERM. npm: `~/.npm`. pnpm: `~/Library/pnpm/store`, `~/Library/Caches/pnpm`,
+    `~/.local/share/pnpm/store`, `~/.cache/pnpm`. yarn: `~/Library/Caches/Yarn`, `~/.cache/yarn`,
+    `~/.yarn/berry/cache`. bun: `~/.bun/install/cache`. Any other package manager gets no write path.
+    The harness writes both the macOS and the Linux paths on every OS.
+    The list is `sandbox.filesystem.allowWrite` in `.claude/settings.json`; `update` adds missing paths and
+    keeps yours.
+  - **Secret folders:** Bash cannot read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`, `~/.netrc`,
+    `~/.npmrc`, `~/.config/gcloud` and `~/.azure`. The Read tool is not covered; guard-file still handles it.
+    `~/.config/gh` stays readable on purpose, so `gh` keeps its token. Git over SSH fails inside the sandbox,
+    because `~/.ssh` is unreadable. If you remove a secret folder from `denyRead`, `update` keeps it removed and
+    warns on each run.
+  - **No `Read(...)` deny rules:** with the sandbox on, Claude Code applies them to Bash too, so a command
+    could not read `node_modules`, the lockfile or build output. guard-file denies the Read tool (and Grep
+    on such a path) for `gates.json` → `protectedGlobs`, `node_modules/` and `coverage/`. Bash can still
+    read these. `update` warns when `settings.local.json` still has such rules; remove them by hand.
+  - **The domain list is not a hard limit in every permission mode.** The model can pass a list of hosts with
+    one Bash command. In the default mode Claude Code asks you. In auto mode its classifier decides and you are
+    not asked. With `bypassPermissions` the host is reached without a question. The hard lock is
+    `sandbox.network.allowManagedDomainsOnly`, and it works in managed settings only.
+  - **Harness files Bash can still write:** `.claude/gates.json`, `.claude/bin/` and `CLAUDE.md`. guard-file
+    stops the Edit and Write tools there, not a script run through Bash. The sandbox does deny Bash writes to
+    `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/`, `.claude/agents/` and `.git/hooks/`
+    (checked on macOS, Claude Code 2.1.329). A fix is planned.
+  - `dangerouslyDisableSandbox` does not take a command out of the sandbox (checked: the read of `~/.ssh` still
+    fails with it).
+  - **Who wins:** a `false` in user settings, `--settings` or managed settings wins over the project value.
+    Loosening entries in the repo's settings files are ignored only when managed settings or `--settings` set
+    `allowUnsandboxedCommands: false`. For a lock the repo cannot loosen, put this block in managed settings, or
+    pass it with `--settings`:
+    `{"sandbox": {"enabled": true, "failIfUnavailable": true, "allowUnsandboxedCommands": false}}`.
+  - `sandbox.excludedCommands` runs a command outside the sandbox.
+  - **Linux and WSL2:** the sandbox needs `bwrap` and `socat`. Without them every Bash command fails
+    (`failIfUnavailable`). `generate` and `update` warn when one is missing. `agent-stack detect` reports whether
+    they are found, not whether the sandbox starts.
+  - **Native Windows:** the sandbox is not documented there, so Bash commands most likely fail. Use WSL2.
 - **Hooks fail open** when they crash. Stop hooks can only nudge once per turn (`stop_hook_active`).
 - `verify` runs commands from an agent-written plan; it is not allow-listed and refuses commands guard-bash
   would block. Review the plan table before implementation starts.
@@ -295,7 +339,6 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 - **Secrets:** reading an env file or a private key (Read, Grep, or `cat`/`grep`/`source` in Bash) asks first,
   but a command that does not name the file (`cat $(ls -a | grep env)`, a script) is not caught.
 - **Known gaps** (security review of 0.3, fixes planned):
-  - the network is not restricted (`curl`, `gh gist`, WebFetch) — turn on Claude Code's `/sandbox`;
   - irreversible commands (`rm -rf`, `git reset --hard`) are left to Claude Code's own permission prompt;
   - tool results (web pages, MCP output) are not checked for injected instructions;
   - agent prompts, skills, CI workflows and `package.json` scripts are editable without a prompt. A bare install or

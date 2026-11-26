@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.5.0 — OS sandbox for Bash
+
+- **Sandbox block in `settings.json`:** `generate` writes a `sandbox` object into `.claude/settings.json`. It
+  turns on Claude Code's OS sandbox for Bash (`enabled`), stops the model from retrying a command outside it
+  (`allowUnsandboxedCommands: false`) and stops Bash when the sandbox cannot start (`failIfUnavailable: true`).
+  It also makes nine secret folders unreadable for Bash (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`,
+  `~/.netrc`, `~/.npmrc`, `~/.config/gcloud`, `~/.azure`), and lets Bash reach only the listed domains.
+- **Domain list in `gates.json`:** a new key `sandbox.allowedDomains`. `generate` seeds it with the detected
+  package manager's registry, plus `github.com` and `api.github.com` when the forge is GitHub.
+- **`update` merges the sandbox block** one level deeper: a switch you set wins, your other keys and list entries
+  are kept, and a wrong-typed object or list is replaced with a warning. The manifest records the generated lists
+  (`generatedSandbox`).
+- **`agent-stack detect`** prints an `OS sandbox` line: built in on macOS; on Linux, whether `bwrap` and `socat`
+  are found. On Linux, `generate` and `update` warn when one is missing.
+- **README Limits:** "Blocklists, not a sandbox" is now "Blocklists for the tools", and a new bullet "OS sandbox
+  (Bash only)" says what the sandbox covers and what it does not. Spec: `docs/specs/sandbox1/SPEC.md`.
+- **No `Read(...)` deny rules in `settings.local.json`:** with the OS sandbox on, Claude Code applies them to
+  Bash too, so a command could not read `node_modules`, the lockfile or build output (`require` of an installed
+  package failed with MODULE_NOT_FOUND). `generate` no longer writes them. The guard-file hook now denies the
+  Read tool, and Grep on such a path, for `protectedGlobs`, `node_modules/` and `coverage/`. `update` leaves
+  `settings.local.json` alone, but warns and lists the `Read(...)` lines to remove by hand.
+- **Package cache is writable:** the sandbox block gets `filesystem.allowWrite` with the cache folders of the
+  detected package manager (npm, pnpm, yarn or bun; the paths are in README Limits). Without it an install inside
+  the sandbox failed with EPERM on the cache. `update` adds missing paths, keeps yours, and removes a path it
+  wrote earlier when the package manager changes. Any other package manager gets no write path yet.
+- **Live check with the real `claude`** (macOS, Claude Code 2.1.329 and 2.1.332). It found the two
+  defects above, which the tests and the eval run did not see: the eval tasks have no dependencies. Passed: Bash
+  cannot read `~/.ssh`; an unlisted domain is refused and a listed one answers; Bash cannot write
+  `.claude/settings*.json`, `.claude/hooks/`, `.claude/agents/`, `.git/hooks/`, `~/.zshrc` or `~/.gitconfig`;
+  `dangerouslyDisableSandbox` does not leave the sandbox; an install, a `require` of the installed package and
+  `npm ci` work; the Read tool is denied in `node_modules/`. Gaps, now in README Limits: Bash can write
+  `.claude/gates.json`, `.claude/bin/` and `CLAUDE.md`; in auto mode the model can open a host for one command
+  without a question to you; Node's `fetch` needs `NODE_USE_ENV_PROXY=1`. Not checked: Linux.
+- **Audit of Claude Code's own controls** (sandbox, protected paths, auto mode, `updatedToolOutput`,
+  fail-closed hooks, worktrees): the input of the 0.5 security work. Kept outside the repo, with the doc URLs.
+- **Slow test group:** the four sandbox test files and `tests/run/scout-prompts.test.ts` start git and move to
+  `SLOW`, as CONTRIBUTING asks.
+- **The scout pays off:** the first spec step with a scout took 20:46 and $5.71, against 29:13 and about $9.15
+  without one (−29% time, −38% cost); the scout call cost $0.008. The scout stays.
+- **Eval run** on 0.5.0, k = 3, real `claude`, the OS sandbox on in every try: 21/21 passed, pass^3 = 1, $1.67,
+  6:18 (0.4.8: $1.29, 6:01). The cost rose in every task by a few cents a try; the cause is not measured.
+  Results: `evals/results/2026-11-26-112823.json`. A second run after the two fixes from the live check gave
+  the same: 21/21, pass^3 = 1, $1.67, 5:37 — `evals/results/2026-11-26-174744.json`.
+- **Defect log:** #49–#51 (orphaned test workers after implement, tests with hard time limits on a loaded
+  machine, a bare retry after BLOCKED).
+
+### Upgrading from 0.4.8
+
+- **By hand, after `agent-stack update`:** remove the `Read(...)` deny rules from `.claude/settings.local.json`.
+  `update` lists the lines. Until you do, Bash inside the sandbox cannot read `node_modules`, the lockfile or
+  build output, so tests and builds that need them fail. The guard-file hook now keeps the Read tool away from
+  these paths.
+- Run `agent-stack update`: it adds the sandbox block to `settings.json`. The domain list comes from
+  `gates.json` → `sandbox.allowedDomains`, or the detected list when that key is missing. `update` does not add
+  the key to `gates.json`; it prints a line that says to add it.
+- Bash now reaches only the listed domains. To add a domain, add it to `gates.json` → `sandbox.allowedDomains`,
+  then run `update`.
+- On Linux and WSL2, install `bwrap` (bubblewrap) and `socat` first, or Bash commands fail. On native Windows,
+  Bash commands most likely fail; use WSL2.
+- Git over SSH in Bash fails, because `~/.ssh` is unreadable inside the sandbox. `git push` stays manual.
+- A switch you set yourself (`enabled`, `allowUnsandboxedCommands`, `failIfUnavailable`) is kept, with a warning
+  when it is weaker. A secret folder you removed from `denyRead` stays removed, with a warning on each `update`.
+
 ## 0.4.8 — effort by task size and a scout call
 
 - **Routing block in `gates.json`:** the driver now picks the model and the effort of each call from the tier and

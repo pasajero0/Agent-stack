@@ -350,6 +350,23 @@ describe("guard-file: path normalisation", () => {
   });
 });
 
+describe("guard-file: generated and noise reads", () => {
+  it.each(["node_modules/x/index.js", "packages/a/node_modules/x/i.js", "coverage/lcov.info", "dist/index.js", "pnpm-lock.yaml"])(
+    "Q1: denies Read of %s, names the path and says to read the source",
+    (rel) => {
+      const r = runHook(dir, "guard-file.sh", readTool(join(dir, rel)));
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain(rel);
+      expect(r.stderr).toContain("Read the source file instead");
+    }
+  );
+
+  it("Q1: denies Grep inside node_modules, passes Grep on src", () => {
+    expect(runHook(dir, "guard-file.sh", grepTool(join(dir, "node_modules"))).code).toBe(2);
+    expect(runHook(dir, "guard-file.sh", grepTool(join(dir, "src"))).code).toBe(0);
+  });
+});
+
 describe("guard-file: secret reads", () => {
   it.each([
     ".env",

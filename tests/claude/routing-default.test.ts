@@ -6,6 +6,9 @@ import { buildHarnessFiles } from "../../src/claude/harness.js";
 import { generateCommand } from "../../src/commands/generate.js";
 import { checkRouting } from "../../src/run/routing.js";
 import { TS_PARAMS } from "../hooks/fixture.js";
+import { pinPlatform } from "./pin-platform.js";
+
+pinPlatform(); // the warnings these tests compare must not depend on the machine (Linux without socat)
 
 // The Contract's default routing block (docs/specs/effort1/SPEC.md).
 const CONTRACT = {

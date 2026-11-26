@@ -12,9 +12,14 @@ const SLOW = [
   "tests/run/frozen.test.ts",
   "tests/run/git.test.ts",
   "tests/run/progress.test.ts",
+  "tests/run/scout-prompts.test.ts",
   "tests/run/timing.test.ts",
   "tests/run/watch.test.ts",
   "tests/eval/**/*.test.ts",
+  "tests/claude/sandbox-update.test.ts",
+  "tests/claude/sandbox-merge.test.ts",
+  "tests/claude/sandbox-lists.test.ts",
+  "tests/claude/sandbox-tools.test.ts",
 ];
 
 export default defineConfig({

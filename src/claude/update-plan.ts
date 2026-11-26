@@ -2,8 +2,12 @@ import { createHash } from "node:crypto";
 import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { join, dirname, posix, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GeneratedFile } from "./types.js";
+import type { GeneratedFile, UpdatePlan } from "./types.js";
 import { HOOKS_BLOCK, hookScript } from "./hooks-block.js";
+import { builtDomains, builtWritePaths, domainSource, generatedSandbox, mergeSandbox, readGeneratedSandbox, withDomains } from "./sandbox.js";
+import type { GeneratedSandbox } from "./sandbox.js";
+
+export type { UpdatePlan } from "./types.js";
 
 const HARNESS_HOOKS = new Set(
   Object.values(HOOKS_BLOCK).flatMap((entries) =>
@@ -184,8 +188,14 @@ export function toolVersion(): string {
   return "0.0.0";
 }
 
-export function manifestContent(params: unknown, files: Record<string, string>, generatedAllow: unknown): string {
-  return JSON.stringify({ templateVersion: toolVersion(), params, files, generatedAllow }, null, 2) + "\n";
+export function manifestContent(
+  params: unknown,
+  files: Record<string, string>,
+  generatedAllow: unknown,
+  generatedSandbox: unknown
+): string {
+  const manifest = { templateVersion: toolVersion(), params, files, generatedAllow, generatedSandbox };
+  return JSON.stringify(manifest, null, 2) + "\n";
 }
 
 interface Manifest {
@@ -193,10 +203,12 @@ interface Manifest {
   hashes: Record<string, string> | null;
   /** The `permissions.allow` entries the harness generated. */
   generatedAllow: string[];
+  /** The sandbox lists the harness wrote last time (read per the sandbox1 Contract). */
+  generatedSandbox: GeneratedSandbox;
 }
 
 function readManifest(projectDir: string): Manifest {
-  const none: Manifest = { hashes: null, generatedAllow: [] };
+  const none: Manifest = { hashes: null, generatedAllow: [], generatedSandbox: readGeneratedSandbox(undefined) };
   let m: unknown;
   try {
     m = JSON.parse(readFileSync(join(projectDir, MANIFEST), "utf-8"));
@@ -207,47 +219,40 @@ function readManifest(projectDir: string): Manifest {
   const generatedAllow = Array.isArray(m.generatedAllow)
     ? m.generatedAllow.filter((x): x is string => typeof x === "string")
     : [];
-  if (!isObject(m.files)) return { hashes: null, generatedAllow };
+  const generatedSandbox = readGeneratedSandbox(m.generatedSandbox);
+  if (!isObject(m.files)) return { hashes: null, generatedAllow, generatedSandbox };
   const hashes: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const [k, v] of Object.entries(m.files)) if (typeof v === "string") hashes[k] = v;
-  return { hashes, generatedAllow };
-}
-
-export interface UpdatePlan {
-  created: string[];
-  changed: string[];
-  unchanged: number;
-  /** Seed files already on disk — the user's, left untouched. */
-  kept: string[];
-  /** What `update` actually writes: new files + changed emitter-owned files. */
-  toWrite: GeneratedFile[];
-  /** The user's own hook entries carried over into the regenerated settings.json. */
-  customHooks: string[];
-  /** Hooks an earlier version registered and this one dropped (their files stay on disk). */
-  retiredHooks: string[];
-  /** settings.json on disk was not valid JSON: its custom hooks, if any, could not be carried over. */
-  settingsUnreadable: boolean;
-  /** The user's own settings.json keys and permission entries carried over (variant A2). */
-  customSettings: string[];
-  /** Harness files the user changed since they were deployed: left as they are (`--force` overwrites). */
-  edited: string[];
-  /** Harness files no longer shipped, untouched since deployment: `update` deletes them. */
-  removed: string[];
-  /** Harness files no longer shipped but changed by the user: left in place. */
-  orphaned: string[];
-  /** The manifest predates file hashes (≤ 0.2): edits cannot be told apart this time. */
-  noHashes: boolean;
-  /** gates.json is a JSON object without `routing`: `update` adds the default routing (it stays in `kept`). */
-  routingAdded: boolean;
-  /** gates.json has a `routing` object missing some top-level keys: `update` adds these (in the order S, M, L, retry, risky, scout). */
-  routingKeysAdded: string[];
-  /** The gates.json to write when `routingAdded`. */
-  gatesWithRouting: GeneratedFile | null;
-  /** gates.json is not valid JSON, or not an object: left as it was; the warning to print. */
-  gatesWarning: string | null;
+  return { hashes, generatedAllow, generatedSandbox };
 }
 
 const GATES = ".claude/gates.json";
+const LOCAL = ".claude/settings.local.json";
+
+/**
+ * With the OS sandbox on, Claude Code applies `Read(...)` deny rules to Bash too, so a sandboxed command cannot
+ * read node_modules, the lockfile or build output. Older versions wrote such rules; guard-file now does this job.
+ * `update` leaves the file alone and lists the lines to remove by hand.
+ */
+function readDenyWarning(full: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(full, "utf-8"));
+  } catch {
+    return null;
+  }
+  if (!isObject(parsed) || !isObject(parsed.permissions)) return null;
+  const deny = parsed.permissions.deny;
+  if (!Array.isArray(deny)) return null;
+  const rules = deny.filter((r): r is string => typeof r === "string" && /^Read\(/.test(r));
+  if (rules.length === 0) return null;
+  return (
+    `${LOCAL} has Read(...) deny rules. With the OS sandbox on, Claude Code applies them to Bash too, so a ` +
+    `sandboxed command cannot read those paths (a require of an installed package fails with MODULE_NOT_FOUND). ` +
+    `The guard-file hook now protects them for the Read and Grep tools. Remove these lines by hand: ` +
+    rules.join(", ")
+  );
+}
 
 /** The six top-level keys of `routing`, in the order missing ones are added. */
 const ROUTING_KEYS = ["S", "M", "L", "retry", "risky", "scout"];
@@ -314,8 +319,13 @@ export function planUpdate(
     routingKeysAdded: [],
     gatesWithRouting: null,
     gatesWarning: null,
+    sandboxLines: [],
+    readDenyWarning: null,
   };
   const before = readManifest(projectDir);
+  const builtSettings = files.find((f) => f.path === SETTINGS);
+  const source = domainSource(join(projectDir, GATES), builtSettings ? builtDomains(builtSettings.content) : []);
+  let nextSandbox: GeneratedSandbox | null = null; // null: no settings.json built, the manifest's stays as built
   const recorded = before.hashes;
   plan.noHashes = recorded === null;
   const hashes: Record<string, string> = {};
@@ -329,6 +339,7 @@ export function planUpdate(
     } else if (SEED_PATHS.has(f.path)) {
       plan.kept.push(f.path);
       if (f.path === GATES) addRouting(full, f.content, plan);
+      if (f.path === LOCAL) plan.readDenyWarning = readDenyWarning(full);
     } else if (readFileSync(full, "utf-8") !== f.content) {
       plan.changed.push(f.path);
       plan.toWrite.push(f);
@@ -344,6 +355,11 @@ export function planUpdate(
       manifest = f;
       continue;
     }
+    if (f.path === SETTINGS) {
+      const writes = builtWritePaths(f.content);
+      f = { ...f, content: withDomains(f.content, source.domains) };
+      nextSandbox = generatedSandbox(source.domains, writes);
+    }
     if (f.path === SETTINGS && existsSync(full)) {
       const raw = readFileSync(full, "utf-8");
       const merged = keepCustomHooks(raw, f.content);
@@ -352,12 +368,16 @@ export function planUpdate(
       plan.settingsUnreadable = merged.unreadable;
       if (merged.unreadable) {
         plan.kept.push(f.path); // not ours to overwrite blind: the user fixes the JSON, then updates
+        nextSandbox = before.generatedSandbox; // AC-10: kept as read, and no sandbox line
         continue;
       }
       const settings = keepUserSettings(raw, merged.content, before.generatedAllow);
-      plan.customSettings = settings.kept;
-      f = { ...f, content: settings.content };
+      const sandbox = mergeSandbox(raw, settings.content, before.generatedSandbox);
+      plan.customSettings = [...settings.kept, ...sandbox.kept];
+      plan.sandboxLines = sandbox.lines;
+      f = { ...f, content: sandbox.content };
     }
+    if (f.path === SETTINGS && source.line) plan.sandboxLines.unshift(source.line); // the Contract order
     if (tracked(f.path)) {
       const deployed = recorded?.[f.path];
       const onDisk = existsSync(full) ? readFileSync(full, "utf-8") : null;
@@ -392,7 +412,8 @@ export function planUpdate(
   if (manifest) {
     const m: unknown = JSON.parse(manifest.content);
     const built = isObject(m) ? m : {};
-    classify({ ...manifest, content: manifestContent(built.params, hashes, built.generatedAllow) });
+    const content = manifestContent(built.params, hashes, built.generatedAllow, nextSandbox ?? built.generatedSandbox);
+    classify({ ...manifest, content });
   }
   return plan;
 }
