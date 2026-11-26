@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { RunError } from "./errors.js";
-import { killGroup } from "./process-group.js";
+import { trackGroup } from "./process-group.js";
 import type { CheckResult } from "./types.js";
 
 const TAIL_LINES = 50;
@@ -69,19 +69,20 @@ export function runCheck(cmd: string, cwd: string, timeoutMs: number, signal?: A
     };
     child.stdout.on("data", take);
     child.stderr.on("data", take);
+    const group = trackGroup(child.pid);
     const stop = (why: "timeout" | "aborted"): void => {
       if (stopped) return;
       stopped = why;
-      killGroup(child.pid, () => child.kill("SIGKILL"));
+      group.kill(() => child.kill("SIGKILL"));
     };
-    // Defect 49: once bash has ended, kill what is left of its group (also so a leftover holding the pipes
+    // Defect 49: once bash has ended, kill what is left of its group, once (also so a leftover holding the pipes
     // does not delay 'close'). A process that left the group (setsid, a daemon) is not reached.
-    child.on("exit", () => killGroup(child.pid));
+    child.on("exit", group.end);
     const onAbort = (): void => stop("aborted");
     signal?.addEventListener("abort", onAbort, { once: true });
     const timer = setTimeout(() => stop("timeout"), timeoutMs);
     const finish = (exit: number, extra: string): void => {
-      killGroup(child.pid);
+      group.end();
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
       const text = extra ? (out ? `${out}\n${extra}` : extra) : out;

@@ -367,23 +367,5 @@ export async function statsRun(o: EngineOptions & { json?: boolean }): Promise<E
   return 0;
 }
 
-/**
- * SIGINT/SIGTERM abort the returned signal: the current call is killed, the run file written, exit 1
- * (AC-51). A second signal exits at once.
- */
-export function abortOnSignals(): { signal: AbortSignal; dispose: () => void } {
-  const ac = new AbortController();
-  const on = (): void => {
-    if (ac.signal.aborted) process.exit(1);
-    ac.abort();
-  };
-  process.on("SIGINT", on);
-  process.on("SIGTERM", on);
-  return {
-    signal: ac.signal,
-    dispose: () => {
-      process.off("SIGINT", on);
-      process.off("SIGTERM", on);
-    },
-  };
-}
+/** SIGINT/SIGTERM/SIGHUP handling of the driver (AC-51, defect 49); in signals.ts so a test can load it alone. */
+export { abortOnSignals } from "./signals.js";

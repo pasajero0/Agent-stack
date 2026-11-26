@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { execa } from "execa";
 import { lineSplitter, toolLines } from "./engine/progress.js";
 import { insideOuterSandbox, NO_TOKEN_MESSAGE, outerSandboxEnv } from "./outer-sandbox.js";
-import { killGroup } from "./process-group.js";
+import { trackGroup } from "./process-group.js";
 import type { Role } from "./types.js";
 
 export type Model = "opus" | "sonnet" | "haiku";
@@ -308,14 +308,15 @@ export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcom
       for (const line of lines.push(decoder.decode(chunk, { stream: true }))) show(line);
     });
   }
+  const group = trackGroup(sub.pid);
   let stopped: "timeout" | "aborted" | null = null;
   const stop = (why: "timeout" | "aborted"): void => {
     stopped ??= why;
-    killGroup(sub.pid, () => sub.kill("SIGKILL"));
+    group.kill(() => sub.kill("SIGKILL"));
   };
-  // Defect 49: once claude has ended, kill what is left of its group (also so a leftover holding the pipes
+  // Defect 49: once claude has ended, kill what is left of its group, once (also so a leftover holding the pipes
   // does not keep `await sub` waiting).
-  sub.on("exit", () => killGroup(sub.pid));
+  sub.on("exit", group.end);
   const timer = setTimeout(() => stop("timeout"), io.timeoutMs);
   const onAbort = (): void => stop("aborted");
   if (io.signal?.aborted) onAbort();
@@ -324,7 +325,7 @@ export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcom
   try {
     proc = await sub;
   } finally {
-    killGroup(sub.pid);
+    group.end();
     clearTimeout(timer);
     io.signal?.removeEventListener("abort", onAbort);
   }
