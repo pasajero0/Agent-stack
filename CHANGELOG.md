@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.2 — The driver starts from the chat inside the sandbox
+
+- **CI runs on release branches:** the workflow also runs on every commit sent to `release/**` and `hotfix/**`.
+- **Defects log has a `Cause` column:** every row in `docs/defects.md` names its cause. `pnpm defects` counts the
+  rows by cause, and `pnpm defects --check` runs in CI after `pnpm test:fast`. The rule is in
+  `docs/GLOSSARY.md` → Cause.
+- **The driver and the evals start from the chat with the sandbox on (macOS, defect #57):** inside an OS sandbox
+  a `claude` child could not read the login ("Not logged in") and could not start its own sandbox. The driver now
+  asks the OS whether it runs inside a sandbox. If it does, each call gets the token from
+  `~/.config/agent-stack/claude-token` (made once with `claude setup-token`) and runs with its own sandbox off;
+  the outer sandbox holds the call's processes. With no token the driver stops and names the command to run.
+  A driver started from a terminal works as before. See README → Limits.
+- **Checked:** the evals started from the chat inside the sandbox pass (see the eval line below); the run that
+  made the `Cause` column was started and driven from the chat with the sandbox on.
+- **Defect log:** #58, #59.
+- **Eval run** on 0.5.2, k = 3, real `claude`, started from the chat inside the OS sandbox: 21/21 passed,
+  pass^3 = 1, $1.17, 5:25 — `evals/results/2026-11-26-210528.json`.
+
+### Upgrading from 0.5.1
+
+- To start `agent-stack run` from a chat with the sandbox on (macOS): run `claude setup-token` in a terminal once
+  and save its output to `~/.config/agent-stack/claude-token` (`chmod 600`). One token serves every project on
+  the machine. Nothing to do if you start the driver from a terminal.
+
 ## 0.5.1 — Temp files inside the sandbox
 
 - **`verify` records the result again (macOS, run by the agent in Bash):** `.claude/bin/verify` made its temp

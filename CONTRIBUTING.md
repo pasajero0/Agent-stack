@@ -20,6 +20,8 @@ A **hotfix** — an urgent fix of a released version — gets its own branch fro
 `hotfix/<next version>`, e.g. `git switch -c hotfix/0.4.4 v0.4.3`. It holds only the fix (spec change, test,
 code, release commit), one PR, squash, tag. Other work waits for the next release.
 
+CI runs on every commit sent to `main`, `release/**` and `hotfix/**`, and on every pull request.
+
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org): `type(scope): what changed`. The scope is required.
@@ -84,17 +86,17 @@ For a release, raise the version in `package.json` first, then run the evals: th
 
 ## Defects
 
-Every defect gets one row in [docs/defects.md](docs/defects.md): what broke, who found it, its class, whether it
-escaped into a release, what closed it, and whether a test now guards it. Write the row when the defect is found,
-not when it is fixed.
+Every defect gets one row in [docs/defects.md](docs/defects.md): what broke, who found it, its class, its cause,
+whether it escaped into a release, what closed it, and whether a test now guards it. Write the row when the defect
+is found, not when it is fixed.
 
 - **Classes:** `dup` (a rule written in several places drifted), `unverified` (an assumption about the platform or
   the model, not checked live), `slip` (an execution error: a command, an order, a wording), `design` (a hole in
   the design), `env` (a test's result depends on the machine it runs on: the OS, installed tools, the load, files
   that are not in git), `process` (release, review or communication).
 - **A fixed defect gets a regression test**, unless it is a slip with nothing to test; then the row says `—`.
-- **A class that repeats gets a check, not more text.** When the same class shows up again, add a test, a hook or
-  a driver check that catches it.
+- **Every row names its cause.** The rule is in [docs/GLOSSARY.md → Cause](docs/GLOSSARY.md). `pnpm defects`
+  counts the rows by cause.
 - `agent-stack run --stats` counts runs, not defects: the log stays human-written. A defect it shows (for example
   permission denials) still gets its row here.
 

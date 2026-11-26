@@ -34,6 +34,14 @@ it here first.
 - **One source of rules.** A rule lives in one place: a skill or an agent. The driver's steps load them and add
   only data and bounds, so a fix to an agent reaches the driver too. Recorded miss: the driver's own review
   text missed the agent's later fixes.
+- **Cause** — the column of `docs/defects.md` that names why a defect happened: a short, stable kebab-case name
+  (`rule-in-two-places`), the same for every row with that cause. One cause per row: the cause that can repeat in
+  other places, not the place that broke (`harness-part-not-tested-with-sandbox`, not "a temp file outside
+  `$TMPDIR`"). The log counts defects by cause, not by class, because one cause can show in several places. The
+  count of repeats sets the priority. **A cause that repeats gets a check:** at 2 rows, the maintainer plans a check
+  for it in the next release; at 3 rows with no test and no planned check (`planned: <version>` in the `Test`
+  cell), `pnpm defects --check` fails in CI and the release does not merge. This entry is the one place of the
+  rule.
 - **The harness is stack-agnostic.** Stack-specific settings live in `.claude/gates.json`; fixed checks that
   are the same for every project live in the hooks, so `update` can deliver them.
 
