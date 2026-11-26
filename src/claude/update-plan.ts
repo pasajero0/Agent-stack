@@ -6,6 +6,8 @@ import type { GeneratedFile, UpdatePlan } from "./types.js";
 import { HOOKS_BLOCK, hookScript } from "./hooks-block.js";
 import { builtDomains, builtWritePaths, domainSource, generatedSandbox, mergeSandbox, readGeneratedSandbox, withDomains } from "./sandbox.js";
 import type { GeneratedSandbox } from "./sandbox.js";
+import { GUARDED, NO_RECORD, readGeneratedList, removedLine } from "./permissions.js";
+import type { GeneratedPermissions, GuardedKey } from "./permissions.js";
 
 export type { UpdatePlan } from "./types.js";
 
@@ -86,17 +88,21 @@ export function keepUserSettings(
   existing: string,
   fresh: string,
   /** `permissions.allow` the harness generated last time (manifest): an entry it no longer writes is dropped. */
-  generatedBefore: readonly string[] = []
-): { content: string; kept: string[] } {
+  generatedBefore: readonly string[] = [],
+  /** `permissions.deny` and `permissions.ask` the harness generated last time; null: no record (older version). */
+  permissionsBefore: GeneratedPermissions = NO_RECORD
+): { content: string; kept: string[]; lines: string[] } {
   let old: unknown;
   try {
     old = JSON.parse(existing);
   } catch {
-    return { content: fresh, kept: [] };
+    return { content: fresh, kept: [], lines: [] };
   }
-  if (!isObject(old)) return { content: fresh, kept: [] };
+  if (!isObject(old)) return { content: fresh, kept: [], lines: [] };
   const next = JSON.parse(fresh) as Record<string, unknown>;
   const kept: string[] = [];
+  const lines: string[] = [];
+  let removedAny = false;
   for (const [key, value] of Object.entries(old)) {
     if (key === "hooks" || key === "__proto__") continue; // hooks: keepCustomHooks
     if (!Object.hasOwn(next, key)) {
@@ -114,16 +120,32 @@ export function keepUserSettings(
         perms[key] = value;
         kept.push(`permissions.${key}`);
       } else if (Array.isArray(mine) && Array.isArray(value)) {
+        const guarded: GuardedKey | null = key === "deny" || key === "ask" ? key : null;
+        const before = guarded ? (permissionsBefore[guarded] ?? []) : key === "allow" ? generatedBefore : [];
+        let whole = false; // the harness writes nothing in this key: the user's list is kept as it is
+        if (guarded) {
+          // An entry the harness wrote last time and the user removed: not written back, one warning line.
+          const removed = GUARDED[guarded].filter((e) => before.includes(e) && !value.includes(e));
+          for (const e of removed) lines.push(removedLine(e, guarded));
+          const written = mine.filter((e) => !(typeof e === "string" && removed.includes(e)));
+          mine.splice(0, mine.length, ...written);
+          removedAny ||= removed.length > 0;
+          whole = written.length === 0;
+        }
+        let pushed = false;
         for (const v of value) {
           if (mine.some((m) => JSON.stringify(m) === JSON.stringify(v))) continue;
-          if (key === "allow" && typeof v === "string" && generatedBefore.includes(v)) continue; // ours, retired
+          if (typeof v === "string" && before.includes(v)) continue; // ours last time, not now: retired
           mine.push(v);
-          kept.push(`permissions.${key}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
+          pushed = true;
+          if (!whole) kept.push(`permissions.${key}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
         }
+        if (whole && pushed) kept.push(`permissions.${key}`);
       }
     }
   }
-  return { content: kept.length ? JSON.stringify(next, null, 2) + "\n" : fresh, kept };
+  const changed = kept.length > 0 || removedAny;
+  return { content: changed ? JSON.stringify(next, null, 2) + "\n" : fresh, kept, lines };
 }
 
 /**
@@ -192,9 +214,19 @@ export function manifestContent(
   params: unknown,
   files: Record<string, string>,
   generatedAllow: unknown,
-  generatedSandbox: unknown
+  generatedSandbox: unknown,
+  /** The deny and ask entries the harness wrote; a missing one stays missing (no record). */
+  generated: { deny?: unknown; ask?: unknown } = {}
 ): string {
-  const manifest = { templateVersion: toolVersion(), params, files, generatedAllow, generatedSandbox };
+  const manifest = {
+    templateVersion: toolVersion(),
+    params,
+    files,
+    generatedAllow,
+    generatedDeny: generated.deny ?? undefined, // undefined: JSON.stringify drops the key
+    generatedAsk: generated.ask ?? undefined,
+    generatedSandbox,
+  };
   return JSON.stringify(manifest, null, 2) + "\n";
 }
 
@@ -203,12 +235,19 @@ interface Manifest {
   hashes: Record<string, string> | null;
   /** The `permissions.allow` entries the harness generated. */
   generatedAllow: string[];
+  /** The `permissions.deny` and `permissions.ask` entries the harness generated; null for an older manifest. */
+  generatedPermissions: GeneratedPermissions;
   /** The sandbox lists the harness wrote last time (read per the sandbox1 Contract). */
   generatedSandbox: GeneratedSandbox;
 }
 
 function readManifest(projectDir: string): Manifest {
-  const none: Manifest = { hashes: null, generatedAllow: [], generatedSandbox: readGeneratedSandbox(undefined) };
+  const none: Manifest = {
+    hashes: null,
+    generatedAllow: [],
+    generatedPermissions: NO_RECORD,
+    generatedSandbox: readGeneratedSandbox(undefined),
+  };
   let m: unknown;
   try {
     m = JSON.parse(readFileSync(join(projectDir, MANIFEST), "utf-8"));
@@ -220,10 +259,11 @@ function readManifest(projectDir: string): Manifest {
     ? m.generatedAllow.filter((x): x is string => typeof x === "string")
     : [];
   const generatedSandbox = readGeneratedSandbox(m.generatedSandbox);
-  if (!isObject(m.files)) return { hashes: null, generatedAllow, generatedSandbox };
+  const generatedPermissions = { deny: readGeneratedList(m.generatedDeny), ask: readGeneratedList(m.generatedAsk) };
+  if (!isObject(m.files)) return { hashes: null, generatedAllow, generatedPermissions, generatedSandbox };
   const hashes: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const [k, v] of Object.entries(m.files)) if (typeof v === "string") hashes[k] = v;
-  return { hashes, generatedAllow, generatedSandbox };
+  return { hashes, generatedAllow, generatedPermissions, generatedSandbox };
 }
 
 const GATES = ".claude/gates.json";
@@ -321,11 +361,13 @@ export function planUpdate(
     gatesWarning: null,
     sandboxLines: [],
     readDenyWarning: null,
+    permissionLines: [],
   };
   const before = readManifest(projectDir);
   const builtSettings = files.find((f) => f.path === SETTINGS);
   const source = domainSource(join(projectDir, GATES), builtSettings ? builtDomains(builtSettings.content) : []);
   let nextSandbox: GeneratedSandbox | null = null; // null: no settings.json built, the manifest's stays as built
+  let nextPermissions: GeneratedPermissions | null = null; // null: the built manifest's record
   const recorded = before.hashes;
   plan.noHashes = recorded === null;
   const hashes: Record<string, string> = {};
@@ -369,11 +411,13 @@ export function planUpdate(
       if (merged.unreadable) {
         plan.kept.push(f.path); // not ours to overwrite blind: the user fixes the JSON, then updates
         nextSandbox = before.generatedSandbox; // AC-10: kept as read, and no sandbox line
+        nextPermissions = before.generatedPermissions; // not written this time: the old record stays
         continue;
       }
-      const settings = keepUserSettings(raw, merged.content, before.generatedAllow);
+      const settings = keepUserSettings(raw, merged.content, before.generatedAllow, before.generatedPermissions);
       const sandbox = mergeSandbox(raw, settings.content, before.generatedSandbox);
       plan.customSettings = [...settings.kept, ...sandbox.kept];
+      plan.permissionLines = settings.lines;
       plan.sandboxLines = sandbox.lines;
       f = { ...f, content: sandbox.content };
     }
@@ -412,7 +456,8 @@ export function planUpdate(
   if (manifest) {
     const m: unknown = JSON.parse(manifest.content);
     const built = isObject(m) ? m : {};
-    const content = manifestContent(built.params, hashes, built.generatedAllow, nextSandbox ?? built.generatedSandbox);
+    const generated = nextPermissions ?? { deny: built.generatedDeny, ask: built.generatedAsk };
+    const content = manifestContent(built.params, hashes, built.generatedAllow, nextSandbox ?? built.generatedSandbox, generated);
     classify({ ...manifest, content });
   }
   return plan;

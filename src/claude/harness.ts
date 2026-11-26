@@ -11,6 +11,7 @@ import { checkRouting } from "../run/routing.js";
 import { HOOKS_BLOCK } from "./hooks-block.js";
 import { MANIFEST, manifestContent, sha256, tracked } from "./update-plan.js";
 import { buildSandboxBlock, detectedDomains, detectedWritePaths, generatedSandbox } from "./sandbox.js";
+import { ASK_ENTRIES, DENY_ENTRIES } from "./permissions.js";
 
 // The update planning lives in update-plan.ts; these names stay importable from here.
 export {
@@ -87,7 +88,7 @@ function buildSettings(p: HarnessParams): string {
   ];
   const settings = {
     $schema: "https://json.schemastore.org/claude-code-settings.json",
-    permissions: { allow },
+    permissions: { allow, deny: [...DENY_ENTRIES], ask: [...ASK_ENTRIES] },
     sandbox: buildSandboxBlock(detectedDomains(p.packageManager, p.forgeCli), detectedWritePaths(p.packageManager)),
     hooks: HOOKS_BLOCK,
   };
@@ -199,7 +200,8 @@ export function buildHarnessFiles(params: HarnessParams, templatesDir?: string):
     detectedDomains(params.packageManager, params.forgeCli),
     detectedWritePaths(params.packageManager)
   );
-  files.push({ path: MANIFEST, content: manifestContent(params, hashes, allow, sandbox), action: "create" });
+  const generated = { deny: [...DENY_ENTRIES], ask: [...ASK_ENTRIES] };
+  files.push({ path: MANIFEST, content: manifestContent(params, hashes, allow, sandbox, generated), action: "create" });
 
   return files;
 }

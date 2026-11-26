@@ -299,7 +299,18 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 - **OS sandbox (Bash only).** The generated `.claude/settings.json` turns on Claude Code's OS sandbox (the
   sandbox block).
   - It covers Bash and its child processes only. Read, Edit, Write, WebFetch, WebSearch, MCP servers and hooks
-    run outside it.
+    run outside it. A text the agent read can use these tools to send data out, so the harness closes them in
+    `.claude/settings.json` → `permissions`:
+    - **Claude in Chrome tools are denied:** `permissions.deny` has `mcp__claude-in-chrome__*`. That browser
+      has your own logins. A deny rule blocks in every permission mode.
+    - **WebFetch and every MCP tool ask each time:** `permissions.ask` has `WebFetch` and `mcp__*`. Claude Code
+      asks also in `bypassPermissions`, because an explicit ask rule wins there.
+    - **WebSearch is allowed and is not limited.**
+    - **The Read tool:** guard-file handles it (see the secret folders below).
+    - **To open a channel:** remove its entry from `.claude/settings.json` by hand. `update` keeps it removed
+      and prints a warning on each run. Your own deny and ask entries are always kept.
+    - **What stays open:** a project cannot turn off the Chrome integration itself; the harness only denies its
+      tools. In a headless call (`claude -p`), Claude Code refuses a tool that must ask.
   - **Network:** for Bash, only the listed domains are reached without a question. The list is `gates.json` →
     `sandbox.allowedDomains`. WebFetch is not limited by it. Node's built-in `fetch` does not use the sandbox
     proxy, so it fails even for a listed domain. Set `NODE_USE_ENV_PROXY=1` for it (checked on Node 22.21).

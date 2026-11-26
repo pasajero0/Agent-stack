@@ -2,6 +2,13 @@
 
 ## 0.5.4 — unreleased
 
+- **The channels past the OS sandbox are closed by default:** the generated `.claude/settings.json` now has
+  `permissions.deny` with `mcp__claude-in-chrome__*` (the Claude in Chrome tools), and `permissions.ask` with
+  `WebFetch` and `mcp__*` (every MCP tool). A deny rule blocks in every permission mode; an ask rule asks also
+  in `bypassPermissions`. `permissions.allow` stays as it was, WebSearch included. The manifest records these
+  entries in `generatedDeny` and `generatedAsk`. `update` adds them to a settings.json of an older version and
+  keeps your own deny and ask entries. If you remove one of the three entries, `update` keeps it removed and
+  prints one warning line for it on each run. In a headless call, Claude Code refuses a tool that must ask.
 - **The feedback of a failed check names the failing tests (defect #60):** the driver now takes the lines that
   name failing tests from the whole output of a red check, not only from its last 50 lines. A line counts when,
   after colour codes are removed, it starts with `FAIL`, `×`, `✗`, `not ok` or `--- FAIL`. The feedback shows
