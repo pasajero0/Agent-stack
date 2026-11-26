@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { cleanupProjects, deployHarness, git, patchGates, runHook, write } from "./fixture.js";
 
@@ -224,5 +225,17 @@ describe("trace reads criteria as the driver does (0.4.5)", () => {
     // The loose line is named, with the form that counts.
     expect(r.out).toContain("note: a line like '- AC-3 …' is not a criterion; write it as '- **AC-3:** …'");
     expect(specAcIds(spec)).toEqual(["AC-1", "AC-2"]);
+  });
+});
+
+describe("trace on this repo's own spec", () => {
+  it("sandbox1 AC-23: trace --terms sandbox1 passes on the repo's spec and glossary", () => {
+    const repoFile = (rel: string) => readFileSync(new URL(`../../${rel}`, import.meta.url), "utf8");
+    const dir = deployHarness();
+    write(dir, "docs/GLOSSARY.md", repoFile("docs/GLOSSARY.md"));
+    write(dir, "docs/specs/sandbox1/SPEC.md", repoFile("docs/specs/sandbox1/SPEC.md"));
+    const r = trace(dir, "--terms", "sandbox1");
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain("trace sandbox1: spec terms ok");
   });
 });

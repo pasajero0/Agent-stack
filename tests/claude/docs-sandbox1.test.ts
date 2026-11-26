@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL("../../", import.meta.url));
 const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
 const changelog = readFileSync(new URL("../../CHANGELOG.md", import.meta.url), "utf8");
 const glossary = readFileSync(new URL("../../docs/GLOSSARY.md", import.meta.url), "utf8");
@@ -117,9 +114,6 @@ describe("sandbox1 AC-23: glossary terms", () => {
     expect(parts).toContain("- **Sandbox block**");
   });
 
-  it("sandbox1 AC-23: trace --terms sandbox1 passes", () => {
-    expect(() =>
-      execFileSync(".claude/bin/trace", ["--terms", "sandbox1"], { cwd: root, stdio: "pipe" }),
-    ).not.toThrow();
-  });
+  // "trace --terms sandbox1 passes" is in tests/hooks/trace.test.ts: it needs a deployed harness, and this
+  // repo's own .claude/ is not in git.
 });
