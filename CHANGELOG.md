@@ -2,6 +2,12 @@
 
 ## 0.5.4 — unreleased
 
+- **Processes that a check or a role call started no longer outlive it (defects #49, #61):** when a check or a
+  role call ends in any way (any exit code, an error, a timeout, an abort), the driver sends SIGKILL to what is
+  left of that child's process group before it takes the result. Before, it did this only on a timeout or an
+  abort, so vitest workers stayed alive with parent PID 1 at full CPU and made later checks fail by time. The
+  result of the check or the call does not change. Not reached: a process that left the group (its own session,
+  for example a daemon or a tool that calls setsid).
 - **Bash cannot write the harness files inside the sandbox:** the generated `.claude/settings.json` now has
   `sandbox.filesystem.denyWrite` with `./.claude/gates.json`, `./.claude/bin` and `./CLAUDE.md`. Before, guard-file
   stopped only the Edit and Write tools there, so a script run through Bash could weaken the pipeline's rules.

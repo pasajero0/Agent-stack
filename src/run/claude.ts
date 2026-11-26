@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { execa } from "execa";
 import { lineSplitter, toolLines } from "./engine/progress.js";
 import { insideOuterSandbox, NO_TOKEN_MESSAGE, outerSandboxEnv } from "./outer-sandbox.js";
+import { killGroup } from "./process-group.js";
 import type { Role } from "./types.js";
 
 export type Model = "opus" | "sonnet" | "haiku";
@@ -267,20 +268,12 @@ export function classify(result: Record<string, unknown>, validate?: (v: unknown
   }
 }
 
-/** SIGKILL to the child's process group (it is spawned detached, so it leads one); the child alone as a fallback. */
-function killGroup(pid: number | undefined, killChild: () => void): void {
-  try {
-    if (pid === undefined) throw new Error("no pid");
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    killChild();
-  }
-}
-
 /**
  * Runs one Claude call: prompt on stdin, `AGENT_STACK_RUN` set; records `calls/<n>-<role>.json`.
  * The child runs detached in its own process group. After `timeoutMs`, or when `io.signal` aborts, the
- * whole group is killed, so tools the call started (test runners, servers) die with it.
+ * whole group is killed, so tools the call started (test runners, servers) die with it. When the call ends in
+ * any way, what is left of the group is killed too (defect 49); a process that left the group (its own
+ * session, such as a daemon or a tool that calls setsid) is not reached.
  */
 export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcome> {
   const bin = io.env?.["AGENT_STACK_CLAUDE"] ?? process.env["AGENT_STACK_CLAUDE"] ?? "claude";
@@ -320,6 +313,9 @@ export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcom
     stopped ??= why;
     killGroup(sub.pid, () => sub.kill("SIGKILL"));
   };
+  // Defect 49: once claude has ended, kill what is left of its group (also so a leftover holding the pipes
+  // does not keep `await sub` waiting).
+  sub.on("exit", () => killGroup(sub.pid));
   const timer = setTimeout(() => stop("timeout"), io.timeoutMs);
   const onAbort = (): void => stop("aborted");
   if (io.signal?.aborted) onAbort();
@@ -328,6 +324,7 @@ export async function callClaude(spec: CallSpec, io: CallIo): Promise<CallOutcom
   try {
     proc = await sub;
   } finally {
+    killGroup(sub.pid);
     clearTimeout(timer);
     io.signal?.removeEventListener("abort", onAbort);
   }

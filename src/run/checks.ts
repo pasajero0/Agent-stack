@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { RunError } from "./errors.js";
+import { killGroup } from "./process-group.js";
 import type { CheckResult } from "./types.js";
 
 const TAIL_LINES = 50;
@@ -51,7 +52,9 @@ function lastLines(text: string): string {
 
 /**
  * Run `cmd` through `bash -c`; decide by exit code only. Empty command is skipped. A timeout or an abort of
- * `signal` kills the whole process group; an aborted check reports `aborted` (AC-51). `env` is added to the
+ * `signal` kills the whole process group; an aborted check reports `aborted` (AC-51). When the check ends in
+ * any way, what is left of its group is killed before the result resolves (defect 49; a process that left the
+ * group, such as a daemon or a tool that calls setsid, is not reached). `env` is added to the
  * check's environment (driverCheck passes `AGENT_STACK_RUN` to the harness scripts, AC-89).
  */
 export function runCheck(cmd: string, cwd: string, timeoutMs: number, signal?: AbortSignal, env: Record<string, string> = {}): Promise<CheckRun> {
@@ -69,16 +72,16 @@ export function runCheck(cmd: string, cwd: string, timeoutMs: number, signal?: A
     const stop = (why: "timeout" | "aborted"): void => {
       if (stopped) return;
       stopped = why;
-      try {
-        if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
-      } catch {
-        child.kill("SIGKILL");
-      }
+      killGroup(child.pid, () => child.kill("SIGKILL"));
     };
+    // Defect 49: once bash has ended, kill what is left of its group (also so a leftover holding the pipes
+    // does not delay 'close'). A process that left the group (setsid, a daemon) is not reached.
+    child.on("exit", () => killGroup(child.pid));
     const onAbort = (): void => stop("aborted");
     signal?.addEventListener("abort", onAbort, { once: true });
     const timer = setTimeout(() => stop("timeout"), timeoutMs);
     const finish = (exit: number, extra: string): void => {
+      killGroup(child.pid);
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
       const text = extra ? (out ? `${out}\n${extra}` : extra) : out;

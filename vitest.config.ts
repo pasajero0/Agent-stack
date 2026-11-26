@@ -11,6 +11,7 @@ const SLOW = [
   "tests/run/e2e.test.ts",
   "tests/run/frozen.test.ts",
   "tests/run/git.test.ts",
+  "tests/run/process-group.test.ts",
   "tests/run/progress.test.ts",
   "tests/run/scout-prompts.test.ts",
   "tests/run/timing.test.ts",
