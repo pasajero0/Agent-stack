@@ -181,6 +181,7 @@ interface MergeReport {
   entries: Record<Place, string[]>; // denyRead, then allowedDomains entries
   warnings: string[];
   replaced: Record<"objects" | "lists", string[]>; // the five places: the objects first, then the lists
+  readable: string[]; // removed secret folders, in the secret folders' order (AC-18)
 }
 
 type Place = "filesystem" | "network";
@@ -227,7 +228,15 @@ function mergePlace(
   else if (!Array.isArray(list)) {
     r.replaced.lists.push(replaced(`${path}.${listKey}`, "a list"));
     out[listKey] = [...harness];
-  } else out[listKey] = mergeList(list, harness, before, `${path}.${listKey}`, r.entries[place]);
+  } else {
+    // A removed secret folder: the harness wrote it last time and the user's list has it no more (AC-18).
+    const removed = place === "filesystem" ? harness.filter((h) => before.includes(h) && !list.includes(h)) : [];
+    for (const folder of removed) {
+      r.readable.push(`${safeText(folder)} is readable inside the sandbox: it is not in ${path}.${listKey}`);
+    }
+    const written = harness.filter((h) => !removed.includes(h));
+    out[listKey] = mergeList(list, written, before, `${path}.${listKey}`, r.entries[place]);
+  }
   for (const [k, v] of Object.entries(user)) {
     if (k === listKey || k === "__proto__") continue;
     out[k] = v;
@@ -268,6 +277,7 @@ export function mergeSandbox(
     entries: { filesystem: [], network: [] },
     warnings: [],
     replaced: { objects: [], lists: [] },
+    readable: [],
   };
   const out: Record<string, unknown> = {};
   for (const key of ["enabled", "allowUnsandboxedCommands", "failIfUnavailable"] as const) {
@@ -298,7 +308,7 @@ export function mergeSandbox(
       ...r.entries.filesystem,
       ...r.entries.network,
     ],
-    lines: [...r.warnings, ...r.replaced.objects, ...r.replaced.lists].map(warn),
+    lines: [...r.warnings, ...r.replaced.objects, ...r.replaced.lists, ...r.readable].map(warn),
   };
 }
 

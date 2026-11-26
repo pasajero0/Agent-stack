@@ -60,6 +60,13 @@ function settingsWith(sandbox: unknown): Record<string, unknown> {
 }
 const settingsSandbox = (): Record<string, unknown> => readJson("settings.json").sandbox as Record<string, unknown>;
 
+/** The manifest without `generatedSandbox`, as 0.4.8 left it (AC-15): every user list entry counts as the user's. */
+function asOldManifest(): void {
+  const m = readJson(".harness.json");
+  delete m.generatedSandbox;
+  write(".harness.json", m);
+}
+
 beforeEach(async () => {
   project = mkdtempSync(join(tmpdir(), "sandbox-merge-"));
   dirs.push(project);
@@ -187,6 +194,7 @@ describe("sandbox1: other keys and list entries", () => {
 
   it("sandbox1 AC-8: lists are the harness entries, then the user's, no entry twice; each user entry reported once", async () => {
     expect(detected.length).toBeGreaterThan(0);
+    asOldManifest();
     write(
       "settings.json",
       settingsWith({
@@ -310,6 +318,7 @@ describe("sandbox1: safe text and __proto__", () => {
   it("sandbox1 AC-25: control and bidi characters in keys and entries print as ?, the file keeps them", async () => {
     const entry = "~/.x\u001b]0;pwned\u0007";
     const key = "‮evil";
+    asOldManifest();
     write(
       "settings.json",
       settingsWith({
