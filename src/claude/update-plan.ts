@@ -4,6 +4,8 @@ import { join, dirname, posix, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GeneratedFile, UpdatePlan } from "./types.js";
 import { HOOKS_BLOCK, hookScript } from "./hooks-block.js";
+import { builtDomains, domainSource, generatedSandbox, readGeneratedSandbox, withDomains } from "./sandbox.js";
+import type { GeneratedSandbox } from "./sandbox.js";
 
 export type { UpdatePlan } from "./types.js";
 
@@ -201,10 +203,12 @@ interface Manifest {
   hashes: Record<string, string> | null;
   /** The `permissions.allow` entries the harness generated. */
   generatedAllow: string[];
+  /** The sandbox lists the harness wrote last time (read per the sandbox1 Contract). */
+  generatedSandbox: GeneratedSandbox;
 }
 
 function readManifest(projectDir: string): Manifest {
-  const none: Manifest = { hashes: null, generatedAllow: [] };
+  const none: Manifest = { hashes: null, generatedAllow: [], generatedSandbox: readGeneratedSandbox(undefined) };
   let m: unknown;
   try {
     m = JSON.parse(readFileSync(join(projectDir, MANIFEST), "utf-8"));
@@ -215,10 +219,11 @@ function readManifest(projectDir: string): Manifest {
   const generatedAllow = Array.isArray(m.generatedAllow)
     ? m.generatedAllow.filter((x): x is string => typeof x === "string")
     : [];
-  if (!isObject(m.files)) return { hashes: null, generatedAllow };
+  const generatedSandbox = readGeneratedSandbox(m.generatedSandbox);
+  if (!isObject(m.files)) return { hashes: null, generatedAllow, generatedSandbox };
   const hashes: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const [k, v] of Object.entries(m.files)) if (typeof v === "string") hashes[k] = v;
-  return { hashes, generatedAllow };
+  return { hashes, generatedAllow, generatedSandbox };
 }
 
 const GATES = ".claude/gates.json";
@@ -288,8 +293,12 @@ export function planUpdate(
     routingKeysAdded: [],
     gatesWithRouting: null,
     gatesWarning: null,
+    sandboxLines: [],
   };
   const before = readManifest(projectDir);
+  const builtSettings = files.find((f) => f.path === SETTINGS);
+  const source = domainSource(join(projectDir, GATES), builtSettings ? builtDomains(builtSettings.content) : []);
+  let nextSandbox: GeneratedSandbox | null = null; // null: no settings.json built, the manifest's stays as built
   const recorded = before.hashes;
   plan.noHashes = recorded === null;
   const hashes: Record<string, string> = {};
@@ -318,6 +327,10 @@ export function planUpdate(
       manifest = f;
       continue;
     }
+    if (f.path === SETTINGS) {
+      f = { ...f, content: withDomains(f.content, source.domains) };
+      nextSandbox = generatedSandbox(source.domains);
+    }
     if (f.path === SETTINGS && existsSync(full)) {
       const raw = readFileSync(full, "utf-8");
       const merged = keepCustomHooks(raw, f.content);
@@ -326,12 +339,14 @@ export function planUpdate(
       plan.settingsUnreadable = merged.unreadable;
       if (merged.unreadable) {
         plan.kept.push(f.path); // not ours to overwrite blind: the user fixes the JSON, then updates
+        nextSandbox = before.generatedSandbox; // AC-10: kept as read, and no sandbox line
         continue;
       }
       const settings = keepUserSettings(raw, merged.content, before.generatedAllow);
       plan.customSettings = settings.kept;
       f = { ...f, content: settings.content };
     }
+    if (f.path === SETTINGS && source.line) plan.sandboxLines.push(source.line);
     if (tracked(f.path)) {
       const deployed = recorded?.[f.path];
       const onDisk = existsSync(full) ? readFileSync(full, "utf-8") : null;
@@ -366,7 +381,7 @@ export function planUpdate(
   if (manifest) {
     const m: unknown = JSON.parse(manifest.content);
     const built = isObject(m) ? m : {};
-    const content = manifestContent(built.params, hashes, built.generatedAllow, built.generatedSandbox);
+    const content = manifestContent(built.params, hashes, built.generatedAllow, nextSandbox ?? built.generatedSandbox);
     classify({ ...manifest, content });
   }
   return plan;

@@ -1,3 +1,5 @@
+import type { SandboxLine } from "./sandbox.js";
+
 /** Detected Claude Code install info. */
 export interface ProviderInfo {
   name: string;
@@ -47,4 +49,6 @@ export interface UpdatePlan {
   gatesWithRouting: GeneratedFile | null;
   /** gates.json is not valid JSON, or not an object: left as it was; the warning to print. */
   gatesWarning: string | null;
+  /** The sandbox lines of the Contract, in its order: printed at the end of the report (sandbox1). */
+  sandboxLines: SandboxLine[];
 }

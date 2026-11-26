@@ -3,6 +3,7 @@
  * and the sandbox block the harness writes into `.claude/settings.json`. The only place in `src/` that holds them.
  */
 
+import { readFileSync } from "node:fs";
 import chalk from "chalk";
 
 /** Folders Bash may not read inside the sandbox, in the Contract order. Not `~/.config/gh`: `gh pr view` needs it. */
@@ -101,4 +102,76 @@ export interface GeneratedSandbox {
 
 export function generatedSandbox(domains: readonly string[]): GeneratedSandbox {
   return { denyRead: [...SECRET_FOLDERS], allowedDomains: [...domains] };
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
+/** The manifest's `generatedSandbox` as read back: each list on its own; not an array → empty; non-strings dropped. */
+export function readGeneratedSandbox(v: unknown): GeneratedSandbox {
+  const g = isObject(v) ? v : {};
+  return { denyRead: strings(g.denyRead), allowedDomains: strings(g.allowedDomains) };
+}
+
+/** A sandbox line `update` prints at the end of its report (Contract table "update output"). */
+export interface SandboxLine {
+  kind: "dim" | "warn";
+  text: string;
+}
+
+const ADD_LINE: SandboxLine = {
+  kind: "dim",
+  text: "  add sandbox.allowedDomains to .claude/gates.json to change the list",
+};
+const BAD_LIST: SandboxLine = {
+  kind: "warn",
+  text:
+    ".claude/gates.json sandbox.allowedDomains must be a list of domain names, so the detected list was used. " +
+    "Fix it, then run update again.",
+};
+
+/**
+ * The domain source of `update`: reads gates.json once. An array of strings → that array without duplicates
+ * (JSON equality, first place); key missing → the detected list and the "add" line; wrong type → the detected
+ * list and the "bad list" warning; not valid JSON, not an object or missing → the detected list, no line.
+ */
+export function domainSource(
+  gatesPath: string,
+  detected: readonly string[]
+): { domains: string[]; line: SandboxLine | null } {
+  const fallback = (line: SandboxLine | null) => ({ domains: [...detected], line });
+  let gates: unknown;
+  try {
+    gates = JSON.parse(readFileSync(gatesPath, "utf-8"));
+  } catch {
+    return fallback(null);
+  }
+  if (!isObject(gates)) return fallback(null);
+  if (!Object.hasOwn(gates, "sandbox")) return fallback(ADD_LINE);
+  const sandbox = gates.sandbox;
+  if (!isObject(sandbox)) return fallback(BAD_LIST);
+  if (!Object.hasOwn(sandbox, "allowedDomains")) return fallback(ADD_LINE);
+  const list = sandbox.allowedDomains;
+  if (!Array.isArray(list) || !list.every((d): d is string => typeof d === "string")) return fallback(BAD_LIST);
+  const keys = list.map((d) => JSON.stringify(d));
+  return { domains: list.filter((_, i) => keys.indexOf(keys[i]!) === i), line: null };
+}
+
+/** The detected domain list inside a built settings.json (`buildSettings` output). */
+export function builtDomains(settings: string): string[] {
+  const s: unknown = JSON.parse(settings);
+  const sandbox = isObject(s) ? s.sandbox : undefined;
+  const network = isObject(sandbox) ? sandbox.network : undefined;
+  return strings(isObject(network) ? network.allowedDomains : undefined);
+}
+
+/** A built settings.json with its sandbox block rebuilt for `domains`; the key keeps its place. */
+export function withDomains(settings: string, domains: readonly string[]): string {
+  const s = JSON.parse(settings) as Record<string, unknown>;
+  s.sandbox = buildSandboxBlock(domains);
+  return JSON.stringify(s, null, 2) + "\n";
 }
