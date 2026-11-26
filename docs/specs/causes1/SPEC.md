@@ -12,23 +12,25 @@ whether a test guards them. CI fails when a cause has 3 or more rows with no tes
 What exists today:
 - `docs/defects.md` has one table of 57 rows (`docs/defects.md:15-73`) with a `Class` column of six wide classes
   (`dup`, `unverified`, `slip`, `design`, `env`, `process`);
-- a class hides repeats: #43 (`env`) and #56 (`design (driver)`) have one cause, the driver counting an unrelated
-  red test as a failed attempt; #56 itself says "Third time for this cause". The `env` summary
+- a class hides repeats: #43 (`env`), #50 (`env`) and #56 (`design (driver)`) have one cause, the driver counting an
+  unrelated red test as a failed attempt; #56 itself says "Third time for this cause". The `env` summary
   (`docs/defects.md:90-112`) found six rows of one cause only by hand, after they were logged under `design`;
 - CONTRIBUTING → Defects says "A class that repeats gets a check", and nothing counts the repeats;
 - nothing in CI reads the log.
 
-This stage adds a `Cause` column, a script that counts it, a rule in CONTRIBUTING, and a CI step.
+This stage adds a `Cause` column, a script that counts it, the rule in the glossary entry Cause, a short pointer to
+it in CONTRIBUTING, and a CI step.
 
 ## Decisions
 
 No ADR: the change is a project document, a dev script and one CI step. The maintainer decided these in the grill
 (2026-11-26):
-- **One cause per row:** the cause the fix would remove. For #43 and #56 it is `driver-counts-unrelated-red`. A
-  second cause stays as words in the row's text, as now.
-- **A tested row:** its `Test` cell is not `—` and does not start with `planned`. A **planned check** is written in
+- **One cause per row:** the cause that repeats in different places, not the place that broke (the human,
+  after the first draft). For #43, #50 and #56 it is `driver-counts-unrelated-red`. A second cause stays as words
+  in the row's text, as now.
+- **A tested row:** its `Test` cell is not `—` and does not start with `planned` in any letter case. A **planned check** is written in
   the `Test` cell as `planned: <version>` (`planned: 0.5.3`). For `--check` it closes the cause; it is not counted
-  as a test. Writing `planned: …` is the only change allowed to an old cell, and only where the cell is `—` now.
+  as a test. Writing `planned: …` is the only change this stage makes to an old cell, and only where the cell is `—` now.
 - **CI runs `pnpm defects --check`**, as a step after `pnpm test:fast`. A cause that fails `--check` on the day of
   this change gets `planned: 0.5.3` in the `Test` cell of its newest row. `.claude/tmp/roadmap-plan.md` is not
   changed: the maintainer keeps it.
@@ -38,33 +40,37 @@ No ADR: the change is a project document, a dev script and one CI step. The main
   unchanged. The header gets one
   paragraph `**Cause:**` that explains the column and names `pnpm defects`.
 - **The word Cause is in `docs/GLOSSARY.md` → Ideas**, with the rule "a cause that repeats gets a check".
-  CONTRIBUTING uses that word.
+- **The rule lives in one place: the glossary entry Cause** (the human, after the first draft). It holds the one
+  cause per row, the 2-row and 3-row steps, the form of a planned check, and the two sentences on why the log
+  counts causes. CONTRIBUTING → Defects only points to that entry and names `pnpm defects`; it does not repeat the
+  rule. The CONTRIBUTING bullet "A class that repeats gets a check, not more text" is removed: the glossary entry
+  replaces it, and keeping both would write one rule in two places (`rule-in-two-places`).
+- **#50 is `driver-counts-unrelated-red`** (the human): #56 already calls itself the third case of this cause. So
+  this cause has 3 rows (#43, #50, #56) and no tested row, and #56, its newest row, gets `planned: 0.5.3` in its
+  `Test` cell (now `—`). No other cause fails `--check` today, so no other cell gets `planned`.
+- **#54, #55 and #57 are `harness-part-not-tested-with-sandbox`** (the human): the cause that repeats, not the
+  place that broke. The name `temp-file-outside-tmpdir` is not used. No earlier row of the log has this cause: the
+  two earlier cases that #54 and #57 name (the `Read(...)` rules and the package cache) have no row in the log.
+- **A `Test` cell that says "no test" in a wrong form is a row error, exit 2** (the human): empty, a bare `-`, an en
+  dash `–` (U+2013), `no` or `n/a` (AC-16). The one form of "no test" is `—` (U+2014).
+- **The first paragraph of `docs/defects.md`** ("One line per defect … a defect that comes back is a missing
+  check.") stays as it is (the human).
 
 From the task description:
 - Use these names where they fit: `test-depends-on-machine`, `driver-counts-unrelated-red`,
-  `temp-file-outside-tmpdir`, `harness-part-not-tested-with-sandbox`, `guard-bash-false-positive`,
-  `rule-in-two-places`. New causes get new names; many different causes never share one wide name.
+  `harness-part-not-tested-with-sandbox`, `guard-bash-false-positive`, `rule-in-two-places`. New causes get new
+  names; many different causes never share one wide name. (`temp-file-outside-tmpdir`, also in the description,
+  is dropped by the human's decision above.)
 - `Class` and every other cell stay as they are.
 
 Added by this spec (for the human to confirm):
 - **The cause of every row** is in the table under Contract → "Causes of the existing rows". The spec writer read
   every row. `guard-bash-false-positive` fits no row today, so it is not used.
-- **#50 is `test-depends-on-machine`**, not `driver-counts-unrelated-red`. #50 is about a group of tests with hard
-  time limits (four kinds); its "Closed by" names margin for them. #43 is about one test, and the grill set it to
-  `driver-counts-unrelated-red`. This reason is weak: #43's own "Closed by" also names a fix of the test. With this
-  choice `driver-counts-unrelated-red` has 2 rows (#43, #56), and no cause fails `--check` today (AC-17). If the
-  human moves #50 to `driver-counts-unrelated-red`, that cause has 3 rows with no test, and #56 (its newest row)
-  gets `planned: 0.5.3`.
-- **#54 and #55 are `temp-file-outside-tmpdir`**, #57 is `harness-part-not-tested-with-sandbox`: the cause the fix
-  removed (the task description names both). #54 and #57 call themselves the "third" and "fourth case" of one wider
-  cause; with this choice that repeat does not show in the count. All three rows are tested, so CI does not change
-  either way.
-- **The CONTRIBUTING bullet "A class that repeats gets a check, not more text" is replaced** by the cause rule
-  (AC-19). Keeping both would write one rule in two places (`rule-in-two-places`).
 - **`<version>`** in a planned check is three numbers, `^[0-9]+\.[0-9]+\.[0-9]+$`. A `Test` cell that starts with
-  `planned` in any letter case and any other form, or a `Test` cell that is empty or a bare `-`, is an error (AC-16), so a typo of
-  `planned`, an empty cell or a `-` never counts as a test. Other text (`no`, `n/a`, an en dash) still counts as
-  tested; review catches it.
+  `planned` in any letter case and has any other form is an error (AC-16), so a typo of `planned` never counts as a
+  test. Other text (`yes`, `yes (text)`, a file path, any other words) counts as tested; review catches a wrong one.
+- **The output has a `planned` column** next to `tested`, so the maintainer sees which cause is open only on a
+  planned check.
 - **Exit codes:** 0 ok, 1 a `--check` failure, 2 the log cannot be read or counted.
 - **`--file <path>`** reads another log; the tests use it with fixtures.
 
@@ -80,18 +86,18 @@ makes precise.
   `.claude/tmp/roadmap-plan.md`, which is not in git. Not a *plan* of the glossary (`tasks.json`).
 - **Row** (local): one line of the defect log's table after the header and the separator line.
 - **Tested row** (local): a row whose `Test` cell, trimmed, is not `—` (U+2014) and does not start with `planned` in any
-  letter case. (An empty cell, a bare `-` or a malformed `planned` cell is an error, AC-16.)
+  letter case. (A cell that is empty, `-`, `–`, `no` or `n/a`, or a malformed `planned` cell, is an error, AC-16.)
 - **Planned check** (local): a `Test` cell of the form `planned: <version>`, `<version>` matching
   `^[0-9]+\.[0-9]+\.[0-9]+$`, e.g. `planned: 0.5.3`.
 - **Failing cause** (local): a cause with 3 or more rows, no tested row and no row with a planned check.
 
 ## Model and state transitions
 
-A cause's state, by its rows (CONTRIBUTING → Defects holds the rule):
+A cause's state, by its rows (`docs/GLOSSARY.md` → Cause holds the rule):
 
 | State | Event | New state | Criterion |
 | --- | --- | --- | --- |
-| 1 row | a new row with the same cause | 2 rows: a check goes into the release plan | AC-19, AC-23 |
+| 1 row | a new row with the same cause | 2 rows: a check goes into the release plan | AC-20, AC-23 |
 | 2 rows, no tested row, no planned check | a third row | failing: `--check` exits 1 | AC-9 |
 | failing | a row gets a test, or a `Test` cell `—` becomes `planned: <version>` | closed: `--check` exits 0 | AC-10 |
 
@@ -101,8 +107,9 @@ A cause's state, by its rows (CONTRIBUTING → Defects holds the rule):
 
 - The table header becomes
   `| # | Date | Defect | Found by | Class | Cause | Escaped? | Closed by | Test |`: `Cause` right after `Class`.
-- Every row gets its cause in that column, from the table below. No other cell changes, except the `planned: …`
-  rule of Decisions.
+- Every row gets its cause in that column, from the table below. No other cell changes, except one: the `Test`
+  cell of row #56 changes from `—` to `planned: 0.5.3` (Decisions). The first paragraph of the file and the two
+  summary sections stay as they are.
 - One new paragraph after the `**Found by:**` paragraph, exactly (wrapped like the paragraphs around it):
 
   ```markdown
@@ -115,15 +122,15 @@ A cause's state, by its rows (CONTRIBUTING → Defects holds the rule):
 | Cause | Rows | Tested rows |
 | --- | --- | --- |
 | `rule-in-two-places` | 8, 15, 16, 18, 19, 20, 27, 34, 41 | 7 |
-| `test-depends-on-machine` | 6, 13, 45, 50, 52, 53 | 3 |
+| `test-depends-on-machine` | 6, 13, 45, 52, 53 | 3 |
+| `driver-counts-unrelated-red` | 43, 50, 56 | 0 (planned 1: #56) |
+| `harness-part-not-tested-with-sandbox` | 54, 55, 57 | 3 |
 | `dependency-change-unguarded` | 1, 3 | 2 |
 | `platform-not-checked-live` | 10, 12 | 1 |
 | `conclusion-from-partial-read` | 22, 44 | 0 |
 | `test-passes-for-wrong-reason` | 23, 30 | 2 |
 | `block-hits-legitimate-input` | 24, 40 | 2 |
 | `retry-takes-no-comment` | 39, 51 | 0 |
-| `driver-counts-unrelated-red` | 43, 56 | 0 |
-| `temp-file-outside-tmpdir` | 54, 55 | 2 |
 | `task-can-edit-check-config` | 2 | 1 |
 | `commit-not-gated-on-test` | 4 | 0 |
 | `merge-method-not-enforced` | 5 | 0 |
@@ -149,9 +156,8 @@ A cause's state, by its rows (CONTRIBUTING → Defects holds the rule):
 | `implementer-runs-full-suite` | 47 | 0 |
 | `evals-run-before-version-bump` | 48 | 0 |
 | `child-processes-outlive-call` | 49 | 0 |
-| `harness-part-not-tested-with-sandbox` | 57 | 1 |
 
-36 causes, 57 rows; each of #1–#57 is in exactly one line. The order of this table is not the output order
+35 causes, 57 rows; each of #1–#57 is in exactly one line. The order of this table is not the output order
 (AC-5). The "Tested rows" column follows from today's `Test` cells; the script computes it, this table
 only shows what it should print.
 
@@ -161,21 +167,29 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
 `node scripts/defect-causes.mjs [--check] [--file <path>]`, or `pnpm defects [--check]`.
 
 - **Input:** `docs/defects.md` relative to the repo root (found from the script's own path), or `--file <path>`.
-- **Parsing:** the table starts at a header line with the four columns, followed by a separator line (`|---|…`);
-  a header with no separator line after it is not a table. Columns are found by their header names, not by
-  position. A row starts and ends with `|`; cells are split on `|`, and an escaped `\|` stays inside the cell as
-  `|`, without the backslash. Cells are trimmed. A row with no closing `|` has a different number of cells and is
-  an AC-16 error.
-- **Options:** `--check` may repeat; `--file` may repeat, and the last one wins.
-- **Output (stdout), every run:** a header line, then one line per cause, fields separated by two or more spaces:
+- **Parsing:** the table starts at a header line with the four columns, followed by a separator line: a line
+  starting with `|` whose every cell matches `^:?-+:?$` after trimming (`|---|` and `| --- |` both count). A header
+  with no separator line after it is not a table. Columns are found by their header names, not by position. The
+  cells of a line are the parts between its first and its last unescaped `|`; an escaped `\|` stays inside the cell
+  as `|`, without the backslash. Cells are trimmed. So a row with no closing `|` has one cell fewer and is an
+  AC-16 error. A row with the wrong number of cells gets only that error line, no other.
+- **Options:** `--check` may repeat; `--file` may repeat, and the last one wins. The argument after `--file` is
+  always its path, even when it starts with `--` (`--file --check` reads a file named `--check`).
+- **Output (stdout), every run that exits 0 or 1:** a header line, then one line per cause, six fields:
+
+  For a log whose only cause is `rule-in-two-places`:
 
   ```text
-  cause                        count  last   tested  rows
-  rule-in-two-places               9  25/11       7  8,15,16,18,19,20,27,34,41
+  cause               count  last   tested  planned  rows
+  rule-in-two-places      9  25/11       7        0  8,15,16,18,19,20,27,34,41
   ```
 
-  `last` is the `Date` cell of the cause's row with the highest `#`. `rows` lists the `#` values in ascending
-  order, joined by `,` with no spaces. Lines are sorted by count, highest first; equal counts by cause name, A–Z.
+  The header words are exactly `cause`, `count`, `last`, `tested`, `planned`, `rows`. Each column is padded to its
+  widest value or header word; columns are joined by two spaces. `cause`, `last` and `rows` are left-aligned,
+  `count`, `tested` and `planned` right-aligned; trailing spaces are removed. The tests split a line on `/\s{2,}/`
+  and check the field values and the line order, not the widths. `last` is the `Date` cell of the cause's row with
+  the highest `#`. `rows` lists the `#` values in ascending order, joined by `,` with no spaces. Lines are sorted
+  by count, highest first; equal counts by cause name, compared by UTF-16 code unit (`<`, not `localeCompare`).
 - **`--check`:** after the table, one line on stderr per failing cause, in the order of AC-5 (the printed table):
   `defect-causes: <cause> has <n> rows and no test or planned check (rows <list>)`, `<list>` being the same
   `,`-joined list as the `rows` column; then exit 1. With no failing cause it prints `defect-causes: check ok` on
@@ -201,17 +215,20 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
 
 - `package.json` → `scripts`: `"defects": "node scripts/defect-causes.mjs"`.
 - `.github/workflows/ci.yml`: a step `- run: pnpm defects --check` right after `- run: pnpm test:fast`.
-- `CONTRIBUTING.md` → Defects: the rule (AC-19).
+- `CONTRIBUTING.md` → Defects: a pointer to the glossary entry Cause and the command `pnpm defects` (AC-19).
 - `CHANGELOG.md` → `## 0.5.2 — unreleased`: one bullet (AC-21).
-- `docs/GLOSSARY.md` → Ideas: the entry **Cause** (added with this spec).
+- `docs/GLOSSARY.md` → Ideas: the entry **Cause**, the one place of the rule (added with this spec, AC-20).
 
 ## Constraints
 
 - **Must not:** add a dependency, a build step for the script, or TypeScript for it. Check: `package.json`
   `dependencies` and `devDependencies` unchanged in the diff; the script imports only `node:` modules (review).
-- **Must not:** change a cell of `docs/defects.md` other than the new `Cause` column, the header line, and a `—`
-  `Test` cell that becomes `planned: <version>` (Decisions). Check: the command in How to verify, step 3.
-- **Must not:** change the two summary sections of `docs/defects.md`. Check: How to verify, step 3.
+- **Must not:** change a cell of `docs/defects.md` other than the new `Cause` column, the header line, and the
+  `Test` cell of #56 (`—` → `planned: 0.5.3`). Check: the command in How to verify, step 3.
+- **Must not:** change the first paragraph or the two summary sections of `docs/defects.md`. Check: How to
+  verify, step 3 (a changed or removed line); review of the diff (an added line there).
+- **Must not:** write the cause rule anywhere but `docs/GLOSSARY.md` → Cause. Check: the AC-19 test for
+  CONTRIBUTING; review for the rest (the CHANGELOG bullet, the `**Cause:**` paragraph, the script's header comment).
 - **Must not:** change `.claude/tmp/roadmap-plan.md` or `.claude/tmp/defects.md`. They are not in git, so
   `git diff` cannot show them. Check: review (no task names them), and `shasum` of both files before and after the
   run.
@@ -221,7 +238,8 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
   script's functions and the real files). The one that spawns `node`, `tests/scripts/defect-causes-cli.test.ts`,
   goes into `SLOW` in `vitest.config.ts` (CONTRIBUTING → Tests). Check: review of `vitest.config.ts`.
 - **Must not:** a test that asserts on elapsed time (defects #43, #50). The spawned test gives `spawnSync` a
-  60 s `timeout` only as a guard against a hang (#36). Check: review.
+  15 s `timeout` only as a guard against a hang (#36), below the slow group's 20 s `testTimeout`, so the guard
+  fires first and names the hang. Check: review.
 - **When goals conflict:** a correct count > a short output > speed.
 
 ## Acceptance criteria (EARS)
@@ -231,6 +249,7 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
 - **AC-1:** THE SYSTEM SHALL have in `docs/defects.md` a table header with the columns `#`, `Date`, `Defect`,
   `Found by`, `Class`, `Cause`, `Escaped?`, `Closed by`, `Test`, in that order. Every row has a non-empty kebab-case `Cause`
   (`^[a-z0-9]+(-[a-z0-9]+)*$`); rows #1–#57 have the cause given in Contract → "Causes of the existing rows".
+  Among rows #1–#57, only #56 has a planned check: its `Test` cell is `planned: 0.5.3`.
 - **AC-2:** THE SYSTEM SHALL have in `docs/defects.md`, after the `**Found by:**` paragraph, one paragraph (up to
   the next blank line) starting `**Cause:**` that names `pnpm defects` and `docs/GLOSSARY.md`.
 - **AC-3:** WHEN `parseLog` reads a log, THE SYSTEM SHALL return one row per table line with `n` (the number in
@@ -239,7 +258,7 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
   `date` of its row with the highest `n`), `tested` (the number of tested rows), `planned` (the number of rows with
   a planned check) and `rows` (the `n` values, ascending).
 - **AC-5:** WHEN `countCauses` returns entries, THE SYSTEM SHALL sort them by `count`, highest first, and equal
-  counts by cause name, A–Z.
+  counts by cause name, compared by UTF-16 code unit (`<`).
 - **AC-6:** WHEN the script runs without `--check`, THE SYSTEM SHALL print the header line and one line per cause in
   the order of AC-5, in the format of the Contract, and exit 0.
 - **AC-7:** WHEN a `Test` cell is `yes`, `yes (text)` or a file path, THE SYSTEM SHALL count the row as tested; WHEN
@@ -250,10 +269,12 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
   THE SYSTEM SHALL print the table, then on stderr
   `defect-causes: <cause> has <n> rows and no test or planned check (rows <list>)` for each such cause, and exit 1.
   A spawned `node scripts/defect-causes.mjs --check --file <fixture>` has the process exit code 1.
-- **AC-10:** WHEN a cause has 3 or more rows and either one tested row, or no tested row and one row whose `Test`
-  cell is `planned: 0.5.3`, THE SYSTEM SHALL not name it under `--check`. A planned row SHALL count in `planned`,
+- **AC-10:** WHEN a cause has 3 or more rows and either at least one tested row, or no tested row and at least one row whose `Test`
+  cell is a planned check (e.g. `planned: 0.5.3`), THE SYSTEM SHALL not name it under `--check`. A planned row SHALL count in `planned`,
   not in `tested`.
-- **AC-11:** WHEN `--file <path>` is given, THE SYSTEM SHALL read that file instead of `docs/defects.md`.
+- **AC-11:** WHEN `--file <path>` is given, THE SYSTEM SHALL read that file instead of `docs/defects.md`. WHEN
+  `--file` is given twice, THE SYSTEM SHALL read the last path; WHEN `--file` is followed by `--check`, THE SYSTEM
+  SHALL read a file named `--check`; WHEN `--check` is given twice, THE SYSTEM SHALL act as with one.
 - **AC-12:** THE SYSTEM SHALL have `"defects": "node scripts/defect-causes.mjs"` in `package.json` → `scripts`.
 - **AC-13:** THE SYSTEM SHALL have in `.github/workflows/ci.yml` the step `- run: pnpm defects --check` right after
   the step `- run: pnpm test:fast`.
@@ -262,26 +283,32 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
 
 - **AC-14:** IF the file cannot be read, THEN THE SYSTEM SHALL print `defect-causes: cannot read <path>` on stderr
   and exit 2; IF `--file` is the last argument, with no path after it, THEN THE SYSTEM SHALL print
-  `defect-causes: --file needs a path` on stderr and exit 2 (partner of AC-6, AC-11).
+  `defect-causes: --file needs a path` on stderr and exit 2 (partner of AC-6, AC-11). Arguments are read left to
+  right; the first wrong one (AC-14, AC-18) gives the only error, and the file is not read.
 - **AC-15:** IF the file has no table whose header has `#`, `Date`, `Cause` and `Test`, THEN THE SYSTEM SHALL print
   `defect-causes: no table with the columns #, Date, Cause and Test in <path>` on stderr and exit 2 (partner of
   AC-3).
 - **AC-16:** IF a row is wrong, THEN THE SYSTEM SHALL print one stderr line per problem and exit 2, with or without
-  `--check` (partner of AC-3, AC-4, AC-7). `<where>` is `row <#>`, or `line <line number in the file>` when the
-  `#` is not a number. The problems and their texts:
+  `--check` (partner of AC-3, AC-4, AC-7). `<where>` is `row <#>`, `<#>` printed as a number (`row 7` for `07`),
+  or `line <line number in the file>` when the `#` is not a number. The lines come in the order of the file's
+  lines; the duplicate-`#` lines come after them, in ascending `#`. Within one row, the lines come in the order of
+  this list. A row whose `#` is not a number is still checked for `Date`, `Cause` and `Test`. A row with the wrong
+  number of cells is not used for the duplicate check. The problems and their texts:
   - `defect-causes: <where>: <k> cells, the header has <h>` — the number of cells differs from the header's;
-  - `defect-causes: line <line>: # is not a number` — the `#` cell is not a whole number;
-  - `defect-causes: row <#>: # is used by another row` — a `#` that two or more rows share (one line per such
-    `#`);
+  - `defect-causes: line <line>: # is not a number` — the `#` cell does not match `^[0-9]+$` (`+3`, `3a`);
   - `defect-causes: <where>: Date is empty` — the `Date` cell is empty;
   - `defect-causes: <where>: Cause is empty` — the `Cause` cell is empty;
-  - `defect-causes: <where>: Cause "<text>" is not kebab-case` — it does not match `^[a-z0-9]+(-[a-z0-9]+)*$`;
-  - `defect-causes: <where>: Test is empty or "-"; write — or a test` — the `Test` cell is empty or a bare `-`;
+  - `defect-causes: <where>: Cause "<text>" is not kebab-case` — a non-empty cell that does not match
+    `^[a-z0-9]+(-[a-z0-9]+)*$` (an empty cell gets only the line above);
+  - `defect-causes: <where>: Test "<text>" is not a test; write — or a test` — the `Test` cell, trimmed, is empty,
+    `-`, `–` (U+2013), or `no` or `n/a` in any letter case (`<text>` is the trimmed cell, `""` when empty);
   - `defect-causes: <where>: Test "<text>" is not "planned: <version>"` — the cell starts with `planned` in any
-    letter case (`/^planned/i`) and does not match `^planned: [0-9]+\.[0-9]+\.[0-9]+$` exactly.
+    letter case (`/^planned/i`) and does not match `^planned: [0-9]+\.[0-9]+\.[0-9]+$` exactly;
+  - `defect-causes: row <#>: # is used by another row` — a `#` that two or more rows share; `#` values compare as
+    numbers, so `07` and `7` are the same `#` (one line per such `#`, after all other lines).
 - **AC-17:** IF the real `docs/defects.md` has a failing cause, THEN THE SYSTEM SHALL fail `pnpm defects --check`
-  in CI. On the day of this change it SHALL pass, because every cause that fails it gets `planned: 0.5.3` in the
-  `Test` cell of its newest row. A fast test reads the real file with `parseLog`: no errors, at least 57 rows, every
+  in CI. On the day of this change it SHALL pass: the one cause that would fail, `driver-counts-unrelated-red`
+  (#43, #50, #56), has `planned: 0.5.3` in #56 (AC-1). A fast test reads the real file with `parseLog`: no errors, at least 57 rows, every
   `cause` non-empty. It does not assert "no failing cause": that is the CI step's job, so a failure prints the
   cause by name (partner of AC-1, AC-9, AC-13).
 - **AC-18:** IF an argument other than `--check` and `--file <path>` is given, THEN THE SYSTEM SHALL print
@@ -290,15 +317,18 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
 ### Documents
 
 - **AC-19:** THE SYSTEM SHALL have in `CONTRIBUTING.md` → Defects, next to the classes, in place of the bullet "A
-  class that repeats gets a check, not more text": a new row names its cause (the glossary word Cause); when a
-  cause reaches 2 rows, the maintainer puts a check for it into the release plan of the next release;
-  when a cause reaches 3 rows with no test and no planned check, `pnpm defects --check` fails in CI on every pull
-  request and the release does not merge until the cause has one; a planned check is written `planned: <version>` in the
-  `Test` cell. It SHALL explain in two sentences why the log counts causes: one cause can show in several places,
-  and the count of repeats sets the priority. A fast test reads the Defects section and finds `Cause`,
-  `pnpm defects --check`, `no planned check` and `planned: <version>` in it, and no `A class that repeats`.
-- **AC-20:** THE SYSTEM SHALL have in `docs/GLOSSARY.md` → Ideas an entry with the headword **Cause** and the rule
-  "a cause that repeats gets a check". A fast test finds the line `- **Cause** —` under `## Ideas`.
+  class that repeats gets a check, not more text", one bullet that says: every row names its cause; the rule for
+  causes is in `docs/GLOSSARY.md` → Cause (a link); `pnpm defects` counts the rows by cause. The intro sentence of
+  the section also lists "its cause" among the cells. The section SHALL not repeat the rule. A fast test reads
+  the Defects section and finds `Cause`, `GLOSSARY.md` and `pnpm defects` in it, and none of `A class that
+  repeats`, `2 rows`, `3 rows` and `planned:`.
+- **AC-20:** THE SYSTEM SHALL have in `docs/GLOSSARY.md` → Ideas an entry with the headword **Cause** that holds the
+  whole rule: one cause per row, the cause that can repeat in other places, not the place that broke; at 2 rows a
+  check goes into the plan of the next release; at 3 rows with no test and no planned check (`planned: <version>`
+  in the `Test` cell) `pnpm defects --check` fails in CI and the release does not merge. It SHALL explain in two
+  sentences why the log counts causes: one cause can show in several places, and the count of repeats sets the
+  priority. A fast test finds the line `- **Cause** —` under `## Ideas`, and in that entry `2 rows`, `3 rows`,
+  `planned: <version>` and `pnpm defects --check`.
 - **AC-21:** THE SYSTEM SHALL have under `## 0.5.2 — unreleased` in `CHANGELOG.md` one bullet that names the
   `Cause` column, `pnpm defects` and its `--check` step in CI. A fast test finds all three in the 0.5.2 entry.
 
@@ -328,8 +358,13 @@ Plain Node ESM, built-ins only, a header comment, the style of `scripts/eval.mjs
 - Changing `Class`, the old summaries, `.claude/tmp/defects.md` or `.claude/tmp/roadmap-plan.md`.
 - The first paragraph of `docs/defects.md` ("Goal … see which classes repeat") stays as it is, as history; the new
   `**Cause:**` paragraph says how the log counts now.
-- Writing the checks themselves for the causes with 2 rows (`driver-counts-unrelated-red`, `retry-takes-no-comment`,
-  `conclusion-from-partial-read`, …): the rule puts them into the release plan, which the maintainer keeps.
+- Writing the checks themselves: for `driver-counts-unrelated-red` (planned for 0.5.3), and for the causes with 2
+  rows (`retry-takes-no-comment`, `conclusion-from-partial-read`, …). The rule puts them into the release plan,
+  which the maintainer keeps.
+- New rows for the two earlier `harness-part-not-tested-with-sandbox` cases that #54 and #57 name (the `Read(...)`
+  rules, the package cache): they have no row today, and this stage adds no row.
+- Words other than `no` and `n/a` that mean "no test" (`none`, `no test`): they count as tested; review catches
+  them.
 - A check that a new row's cause is not a near duplicate of an existing name (`rule-in-2-places`): review catches it.
 - `CODEMAP.md`: it is git-excluded in this repo, so the change does not touch it.
 - Branch protection: a red CI check stops a merge only if the `check` job is required on GitHub. That is the
