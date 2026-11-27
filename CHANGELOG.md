@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.5.4 — unreleased
+## 0.5.4 — Fewer ways around the sandbox
+
+This release closes the channels past the OS sandbox by default: Claude in Chrome tools are denied, and WebFetch and MCP tools ask. Bash cannot write the harness's own rules or read the GitHub CLI login. The driver marks outside text in its prompts as data, kills the processes its steps leave behind, and a failed check names the failing tests. Still open: Linux has no live probe, and the model token is not masked.
 
 - **`.gitignore` keeps local state and secrets out of commits:** it now lists `.env`, `.env.*`, `*.log`,
   `coverage/` and `/.claude/`. Before, `.claude/` was hidden only by `.git/info/exclude`, which lives on one

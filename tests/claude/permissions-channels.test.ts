@@ -153,7 +153,7 @@ describe("Q1: README and CHANGELOG", () => {
   });
 
   it("Q1: CHANGELOG 0.5.4 has an entry for the channels", () => {
-    const at = changelog.indexOf("## 0.5.4 — unreleased");
+    const at = changelog.indexOf("## 0.5.4 — ");
     const section = changelog.slice(at, changelog.indexOf("\n## ", at + 3));
     expect(section).toContain(CHROME);
   });
