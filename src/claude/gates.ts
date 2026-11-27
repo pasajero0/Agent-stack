@@ -8,6 +8,9 @@ export type GateMode = "interactive" | "autonomous";
 /** strict: no code edit without a merged spec for the active stage. stage: only while a stage is active. */
 export type SpecGateMode = "strict" | "stage" | "off";
 
+/** driver: code changes only through the driver (default). anyone: the emergency exit, set by hand. */
+export type CodeBy = "driver" | "anyone";
+
 /**
  * `.claude/gates.json` — every stack-specific value the hooks need. Hooks read only this file, so the
  * harness works the same for any language. Edited by a human (guard-file blocks the agent).
@@ -20,6 +23,11 @@ export interface GatesConfig {
   /** Bash regex on the branch's last path segment; capture group 1 is the stage id. */
   stagePattern: string;
   specGate: SpecGateMode;
+  /**
+   * Who may edit code outside `openPaths` (spec-gate). "driver": only a driver call of a live run on this
+   * branch; a missing or unknown value reads as "driver". "anyone": the emergency exit a human sets by hand.
+   */
+  codeBy: CodeBy;
   /** Case-globs (relative to the repo root) that stay editable without a merged spec. */
   openPaths: string[];
   /** Case-globs of generated files and lockfiles — never hand-edited. */
@@ -122,6 +130,7 @@ export function buildGatesConfig(p: HarnessParams, routing: Record<string, unkno
     stagePattern: DEFAULT_STAGE_PATTERN,
     adrDir: `${p.docsDir}adr`,
     specGate: "strict",
+    codeBy: "driver",
     openPaths: [`${p.docsDir}*`, "*.md", ".claude/*", ".gitignore"],
     protectedGlobs: [...generated, ...(p.lockfile ? [`*${p.lockfile}`] : [])],
     packageManager: p.packageManager,

@@ -12,7 +12,8 @@
 # openPaths (docs, *.md, .claude/) stay open. gates.json → specGate: strict (default) | stage | off.
 # A repository with no commits yet is open too: there is nothing to merge a spec into before the scaffold.
 # So is a live quick run of the driver on this branch (gates-lib: driver_run_on_branch).
-# gates.json → codeBy: "driver" closes code to everything but a live driver run on this branch, any mode.
+# gates.json → codeBy: "driver" (the default) closes code to everything but a live driver run on this branch,
+# any mode; "anyone" is the emergency exit.
 set -euo pipefail
 . "$(dirname "$0")/gates-lib.sh"
 require_jq
@@ -25,23 +26,24 @@ rel=$(rel_path "$path")
 case "$rel" in /*) exit 0 ;; esac # outside the project
 gate_list '.openPaths' | glob_match_any "$rel" && exit 0
 
-# codeBy "driver": code changes only inside a driver call, so a chat runs the work through the driver
-# (/drive) instead of doing it. Checked before specGate, so "off" does not open it (spec AC-71).
+# codeBy: code changes only inside a driver call, so a chat runs the work through the driver (/drive)
+# instead of doing it. Missing, null, "" and unknown values read as "driver"; "anyone" is the emergency exit
+# a human sets by hand. Checked before specGate, so "off" does not open it (drive1 AC-14).
 code_by=$(gate_get '.codeBy')
-case "$code_by" in
-  "" | anyone) ;;
-  *)
-    if repo_is_empty; then
-      # stdout JSON: a note on stderr with exit 0 is not shown to anyone.
-      jq -n --arg m "spec-gate: codeBy \"$code_by\" starts after the first commit; this edit is not held by it." '{systemMessage: $m}'
-    elif ! driver_run_on_branch; then
-      unknown=""
-      [ "$code_by" = driver ] || unknown=" (the value \"$code_by\" is unknown, so it is read as \"driver\")"
-      echo "Blocked by spec-gate ($rel): gates.json → codeBy is \"driver\"$unknown — code changes only through the driver. Run the work with /drive (agent-stack run task or run quick); do not edit code yourself." >&2
-      exit 2
-    fi
-    ;;
-esac
+if [ "$code_by" != anyone ]; then
+  if repo_is_empty; then
+    # stdout JSON: a note on stderr with exit 0 is not shown to anyone.
+    jq -n --arg m "spec-gate: codeBy \"${code_by:-driver}\" starts after the first commit; this edit is not held by it." '{systemMessage: $m}'
+  elif ! driver_run_on_branch; then
+    case "$code_by" in
+      "") why='gates.json → codeBy is not set, so it is "driver"' ;;
+      driver) why='gates.json → codeBy is "driver"' ;;
+      *) why="gates.json → codeBy is \"$code_by\", which is unknown, so it is read as \"driver\"" ;;
+    esac
+    printf '%s\n' "Blocked by spec-gate ($rel): only the driver edits code here — $why. Run the work through the driver: /drive in this chat, or agent-stack run task \"<goal>\" (agent-stack run quick \"<fix>\" for a small fix). If the driver itself is broken, a human opens the emergency exit: set \"codeBy\": \"anyone\" in .claude/gates.json by hand." >&2
+    exit 2
+  fi
+fi
 
 mode=$(gate_get '.specGate')
 mode=${mode:-strict}

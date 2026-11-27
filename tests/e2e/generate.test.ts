@@ -44,9 +44,16 @@ describe("generate → full gate cycle on a TypeScript repo", () => {
     expect(g.commands.lint).toBe("pnpm exec eslint --no-warn-ignored {file}");
     expect(statSync(join(dir, ".claude/bin/verify")).mode & 0o111).not.toBe(0);
 
-    // The steps below check spec-gate's spec and plan steps in a chat, so a human opens codeBy (drive1).
-    patchGates(dir, { codeBy: "anyone" });
     const src = join(dir, "src/app.ts");
+    // 0. The default: only the driver edits code, so a chat's code edit gets the refusal line (drive1).
+    expect(g.codeBy).toBe("driver");
+    const chat = runHook(dir, "spec-gate.sh", edit(src), { AGENT_STACK_RUN: "" });
+    expect(chat.code).toBe(2);
+    expect(chat.stderr).toContain(
+      'Blocked by spec-gate (src/app.ts): only the driver edits code here — gates.json → codeBy is "driver".'
+    );
+    // The steps below check spec-gate's spec and plan steps in a chat, so a human opens the emergency exit.
+    patchGates(dir, { codeBy: "anyone" });
     // 1. No spec merged → no code.
     expect(runHook(dir, "spec-gate.sh", edit(src)).code).toBe(2);
     // 2. Writing the spec and an ADR is always open.

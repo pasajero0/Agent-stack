@@ -261,6 +261,7 @@ describe("spec-gate: codeBy driver (AC-71)", () => {
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("codeBy is \"driver\"");
     expect(r.stderr).toContain("/drive");
+    expect(r.stderr).toContain('set "codeBy": "anyone" in .claude/gates.json by hand');
     expect(runHook(dir, "spec-gate.sh", edit(join(dir, "docs/notes.md")), NO_ENV).code).toBe(0);
     expect(runHook(dir, "spec-gate.sh", writeTool(join(dir, "src/new.ts")), NO_ENV).code).toBe(2);
   });
@@ -275,23 +276,36 @@ describe("spec-gate: codeBy driver (AC-71)", () => {
     expect(runHook(dir, "spec-gate.sh", codeEdit(dir), env(RUN)).code).toBe(2);
   });
 
-  it("v04 AC-71: codeBy missing or anyone changes nothing; an unknown value is read as driver and says so", () => {
-    expect(runHook(open("anyone"), "spec-gate.sh", codeEdit(open("anyone")), NO_ENV).code).toBe(0);
+  it("v04 AC-71: codeBy anyone (the emergency exit) changes nothing; missing is driver; an unknown value is read as driver and says so", () => {
+    const anyone = open("anyone");
+    expect(runHook(anyone, "spec-gate.sh", codeEdit(anyone), NO_ENV).code).toBe(0);
     const unset = repo("fix/login");
-    patchGates(unset, { specGate: "off" });
-    expect(runHook(unset, "spec-gate.sh", codeEdit(unset), NO_ENV).code).toBe(0);
+    patchGates(unset, { specGate: "off", codeBy: null });
+    const u = runHook(unset, "spec-gate.sh", codeEdit(unset), NO_ENV);
+    expect(u.code).toBe(2);
+    expect(u.stderr).toContain("codeBy is not set, so it is \"driver\"");
     const typo = open("drivr");
     const r = runHook(typo, "spec-gate.sh", codeEdit(typo), NO_ENV);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("\"drivr\" is unknown");
+    expect(r.stderr).toContain("codeBy is \"drivr\", which is unknown, so it is read as \"driver\"");
   });
 
   it("v04 AC-71: in a repo with no commits codeBy does not apply yet, and says so", () => {
     const dir = deployHarness();
     git(dir, "init", "-q", "-b", "main");
-    patchGates(dir, { codeBy: "driver" });
+    patchGates(dir, { codeBy: null });
     const r = runHook(dir, "spec-gate.sh", codeEdit(dir), NO_ENV);
     expect(r.code).toBe(0);
-    expect(JSON.parse(r.stdout).systemMessage).toContain("starts after the first commit");
+    expect(JSON.parse(r.stdout).systemMessage).toBe(
+      'spec-gate: codeBy "driver" starts after the first commit; this edit is not held by it.'
+    );
+  });
+
+  it("v04 AC-71: generate writes codeBy driver, so a chat edit of code is denied with no change to gates.json", () => {
+    const dir = repo("fix/login");
+    patchGates(dir, { specGate: "off" });
+    const r = runHook(dir, "spec-gate.sh", codeEdit(dir), NO_ENV);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("codeBy is \"driver\"");
   });
 });
