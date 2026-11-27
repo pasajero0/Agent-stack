@@ -88,9 +88,9 @@ describe("routing texts", () => {
     }
   });
 
-  it("effort1 AC-22: by hand, the escalation uses the model of routing.retry", () => {
-    expect(verifyHint()).toContain("by hand, use the model of `routing.retry`");
-    expect(planSkill().replace(/\s+/g, " ")).toContain("by hand, use the model of `routing.retry`");
+  it("effort1 AC-22: the escalation uses the model of routing.retry", () => {
+    expect(verifyHint()).toContain("a retry runs on the model of `routing.retry`");
+    expect(planSkill().replace(/\s+/g, " ")).toContain("use the model of `routing.retry`");
     expect(implementerDescription()).toContain(".claude/gates.json → routing");
   });
 
@@ -99,8 +99,8 @@ describe("routing texts", () => {
     const line = claude.split("\n").find((l) => l.includes("**implementer**"));
     expect(line).toBeDefined();
     expect(line!.replace(/\*\*/g, "")).toContain(
-      "implementer — under the driver, .claude/gates.json → routing picks its model and effort; by hand, spawn it " +
-        "with the model of the task's cell in routing.",
+      "implementer — the driver runs it, and .claude/gates.json → routing picks its model and effort; " +
+        "a chat runs the work with /drive.",
     );
     expect(claude).not.toMatch(/model (per|by) tier/);
   });

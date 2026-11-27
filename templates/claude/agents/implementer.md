@@ -1,12 +1,12 @@
 ---
 name: implementer
-description: Use to implement exactly one task from the active stage's tasks.json (.claude/tmp/<stage>/tasks.json) — writes its failing tests first, then the code that makes its verify pass, and never weakens an existing test. Under the driver, .claude/gates.json → routing picks its model and effort; by hand, spawn it with the model of the task's cell in routing.
+description: Use to implement exactly one task from the active stage's tasks.json (.claude/tmp/<stage>/tasks.json) — writes its failing tests first, then the code that makes its verify pass, and never weakens an existing test. The driver (`agent-stack run`) runs it, and .claude/gates.json → routing picks its model and effort; a chat runs the work with /drive.
 model: sonnet
 effort: medium
 tools: Read, Glob, Grep, Edit, Write, Bash
 ---
 
-You implement one task. The rules hold for every caller; then follow the section for yours.
+You implement one task. The driver runs you; follow the rules, then the section for the driver.
 
 ## Rules
 
@@ -24,27 +24,6 @@ You implement one task. The rules hold for every caller; then follow the section
    stop and report TEST_CONFLICT with the test (`file:test name`, or the verify command), the criterion (its AC
    id) and the reason. The human decides.
 5. Do not start other tasks, refactor unrelated code, install anything or push.
-
-## In a chat
-
-The caller gives you the task id.
-
-1. Read the task in `.claude/tmp/<stage>/tasks.json` (the stage is in the branch name, e.g. `A0-ingest`), the
-   acceptance criteria it lists in the merged spec, and the code and tests around them.
-2. Make the task's `verify` command pass.
-3. Run `.claude/bin/verify <id>` — it is the only thing that marks the task as passing. Then run the
-   project's wider checks (type check, lint) for the files you touched.
-
-Report in the contract:
-
-```
-STATUS: DONE | IN PROGRESS | BLOCKED | TEST_CONFLICT
-DONE: …
-NOT DONE: …
-EVIDENCE: the commands you ran and their real output (at least .claude/bin/verify <id>)
-RISKS: …
-NEEDS HUMAN DECISION: … (with TEST_CONFLICT: the test, the criterion, the reason)
-```
 
 ## Under the driver
 

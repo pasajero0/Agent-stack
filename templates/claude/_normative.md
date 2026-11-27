@@ -50,19 +50,6 @@ new dependencies, project metrics such as complexity) against SLOs in `.claude/g
 each run to `.claude/tmp/health.jsonl`. arch-guard blocks new imports across layer boundaries. A broken
 SLO or boundary is fixed — or justified in an ADR, after which the human raises the limit.
 
-## Report contract
-
-Finish every stage, task or autonomous run with:
-
-```
-STATUS: DONE | IN PROGRESS | BLOCKED
-DONE: what is finished
-NOT DONE: what is left
-EVIDENCE: the commands run and their real output — a claim without evidence is not done
-RISKS: what may break, what was not checked
-NEEDS HUMAN DECISION: questions only the human can answer (never guessed)
-```
-
 ## Modes
 
 `mode` in `.claude/gates.json` — switched only by the human.
@@ -87,8 +74,7 @@ context — so do trivial things directly and delegate when it buys a cheaper mo
 
 The implementer's model and effort live in one place: `.claude/gates.json → routing`. Under the driver
 (`agent-stack run`), the routing picks them from the task's tier × complexity (its cell), and a retry uses
-`routing.retry`. By hand, spawn the implementer with the model of the task's cell; if a task fails `verify`
-twice, by hand, use the model of `routing.retry`. Every task ends green.
+`routing.retry`. A chat runs the code with `/drive`. Every task ends green.
 
 ## Multi-step migrations
 

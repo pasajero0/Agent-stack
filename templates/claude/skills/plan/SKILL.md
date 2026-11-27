@@ -68,7 +68,7 @@ argument-hint: "<stage id, e.g. A0>"
    | L | new design, concurrency, data migration, security, money, auth |
 
    Under the driver (`agent-stack run`), a retry runs on the retry route (`routing.retry`). If a task fails
-   `verify` twice: by hand, use the model of `routing.retry` (`.claude/bin/verify` prints the hint).
+   `verify` twice, `/drive` and the driver use the model of `routing.retry` (`.claude/bin/verify` prints the hint).
 4. **Run `.claude/bin/verify`** once: every task should fail now (red). A `verify` that already passes
    proves nothing — fix it, except a docs-only task's `true`, which is green by design. Under the driver, skip this step: the driver runs each task's verify before its
    first attempt and notes one that is already green.
@@ -96,7 +96,4 @@ L · low. Every L task has a `splitReason`: one line, at most 80 characters, on 
 
 Under the driver (`agent-stack run`): stop here — the driver runs the tasks, checks and commits.
 
-By hand: implement one task at a time with the `implementer` subagent, spawned with the model of the task's
-cell in `.claude/gates.json → routing` — its tests
-first, then the code — run `.claude/bin/verify <id>` after each, commit, next. Report with the contract
-from CLAUDE.md.
+A chat runs the code with `/drive`.

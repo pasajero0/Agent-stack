@@ -279,15 +279,14 @@ describe("role prompts", () => {
     );
   });
 
-  it("v04 AC-67: the implementer agent has a chat mode and a driver mode; both have the test conflict exit", () => {
+  it("v04 AC-67: the implementer agent is driver-only and has the test conflict exit", () => {
     const agent = readFileSync(new URL("../../templates/claude/agents/implementer.md", import.meta.url), "utf8");
     const flat = agent.replace(/\s+/g, " ");
-    expect(agent).toMatch(/^## In a chat$/m);
+    expect(agent).not.toMatch(/^## In a chat$/m);
+    expect(agent).not.toContain("STATUS:");
+    expect(flat).not.toContain("Run `.claude/bin/verify <id>`");
     expect(agent).toMatch(/^## Under the driver$/m);
-    const chat = flat.slice(flat.indexOf("## In a chat"), flat.indexOf("## Under the driver"));
     const driver = flat.slice(flat.indexOf("## Under the driver"));
-    expect(chat).toContain("Run `.claude/bin/verify <id>`");
-    expect(chat).toContain("STATUS: DONE | IN PROGRESS | BLOCKED | TEST_CONFLICT");
     expect(driver).toMatch(/never run `\.claude\/bin\/verify`/);
     expect(driver).toMatch(/answer in the caller's schema/i);
     expect(flat).toMatch(/existing test, or the task's verify, contradicts a criterion/);

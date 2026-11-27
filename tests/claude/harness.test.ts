@@ -57,7 +57,6 @@ describe("buildHarnessFiles", () => {
     for (const section of [
       "## Explaining to the human",
       "## Spec-driven workflow",
-      "## Report contract",
       "## Modes",
       "## Model routing",
       "## Multi-step migrations",

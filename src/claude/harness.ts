@@ -129,7 +129,7 @@ ${lines.join("\n")}
 - **task-analyzer** at the start of a non-trivial task.
 - **spec-reviewer** after writing or changing a spec, before its MR.
 - **test-writer** for tests from acceptance criteria.
-- **implementer** — under the driver, .claude/gates.json → routing picks its model and effort; by hand, spawn it with the model of the task's cell in routing.
+- **implementer** — the driver runs it, and .claude/gates.json → routing picks its model and effort; a chat runs the work with /drive.
 - **code-reviewer** after writing or modifying code.
 - **researcher** for fact lookups (cheap model).
 - **pattern-scout** to (re)generate \`.claude/rules/\` after structural changes.
