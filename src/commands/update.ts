@@ -59,7 +59,7 @@ export async function updateCommand(
       )
     );
     plan.edited.forEach((p) => console.log(`  = ${p} (you changed it — kept; --force overwrites)`));
-    reportExtras(plan, missing);
+    reportExtras(projectDir, plan, missing);
     console.log();
     log.dim(`  ${plan.unchanged} unchanged. rules/ and tmp/ are preserved (not emitter-owned).`);
     return;
@@ -86,15 +86,18 @@ export async function updateCommand(
           : ".")
   );
   plan.edited.forEach((p) => log.dim(`  kept ${p} — you changed it since it was deployed; --force overwrites`));
-  reportExtras(plan, missing);
+  reportExtras(projectDir, plan, missing);
 }
 
-function reportExtras(plan: UpdatePlan, missingTools: readonly string[]): void {
+function reportExtras(projectDir: string, plan: UpdatePlan, missingTools: readonly string[]): void {
   plan.customHooks.forEach((h) => log.dim(`  kept your hook in settings.json — ${h}`));
   plan.customSettings.forEach((s) => log.dim(`  kept your setting in settings.json — ${s}`));
-  plan.retiredHooks.forEach((h) =>
-    log.dim(`  dropped ${h} from settings.json — no longer part of the harness; delete .claude/hooks/${h}`)
-  );
+  plan.retiredHooks.forEach((h) => {
+    const path = `.claude/hooks/${h}`;
+    // The delete clause only when the file is there and update neither deletes it nor lists it as orphaned.
+    const ask = existsSync(join(projectDir, path)) && !plan.removed.includes(path) && !plan.orphaned.includes(path);
+    log.dim(`  dropped ${h} from settings.json — no longer part of the harness${ask ? `; delete ${path}` : ""}`);
+  });
   plan.orphaned.forEach((p) =>
     log.dim(`  left ${p} — no longer part of the harness, but you changed it; delete it if unused`)
   );
