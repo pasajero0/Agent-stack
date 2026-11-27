@@ -33,3 +33,18 @@ describe("drive1 AC-32: CHANGELOG 0.6.0 section", () => {
     }
   });
 });
+
+describe("drive1 AC-33: CLAUDE.md subagent delegation", () => {
+  it("drive1 AC-33: 'Subagent delegation' names code-reviewer and pattern-scout, not task-analyzer or test-writer", () => {
+    const claudeMd = readFileSync(new URL("../../CLAUDE.md", import.meta.url), "utf8");
+    const start = claudeMd.indexOf("## Subagent delegation");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const rest = claudeMd.slice(start + 3);
+    const next = rest.indexOf("\n## ");
+    const s = next < 0 ? rest : rest.slice(0, next);
+    expect(s).not.toContain("task-analyzer");
+    expect(s).not.toContain("test-writer");
+    expect(s).toContain("code-reviewer");
+    expect(s).toContain("pattern-scout");
+  });
+});
