@@ -176,6 +176,11 @@ it here first.
 - **`gates.json`** — the project's settings for the gates. Yours: `update` never rewrites it, so new keys
   get defaults in code. One exception: `routing` has no default in code, so `update` adds the block when it is
   missing, and adds a missing top-level key of it (such as `scout`). It never changes a value that is there.
+- **`codeBy`** — `gates.json` → `codeBy`: who may edit code outside `openPaths`. spec-gate reads it.
+  **driver** (the default, also when the key is missing): only a driver call of a live run on this branch. A chat
+  runs the work with `/drive`, also a small fix (`run quick`).
+  - **Emergency exit** — `"codeBy": "anyone"`: every chat may edit code again. Only a human sets it, by hand, when
+    the driver itself is broken.
 - **OS sandbox** — Claude Code's own sandbox for the Bash tool and its child processes: macOS Seatbelt, or
   `bwrap` + `socat` on Linux and WSL2. It limits the files Bash reads and writes and the domains it reaches. It
   does not cover Read, Edit, Write, WebFetch, MCP servers or hooks.

@@ -137,3 +137,12 @@ at fixed gates. The stage order and the engine follow Purple Flow; the safety mo
   branch; the human's answer at gate:spec-approve is the approval, and a later spec change is approved again.
   Why (Leonid): a team needs the merge; working alone, a second branch and a second PR for each spec only slow
   the work down.
+- 2026-11-27 — **One way to write code: the driver** (driver spec drive1). This replaces "Plain `claude` sessions
+  keep the hooks as the safety net", the consequence "the `tasks.json` → `verify` → `evidence-gate` chain finally
+  has a caller", the follow-up "The plain-session gates", and in the first Alternatives row "It stays as the
+  fallback for plain sessions". A plain session does not write code: `gates.json → codeBy` is `"driver"` by default, so
+  spec-gate refuses a chat's code edit, and the chat runs the work with `/drive` (a small fix with `run quick`).
+  `"codeBy": "anyone"` stays as the emergency exit a human sets by hand when the driver itself is broken.
+  evidence-gate, the Report contract and the subagents test-writer and task-analyzer are removed. Why (Leonid): in a
+  chat a rule is a request and the chat can skip a step; in the driver a rule is a program. The usage numbers
+  agree: evidence-gate gave output once in all its runs, and task-analyzer was never called.
