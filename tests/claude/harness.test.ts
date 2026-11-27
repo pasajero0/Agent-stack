@@ -48,7 +48,6 @@ describe("buildHarnessFiles", () => {
   });
 
   it("does not deploy generator-input files (_*)", () => {
-    expect(byPath(".claude/_TOKENS.md")).toBeUndefined();
     expect(byPath(".claude/_normative.md")).toBeUndefined();
   });
 
@@ -137,10 +136,8 @@ describe("buildHarnessFiles", () => {
     const expected: Record<string, string> = {
       "code-reviewer": "opus",
       "spec-reviewer": "opus",
-      "task-analyzer": "opus",
       "pattern-scout": "opus",
       implementer: "sonnet",
-      "test-writer": "sonnet",
       researcher: "haiku",
     };
     expect(agents.map((a) => a.path.replace(/^.*\/|\.md$/g, "")).sort()).toEqual(

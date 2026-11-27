@@ -7,7 +7,7 @@ export type Stack = "node" | "python" | "go" | "rust" | "unknown";
 /**
  * Values the harness emitter needs about the target project. Stack-specific facts live here and in
  * `.claude/gates.json` — the hooks themselves stay stack-agnostic. Empty string = not applicable.
- * See templates/claude/_TOKENS.md for the token contract.
+ * See substitute() in src/claude/harness.ts for the token contract.
  */
 export interface HarnessParams {
   stack: Stack;

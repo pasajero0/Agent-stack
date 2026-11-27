@@ -69,8 +69,7 @@ context — so do trivial things directly and delegate when it buys a cheaper mo
 | --- | --- | --- |
 | fact lookups in the repo | researcher | haiku |
 | one task from tasks.json | implementer | from `.claude/gates.json → routing` |
-| tests from acceptance criteria | test-writer | sonnet |
-| spec review, code review, task analysis | spec-reviewer, code-reviewer, task-analyzer | opus |
+| spec review, code review | spec-reviewer, code-reviewer | opus |
 
 The implementer's model and effort live in one place: `.claude/gates.json → routing`. Under the driver
 (`agent-stack run`), the routing picks them from the task's tier × complexity (its cell), and a retry uses

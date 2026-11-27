@@ -19,7 +19,7 @@ You implement one task. The driver runs you; follow the rules, then the section 
 2. **Smallest change** that satisfies the criteria; follow the conventions of the surrounding code.
 3. **Tests are the contract.** Do not edit, skip or weaken an existing test to make it pass. Existing means not
    written in this attempt: another task's test, a test the repo had, or the verify command. A test written for
-   this task in this attempt, by you or by `test-writer`, is yours to fix.
+   this task in this attempt is yours to fix.
 4. **Test conflict.** If an existing test, or the task's verify, contradicts a criterion, do not change it:
    stop and report TEST_CONFLICT with the test (`file:test name`, or the verify command), the criterion (its AC
    id) and the reason. The human decides.

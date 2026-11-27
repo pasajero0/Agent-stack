@@ -57,6 +57,20 @@ function verifyCommand(p: HarnessParams): string {
   return p.commands.length ? p.commands.join(" && ") : "<test command>";
 }
 
+/**
+ * Replace the template tokens in a prose template (agents, commands, skills). Hooks never use tokens:
+ * they read everything stack-specific from `.claude/gates.json` at runtime.
+ *
+ * | Token             | Meaning                                            | Example value                 |
+ * | ----------------- | -------------------------------------------------- | ----------------------------- |
+ * | `{{DOCS_DIR}}`    | docs directory (trailing slash)                    | `docs/`                       |
+ * | `{{MAIN_BRANCH}}` | default branch (git `origin/HEAD`, else current)   | `main`                        |
+ * | `{{VERIFY_CMD}}`  | the project's verify commands, `&&`-joined         | `pnpm typecheck && pnpm test` |
+ *
+ * Not templated (built directly): `settings.json`, `settings.local.json`, `gates.json`, `CLAUDE.md`
+ * (body + `_normative.md` verbatim) and `CODEMAP.md`. The last four are seed files: `generate` writes
+ * them once and `update` never overwrites them. Files starting with `_` are generator input, not deployed.
+ */
 function substitute(text: string, p: HarnessParams): string {
   return text
     .replaceAll("{{DOCS_DIR}}", p.docsDir)
@@ -126,9 +140,7 @@ ${lines.join("\n")}
 
 ## Subagent delegation
 
-- **task-analyzer** at the start of a non-trivial task.
 - **spec-reviewer** after writing or changing a spec, before its MR.
-- **test-writer** for tests from acceptance criteria.
 - **implementer** — the driver runs it, and .claude/gates.json → routing picks its model and effort; a chat runs the work with /drive.
 - **code-reviewer** after writing or modifying code.
 - **researcher** for fact lookups (cheap model).

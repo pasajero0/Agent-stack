@@ -22,10 +22,4 @@ describe("drive1 test-name rule", () => {
     expect(t).not.toContain("counts duplicates");
     expect(t).not.toContain("test-writer");
   });
-
-  it("drive1 AC-3: test-writer no longer holds the test-name rule", () => {
-    const t = read("agents/test-writer.md");
-    expect(t).not.toContain("counts duplicates");
-    expect(t).not.toContain("counts_duplicates");
-  });
 });
