@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
@@ -442,75 +442,3 @@ describe("session-start-context", () => {
   });
 });
 
-describe("evidence-gate", () => {
-  const stop = (msg: string, extra: Record<string, unknown> = {}) => ({
-    hook_event_name: "Stop",
-    stop_hook_active: false,
-    last_assistant_message: msg,
-    ...extra,
-  });
-  const decision = (r: { stdout: string }) => (r.stdout ? JSON.parse(r.stdout).decision : undefined);
-
-  it("outside an active stage, asks only for evidence", () => {
-    const dir = repo();
-    expect(decision(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE")))).toBe("block");
-    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE\nEVIDENCE: pnpm test → 12 passed")).stdout).toBe("");
-    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: IN PROGRESS")).stdout).toBe("");
-  });
-
-  it("skipping /plan does not skip the evidence check; an unreadable plan falls back to it", () => {
-    const dir = repo();
-    git(dir, "checkout", "-q", "-b", "A0-work"); // stage branch, no tasks.json
-    expect(decision(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE")))).toBe("block");
-    write(dir, ".claude/tmp/A0/tasks.json", "{}");
-    expect(decision(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE")))).toBe("block");
-    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE\nEVIDENCE: pnpm test → ok")).stdout).toBe("");
-  });
-
-  it("blocks a DONE claim while a task is not passing", () => {
-    const dir = stageWithTasks([{ id: "T1", verify: "false", passes: false }]);
-    const r = runHook(dir, "evidence-gate.sh", stop("**STATUS:** DONE\nEVIDENCE: trust me"));
-    expect(decision(r)).toBe("block");
-    expect(JSON.parse(r.stdout).reason).toContain("T1");
-  });
-
-  it("blocks DONE without an EVIDENCE section, allows it with one", () => {
-    const dir = stageWithTasks([{ id: "T1", verify: "true", passes: false }]);
-    verify(dir);
-    expect(decision(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE, all good")))).toBe("block");
-    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE\nEVIDENCE:\n$ verify → 1/1")).stdout).toBe("");
-  });
-
-  it("never blocks twice in a row", () => {
-    const dir = stageWithTasks([{ id: "T1", verify: "false", passes: false }]);
-    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: DONE", { stop_hook_active: true })).stdout).toBe("");
-  });
-
-  it("interactive: an honest IN PROGRESS stop is fine", () => {
-    const dir = stageWithTasks([{ id: "T1", verify: "false", passes: false }]);
-    expect(runHook(dir, "evidence-gate.sh", stop("STATUS: IN PROGRESS — T1 next")).stdout).toBe("");
-  });
-
-  it("autonomous: keeps going until tasks pass or the agent reports BLOCKED", () => {
-    const dir = stageWithTasks([{ id: "T1", verify: "false", passes: false }]);
-    setMode(dir, "autonomous");
-    expect(decision(runHook(dir, "evidence-gate.sh", stop("STATUS: IN PROGRESS")))).toBe("block");
-    expect(
-      runHook(dir, "evidence-gate.sh", stop("STATUS: BLOCKED\nNEEDS HUMAN DECISION: pick a DB")).stdout
-    ).toBe("");
-  });
-
-  it("falls back to the transcript when last_assistant_message is missing", () => {
-    const dir = stageWithTasks([{ id: "T1", verify: "false", passes: false }]);
-    const transcript = join(dir, "transcript.jsonl");
-    const line = (text: string) =>
-      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text }] } });
-    writeFileSync(transcript, [line("working"), line("STATUS: DONE\nEVIDENCE: none")].join("\n") + "\n");
-    const r = runHook(dir, "evidence-gate.sh", {
-      hook_event_name: "Stop",
-      stop_hook_active: false,
-      transcript_path: transcript,
-    });
-    expect(decision(r)).toBe("block");
-  });
-});

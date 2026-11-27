@@ -73,20 +73,6 @@ describe("review fixes", () => {
     }
   });
 
-  it("evidence-gate reads report fields at line start, not words in prose", () => {
-    const dir = repo();
-    git(dir, "checkout", "-q", "-b", "A0-work");
-    write(dir, ".claude/tmp/A0/tasks.json", JSON.stringify({ tasks: [{ id: "T1", verify: "true", passes: true }] }));
-    const stop = (msg: string) =>
-      runHook(dir, "evidence-gate.sh", { stop_hook_active: false, last_assistant_message: msg });
-    expect(JSON.parse(stop("STATUS: DONE\nThere is no EVIDENCE yet.").stdout).decision).toBe("block");
-    expect(stop("**STATUS:** DONE\n**EVIDENCE:** verify → 1/1").stdout).toBe("");
-
-    write(dir, ".claude/tmp/A0/tasks.json", JSON.stringify({ tasks: [{ id: "T1", verify: "false", passes: false }] }));
-    setMode(dir, "autonomous");
-    expect(JSON.parse(stop("STATUS: IN PROGRESS — nothing is blocked").stdout).decision).toBe("block");
-  });
-
   it("spec-gate defaults to strict when gates.json lacks the key", () => {
     const dir = repo();
     const file = join(dir, ".claude/gates.json");

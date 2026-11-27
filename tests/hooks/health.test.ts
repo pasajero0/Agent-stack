@@ -92,18 +92,6 @@ describe("health", () => {
     expect(series[0]).toMatchObject({ branch: "A0-work", stage: "A0", metrics: { maxFileLines: 10 }, broken: [] });
   });
 
-  it("evidence-gate refuses DONE while a health SLO is broken", () => {
-    const dir = repo();
-    write(dir, ".claude/tmp/A0/tasks.json", JSON.stringify({ tasks: [{ id: "T1", verify: "true", passes: true }] }));
-    write(dir, "src/a.test.ts", 'it("A0 AC-1", f);\n');
-    write(dir, "src/big.ts", lines(450));
-    const done = { stop_hook_active: false, last_assistant_message: "STATUS: DONE\nEVIDENCE: verify 1/1" };
-    const r = runHook(dir, "evidence-gate.sh", done);
-    expect(JSON.parse(r.stdout).reason).toContain("code-health SLO is broken");
-    write(dir, "src/big.ts", lines(50));
-    expect(runHook(dir, "evidence-gate.sh", done).stdout).toBe("");
-  });
-
   it("has no misplacedDocs row with the default gates", () => {
     const dir = repo();
     write(dir, "apps/web/notes.md", "# notes\n");

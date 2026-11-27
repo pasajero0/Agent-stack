@@ -67,18 +67,14 @@ describe("generate → full gate cycle on a TypeScript repo", () => {
     expect(runHook(dir, "guard-file.sh", writeTool(planPath, plan)).code).toBe(0);
     write(dir, ".claude/tmp/A0/tasks.json", plan);
     expect(runHook(dir, "spec-gate.sh", edit(src)).code).toBe(0);
-    // 5. Claiming done before verify is blocked; cheating is blocked.
-    const stop = (msg: string) =>
-      runHook(dir, "evidence-gate.sh", { stop_hook_active: false, last_assistant_message: msg });
-    expect(JSON.parse(stop("STATUS: DONE\nEVIDENCE: looks fine").stdout).decision).toBe("block");
+    // 5. Cheating is blocked.
     expect(runHook(dir, "cheat-guard.sh", writeTool(src, "export const x: any = 1;")).code).toBe(2);
-    // 6. Implement, verify, report with evidence.
+    // 6. Implement, verify.
     write(dir, "src/app.test.ts", 'it("A0 AC-1: exists", () => expect(x).toBe(1));\n');
     write(dir, "src/app.ts", "export const x = 1;\n");
     const v = spawnSync(join(dir, ".claude/bin/verify"), [], { cwd: dir, encoding: "utf-8" });
     expect(v.status).toBe(0);
     expect(v.stdout).toContain("1/1 tasks passing");
-    expect(stop("STATUS: DONE\nEVIDENCE:\n$ .claude/bin/verify\nPASS T1").stdout).toBe("");
     // Hard limits hold throughout.
     expect(runHook(dir, "guard-bash.sh", bash("git -C . push")).code).toBe(2);
     expect(runHook(dir, "guard-file.sh", edit(join(dir, ".claude/gates.json"))).code).toBe(2);

@@ -6,7 +6,7 @@
 #     uncommitted edits, code is closed; a committed spec that differs from the base must say what
 #     changed under "## Changes". So history always reads "docs(<stage>): spec — …" before the code it explains.
 #  3. The plan follows the spec: code waits until /plan has broken the spec into tasks
-#     (.claude/tmp/<stage>/tasks.json), so verify and evidence-gate have something to check.
+#     (.claude/tmp/<stage>/tasks.json), so verify has something to check.
 # In spec flow branch (gates.json → specFlow, AC-89) 1 is: the spec committed on this branch, no merge; the
 # human approves it at the driver's gate:spec-approve. 2 holds without the check against the base.
 # openPaths (docs, *.md, .claude/) stay open. gates.json → specGate: strict (default) | stage | off.

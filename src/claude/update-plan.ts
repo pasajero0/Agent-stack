@@ -23,7 +23,7 @@ const EVENT_NAME = /^[A-Z][A-Za-z]+$/;
 type LooseEntry = Record<string, unknown> & { hooks: Record<string, unknown>[] };
 
 /** Hooks an earlier version shipped and this one removed: dropped on update, not kept as the user's. */
-const RETIRED_HOOKS = new Set(["post-edit-verify.sh"]);
+const RETIRED_HOOKS = new Set(["post-edit-verify.sh", "evidence-gate.sh"]);
 
 /**
  * `update` regenerates settings.json; carry over every hook the harness does not ship (the user's own

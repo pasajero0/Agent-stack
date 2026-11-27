@@ -26,7 +26,7 @@ export const HOOKS_BLOCK: HooksBlock = {
     { matcher: "Read|Grep", hooks: [hook("guard-file.sh")] },
   ],
   SessionStart: [{ hooks: [hook("session-start-context.sh")] }],
-  Stop: [{ hooks: [hook("stop-flag-reflect.sh"), hook("evidence-gate.sh")] }],
+  Stop: [{ hooks: [hook("stop-flag-reflect.sh")] }],
   PostToolUse: [{ matcher: "Edit|Write|MultiEdit", hooks: [hook("post-edit-lint.sh")] }],
 };
 

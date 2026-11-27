@@ -82,18 +82,6 @@ describe("trace", () => {
     expect(trace(dir).out).toContain("no stage");
   });
 
-  it("evidence-gate refuses DONE while criteria and tests do not line up", () => {
-    const dir = stageRepo();
-    write(dir, ".claude/tmp/A0/tasks.json", JSON.stringify({ tasks: [{ id: "T1", verify: "true", passes: true }] }));
-    write(dir, "src/ingest.test.ts", 'it("A0 AC-1", f);\n');
-    const done = { stop_hook_active: false, last_assistant_message: "STATUS: DONE\nEVIDENCE: verify 1/1" };
-    const r = runHook(dir, "evidence-gate.sh", done);
-    expect(JSON.parse(r.stdout).decision).toBe("block");
-    expect(JSON.parse(r.stdout).reason).toContain("missing tests: AC-2 AC-3");
-
-    write(dir, "src/ingest.test.ts", 'it("A0 AC-1", f); it("A0 AC-2", f); it("A0 AC-3", f);\n');
-    expect(runHook(dir, "evidence-gate.sh", done).stdout).toBe("");
-  });
 });
 
 describe("trace: spec terms against the glossary", () => {
@@ -194,15 +182,6 @@ describe("trace: spec terms against the glossary", () => {
     expect(r.out).toContain("terms not in docs/GLOSSARY.md: Novel");
   });
 
-  it("evidence-gate names a term failure as a trace failure, not as criteria and tests out of line", () => {
-    const dir = termsRepo("- **Novel** — new.\n");
-    write(dir, ".claude/tmp/A0/tasks.json", JSON.stringify({ tasks: [{ id: "T1", verify: "true", passes: true }] }));
-    const done = { stop_hook_active: false, last_assistant_message: "STATUS: DONE\nEVIDENCE: verify 1/1" };
-    const reason = JSON.parse(runHook(dir, "evidence-gate.sh", done).stdout).reason as string;
-    expect(reason).toContain("trace failed");
-    expect(reason).toContain("Novel");
-    expect(reason).not.toContain("do not line up");
-  });
 });
 
 describe("trace reads criteria as the driver does (0.4.5)", () => {

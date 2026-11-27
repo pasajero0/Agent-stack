@@ -174,7 +174,7 @@ function ingestStop(r: UsageReport, d: Record<string, unknown>) {
   }
 }
 
-/** `$CLAUDE_PROJECT_DIR/.claude/hooks/evidence-gate.sh` → `evidence-gate`; other commands → null. */
+/** `$CLAUDE_PROJECT_DIR/.claude/hooks/stop-flag-reflect.sh` → `stop-flag-reflect`; other commands → null. */
 function hookName(command: string | null): string | null {
   const m = command ? /([\w.-]+)\.sh"?$/.exec(command) : null;
   return m?.[1] ?? null;

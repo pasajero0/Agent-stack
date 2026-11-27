@@ -13,7 +13,7 @@
 #                        "max" }] — the command prints one number, e.g. functions over complexity 10.
 # null limit = report only. Each run appends a line to .claude/tmp/health.jsonl (the time series).
 #
-# Usage: .claude/bin/health [--quick]     (--quick: built-in metrics only — fast, used by evidence-gate)
+# Usage: .claude/bin/health [--quick]     (--quick: built-in metrics only — fast)
 # Exit:  0 within SLOs · 1 an SLO is broken · 2 cannot run
 set -uo pipefail
 

@@ -31,7 +31,6 @@ export interface GatesConfig {
   cheatGuard: boolean;
   /** ERE patterns whose count must not grow in an edit (skipped tests, suppressed checks). */
   cheatPatterns: string[];
-  evidenceGate: boolean;
   commands: { test: string; lint: string };
   /** Case-globs of files the lint hook checks. */
   lintMatch: string[];
@@ -130,7 +129,6 @@ export function buildGatesConfig(p: HarnessParams, routing: Record<string, unkno
     installPatterns: INSTALL_PATTERNS,
     cheatGuard: true,
     cheatPatterns: CHEAT_PATTERNS,
-    evidenceGate: true,
     commands: { test: p.testCommand, lint: p.lintCommand },
     lintMatch: p.lintMatch ? p.lintMatch.split("|") : [],
     testGlobs: p.testGlobs ? p.testGlobs.split("|") : [],
