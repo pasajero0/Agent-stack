@@ -1,5 +1,5 @@
 ---
-description: Run a task through the pipeline driver (agent-stack run) from this chat — start the run, show each gate card to the human, pass their answer, report at the end — and do none of the work yourself. Use when the user asks to build, fix or change something in this repo, says "/drive", "run it through the driver", or when gates.json sets codeBy to "driver".
+description: Run a task through the pipeline driver (agent-stack run) from this chat — start the run, show each gate card to the human, pass their answer, report at the end — and do none of the work yourself. Use when the user asks to build, fix or change something in this repo, says "/drive" or "run it through the driver".
 argument-hint: "<what to build or fix>"
 ---
 
@@ -13,7 +13,8 @@ their answer, and report. Spec: the driver spec, AC-68 to AC-76.
 
 1. **Do no step's work yourself**: no edits of code, the spec or the plan, no commits — while a run is open
    (waiting, interrupted or live) and after it. A later fix is a new run (`/drive <the fix>`); offer that, never a
-   hand edit. With `codeBy: "driver"` in `.claude/gates.json` a hook refuses your code edits anyway.
+   hand edit. spec-gate refuses your code edits anyway, because `codeBy` is `"driver"` by default.
+   Only a human opens the emergency exit (`"codeBy": "anyone"` in `.claude/gates.json`).
 2. **The human decides at every gate.** Never answer a gate on your own. Show your recommendation, then pass what
    the human said. **Never merge, push or open a pull request yourself**, also when the human agrees: merging the
    spec branch is the human's approval. Give the exact command, and wait for "done".

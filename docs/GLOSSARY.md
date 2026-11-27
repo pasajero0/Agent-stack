@@ -76,8 +76,6 @@ it here first.
   missing or wrong.
 - **Verify** — a task's command that fails before the task and passes after it; `.claude/bin/verify` runs
   it and records `passes`.
-- **Evidence** — the commands run and their real output, in the report's EVIDENCE section. "Done" without
-  it is blocked.
 
 ## Driver (ADR-0001)
 
@@ -88,8 +86,8 @@ it here first.
   spec.
 - **Run** — one execution of the pipeline for one piece of work; its state is the **run file**
   (`.claude/tmp/runs/<run id>/run.json`), written only by the driver.
-- **Live run** — a run whose status is `running` and whose driver process is alive. Two hooks step aside only
-  for a live run on its own branch: spec-gate (quick mode) and evidence-gate.
+- **Live run** — a run whose status is `running` and whose driver process is alive. spec-gate steps aside for
+  a live run on its own branch: its `codeBy` check in any mode, its spec and plan checks in quick mode.
 - **Driver call** — a Claude process the driver started, with `AGENT_STACK_RUN=<run id>` in its environment;
   its hooks inherit that variable.
 - **Mode** — the path a run takes: **quick** (a small fix: implement → checks → review → accept), **task**
@@ -108,7 +106,7 @@ it here first.
   same card to a program. One source, so the two never say different things.
 - **Operator chat** — a Claude Code chat that runs the driver for the human: it starts a run, shows each gate
   card, passes the human's answer with `--answer`, and reports at the end. It does no step's work itself; the
-  driver's roles do. With `codeBy: "driver"` a hook holds this: code edits outside `openPaths` and outside a
+  driver's roles do. By default (`codeBy` `"driver"`) spec-gate holds this: code edits outside `openPaths` and outside a
   driver call are refused. It speaks `language.chat` (English by default) and keeps terms in `language.terms`.
 - **Attempt** — one pass of implement → checks → review for a task. Limited (task 3, quick 2); a later
   attempt runs on the retry route.
@@ -168,8 +166,7 @@ it here first.
 - **Hook** — a script Claude Code runs on an event. **PreToolUse** hooks can block an action; **Stop**
   hooks can send the model back once; **SessionStart** hooks add context.
 - **Gates (hooks)** — the blocking hooks that hold the process: **spec-gate** (spec merged, then plan, before
-  code), **cheat-guard** (no skipped tests or suppressed checks), **evidence-gate** (no "done" without
-  evidence or against the plan), **arch-guard** (no imports across layer boundaries).
+  code), **cheat-guard** (no skipped tests or suppressed checks), **arch-guard** (no imports across layer boundaries).
 - **Guards** — the blocking hooks that hold single actions: **guard-bash** (no push, no foreign package
   manager, ask before download-and-run or reading secrets), **guard-file** (harness files, lockfiles,
   generated files, `tasks.json`).

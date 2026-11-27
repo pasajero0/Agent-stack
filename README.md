@@ -34,7 +34,7 @@ without it hooks run unbounded.
 ## What it deploys
 
 ```
-CLAUDE.md                  # project guide + workflow, report contract, modes, model routing (yours after generate)
+CLAUDE.md                  # project guide + workflow, modes, model routing (yours after generate)
 CODEMAP.md                 # where things live — a stub to fill in (yours after generate)
 .claude/
 ├── gates.json             # every stack-specific value the hooks read — human-edited (yours after generate)
@@ -49,7 +49,6 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 │   ├── spec-gate.sh         # the spec leads the code: first spec merged, later changes committed first, then /plan
 │   ├── cheat-guard.sh       # block edits that add .skip/.only, @ts-ignore, eslint-disable, any, …
 │   ├── arch-guard.sh        # block new imports across layer boundaries set in gates.json
-│   ├── evidence-gate.sh     # Stop: no "STATUS: DONE" while a task fails or without EVIDENCE
 │   ├── post-edit-lint.sh    # run the configured linter on the edited file, surface errors + warnings
 │   ├── session-start-context.sh  # git context, mode, active stage progress; warns about hooks that never
 │   │                        #   run (unregistered or not executable), missing jq, a repo with no commits
@@ -60,19 +59,17 @@ CODEMAP.md                 # where things live — a stub to fill in (yours afte
 │                          #   and spec Terms ↔ glossary: a term not in it and not marked (local);
 │                          #   --terms checks only the terms (before a spec has tests)
 ├── bin/health             # code-health SLIs on the branch's changes vs SLOs; time series in tmp/health.jsonl
-├── agents/                # spec-reviewer, implementer, test-writer, code-reviewer, task-analyzer,
+├── agents/                # spec-reviewer, implementer, code-reviewer,
 │                          # researcher, pattern-scout — each with a model and effort level
 ├── skills/                # grill, adr, spec (full + light template), plan, drive, migration, mr-description
-│                          # + reference docs to fill in (update keeps your edits)
 ├── commands/              # /reflect, /review
 └── rules/                 # EMPTY by design — generate per repo with pattern-scout
 ```
 
 ## The workflow
 
-Hooks enforce four points of it: no code before the spec is merged and the plan is written
-(**spec-gate**), no skipped tests or suppressed checks (**cheat-guard**), no "done" without evidence or
-against the task results (**evidence-gate**). The order of the other steps is kept by skills, which the model
+Hooks enforce two points of it: no code before the spec is merged and the plan is written
+(**spec-gate**), no skipped tests or suppressed checks (**cheat-guard**). The order of the other steps is kept by skills, which the model
 may skip. Keeping the whole order outside the model is the job of the driver, `agent-stack run`
 ([ADR 0001](docs/adr/0001-pipeline-driver.md)); it exists as an experimental first part, see
 [Driving the pipeline](#driving-the-pipeline-agent-stack-run-experimental).
@@ -92,12 +89,10 @@ may skip. Keeping the whole order outside the model is the job of the driver, `a
    **Requirements change?** The spec changes first, in the same branch: a `docs(<stage>): spec — …` commit with a
    "## Changes" entry, then tests and code. spec-gate keeps code closed while the spec has uncommitted
    edits or an unexplained change — so history always shows the spec before the code it explains.
-4. **Tests first**, named with criterion ids. **cheat-guard** blocks adding skipped tests or suppressed checks.
-5. **One task at a time** by the **implementer** subagent; **`.claude/bin/verify`** is the only thing that
-   marks a task as passing.
-6. **Report** with STATUS / DONE / NOT DONE / EVIDENCE / RISKS / NEEDS HUMAN DECISION.
-   **evidence-gate** blocks a "done" without EVIDENCE (with or without a task list), and one that the task
-   results contradict.
+4. **Tests first**, named with criterion ids, written through the driver (`agent-stack run`). **cheat-guard**
+   blocks adding skipped tests or suppressed checks.
+5. **One task at a time** by the **implementer** role, through the driver; **`.claude/bin/verify`** is the only
+   thing that marks a task as passing.
 
 ## Drift — measured like a service
 
@@ -107,7 +102,7 @@ Tests catch a broken feature. Two more kinds of drift are measured the way you w
 | --- | --- |
 | SLI — a metric | file size, new dependencies, complexity of the code this branch changed; layer imports |
 | SLO — a target | `slo` / `health[].max` in `gates.json`; `layers` boundaries |
-| Breach → stop releases | `STATUS: DONE` blocked; fix it, or justify it in an ADR and the human raises the limit |
+| Breach → stop releases | the driver's check fails; fix it, or justify it in an ADR and the human raises the limit |
 | Time series | `.claude/tmp/health.jsonl`, one line per `health` run |
 | Trace | spec criterion → test (`trace`) → code, in commit order: `docs(<stage>): spec — …` before the code |
 
@@ -133,7 +128,7 @@ Detected for node, python, go and rust (other stacks get empty defaults to fill 
 | `slo` | code-health limits on changed files: `maxFileLines` (400), `newDependencies` (null = report only) |
 | `health` | project metrics: `[{"name": "complexity", "command": "… {files} …", "max": 0}]` — detected for ESLint and ruff |
 | `docsLayout` | where Markdown files belong; `health` lists a changed `.md` outside these globs (a hint, never a block). Root-level `*.md` always fits. Set for a monorepo (see below), empty otherwise |
-| `codeBy` | `"driver"`: only a live `agent-stack run` call may edit code; a chat runs the work with `/drive`. Default `"anyone"`. Optional, not in the seed |
+| `codeBy` | `"driver"` (default, in the seed): only a live `agent-stack run` call may edit code; a chat runs the work with `/drive`. `"anyone"` is the emergency exit: a human sets it to let the chat edit code |
 | `specFlow` | how a human approves a spec: `"merge"` (default, for a team: the spec branch is merged into the base branch) or `"branch"` (one person: spec, plan and code in the current branch; the driver's gate:spec-approve is the approval, a later spec change is approved again). Optional, not in the seed |
 | `language` | the operator chat's language: `{ "chat": "ru", "terms": "en" }`; both default to `en`. Optional, not in the seed |
 | `sandbox` | `allowedDomains`: the domains Bash may reach inside the OS sandbox. `generate` seeds it from detection (the package manager's registry, plus `github.com` and `api.github.com` for GitHub); `update` reads it and writes it into `settings.json`. An empty list means Bash has no network. To add a domain, edit the list, then run `update` |
@@ -226,8 +221,8 @@ without a terminal or after `--answer`. `1`: a refusal or an error; the message 
 **From a chat.** In Claude Code, `/drive <what to build>` makes the chat an operator: it starts the run, shows
 you each gate card in your language, passes your answer with `--resume <id> --answer "<line>"` (`""` is Enter;
 one `--resume` answers one gate, and extra or wrong answers apply nothing), and reports at the end. It does no
-step's work itself. To hold that with a hook, set `"codeBy": "driver"` in `.claude/gates.json`: then only a live
-driver call edits code (docs and `.claude/` stay open). The chat speaks English unless
+step's work itself. A hook holds that: `codeBy` is `"driver"` by default, so only a live
+driver call edits code (docs and `.claude/` stay open). A human can set `"codeBy": "anyone"` in `.claude/gates.json` as the emergency exit. The chat speaks English unless
 `"language": { "chat": "ru", "terms": "en" }` says otherwise; terms, keys and commands are never translated.
 To see a run while it works, open `agent-stack run --watch` in any terminal (also the one inside VSCode): each
 step with its time, the step in progress with its last tool lines, and the gate it waits at. Each tool a role
@@ -264,8 +259,9 @@ output of the second run. A timeout, an interrupt and an empty command are never
 at the start is not run again. What this can hide: a test that the task itself made unstable can pass on the
 second run. That is why gate `accept` shows the line: read it as "something is unstable".
 
-**Hooks stay on.** Claude is never started with `--bare`, `bypassPermissions` or `disableAllHooks`. Two hooks
-step aside only for a live driver run on the run's own branch: spec-gate (quick mode) and evidence-gate.
+**Hooks stay on.** Claude is never started with `--bare`, `bypassPermissions` or `disableAllHooks`. One hook
+steps aside only for a live driver run on the run's own branch: spec-gate (its `codeBy` check in any mode, its
+spec and plan checks in quick mode).
 **Nothing is pushed or merged**: you push, and you merge the spec yourself.
 Each call is logged in `.claude/tmp/runs/<run id>/calls/` (argv, exit code, result; never the prompt).
 
@@ -417,12 +413,13 @@ chat sessions of 18–25/11 (`agent-stack usage --days 7`). A part that stays un
 | `/plan` → `tasks.json` → `bin/verify` | no `tasks.json` written | the plan step follows `/plan` and writes `tasks.json` (4 plans); the driver runs `bin/verify` after each task and once at the end (32 runs) |
 | `spec-reviewer` subagent | called once (~47k tokens), result discarded | the spec step follows `/spec`, which runs it: 20 runs |
 | `/grill` skill | never called | the clarify step asks the grill questions (at most 5); the skill file itself is not loaded |
-| `evidence-gate` hook | ran 218 times, stopped nothing | ran 580 times, output once — a candidate for removal |
+| `evidence-gate` hook | ran 218 times, stopped nothing | ran 580 times, output once — removed in 0.6.0 |
 | `cheat-guard` hook | never blocked | blocked 6 times; the driver also checks skip marks and frozen tests itself, from the same `cheatPatterns` |
 | `arch-guard` hook | never blocked (no `layers` until an ADR sets them) | the same: this repo sets no `layers` |
 | `bin/health` | never run in the project | 32 runs, inside task verifies; its 400-line limit failed tasks in the `evals1` and `effort1` runs |
 | `post-edit-lint` hook | never reported (`lintMatch` empty) | still silent: this repo has no linter |
-| `task-analyzer`, `pattern-scout` subagents | never called | never called; the driver does not use them |
+| `task-analyzer` subagent | never called | never called; removed in 0.6.0 |
+| `pattern-scout` subagent | never called | never called; the driver does not use it |
 | `/migration` skill | never called | never called |
 | `/mr-description` skill | never called | used once by hand, for the 0.4.8 pull request |
 | `/review`, `/reflect` commands, `stop-flag-reflect` hook | never called; the hook only raises a flag for `/reflect` | never called; the hook ran 580 times |
@@ -430,7 +427,7 @@ chat sessions of 18–25/11 (`agent-stack usage --days 7`). A part that stays un
 Proven in use: `guard-bash` (10 blocks in the last week), `guard-file` and `spec-gate` (proven in the first
 trial; no event in the last week), `session-start-context`,
 `bin/trace` (98 runs), `/spec`, `/adr`, `implementer` and `code-reviewer` (the driver's implement and review steps
-take their rules), `test-writer`, `researcher`. `usage` counts a driver call as a main session, not as a subagent,
+take their rules), `researcher`. `usage` counts a driver call as a main session, not as a subagent,
 so it lists `implementer` as never acted. How to read the summaries:
 [docs/usage-analytics.md](docs/usage-analytics.md).
 

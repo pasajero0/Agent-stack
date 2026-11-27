@@ -16,7 +16,7 @@ Single-package ESM TypeScript CLI. Where things live:
 | `src/mcp/`               | `catalog.ts`, `installer.ts`, `types.ts` — MCP server management.     |
 | `src/utils/`             | `logger.ts`, `shell.ts` (`run`, `runSilent`, `commandExists`).       |
 | `mcp/catalog.json`       | Data: installable MCP servers.                                       |
-| `templates/claude/`      | The deployed harness: `hooks/` (gates + `gates-lib.sh`), `bin/` (`verify`, `trace`, `health`), `agents/`, `skills/`, `commands/`, `rules/` (empty), `_normative.md` (CLAUDE.md sections), `_TOKENS.md`. |
+| `templates/claude/`      | The deployed harness: `hooks/` (gates + `gates-lib.sh`), `bin/` (`verify`, `trace`, `health`), `agents/`, `skills/`, `commands/`, `rules/` (empty), `_normative.md` (CLAUDE.md sections). |
 | `evals/`, `scripts/eval.mjs` | Regression task set for the driver (not shipped): `evals/tasks/<id>/` (`task.json` + `fixture/`), the runner `scripts/eval.mjs` with its modules in `scripts/eval/`, results in `evals/results/`. Spec: `docs/specs/evals1/SPEC.md`. |
 | `tests/`                 | vitest: `claude/`, `detect/` (unit), `hooks/` (shell hooks in temp repos, `fixture.ts`), `e2e/` (`generate` on fresh repos), `eval/` (the eval runner with the fake claude). |
 | `dist/`                  | tsup build output — generated, never hand-edit.                      |
