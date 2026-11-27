@@ -61,7 +61,7 @@ Leonid decided these on 2026-11-18, in the grill and in two review rounds.
 
   Turns per call, attempts per task and the review-loop stop apply whatever the kind.
 - **The driver from a chat (Leonid, 20/11/26).** A chat runs the driver and passes the human's answers; it
-  does no step's work. `codeBy: "driver"` is opt-in and holds even with `specGate: "off"`. The chat may turn a
+  does no step's work. `codeBy: "driver"` is the default and holds even with `specGate: "off"`. The chat may turn a
   clear worded reply into a gate key and says which key it sent; when the reply is unclear, it asks. It never
   runs `agent-stack update` itself: that changes its own guards. A run with no human (autonomous) from a chat
   waits for the sandbox of 0.5. The chat speaks English unless `language.chat` or the human says otherwise.
@@ -314,8 +314,10 @@ Any other value is refused when a run starts, with code 1.
 
 **`.claude/gates.json` → `codeBy`**
 
-Optional, top level, read by spec-gate (AC-71): `"anyone"` (the default when the key is missing) or
-`"driver"`. A seed key is not added by `update`, so a repo turns it on by hand.
+Optional, top level, read by spec-gate (AC-71), as the drive1 Contract says: `"driver"` is the default, and a
+missing key, `null` or `""` reads as `"driver"`. `"anyone"` is the emergency exit, set by a human by hand; the
+refusal line names it. Any other value reads as `"driver"` and is called unknown. `generate` writes
+`"codeBy": "driver"`; `update` never adds the key to an existing `gates.json`.
 
 **`.claude/gates.json` → `specFlow`**
 
@@ -619,8 +621,6 @@ Before committing, the driver normalises the header so that `@commitlint/config-
   task end green: tests first inside a task, and no test-only tasks. The prompt SHALL NOT repeat the rule: the
   skill is its one source (One source of rules).
   - Its "after two failed verify runs move one tier up" SHALL read "under the driver, a retry runs on the retry route" (effort1).
-- **AC-18:** WHILE `AGENT_STACK_RUN` names a live run whose `branch` is the current branch, evidence-gate
-  SHALL not block. The driver decides the result.
 - **AC-19:** WHEN implement returns DONE, THE SYSTEM SHALL itself run `.claude/bin/verify <task>`, and the
   lint command on each lint file (`{file}` replaced), or once if the command has no `{file}`.
   - It SHALL decide by exit code only.
@@ -635,10 +635,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
 - **AC-67:** WHEN the review or the implement role runs, THE SYSTEM SHALL put the body of the project's agent
   (`.claude/agents/code-reviewer.md`, `.claude/agents/implementer.md`; frontmatter removed) into its prompt as
   the rules, and add no rules of its own (One source of rules).
-  - The `implementer` agent SHALL have two sections, "In a chat" and "Under the driver". In a chat it reads
-    the task from `tasks.json`, runs `.claude/bin/verify <id>` and reports in the contract, `TEST_CONFLICT`
-    included. Under the driver it runs only the commands the prompt lists, never `.claude/bin/verify`, and
-    answers in the caller's schema.
+  - The `implementer` agent SHALL have one mode section, "Under the driver". It runs only the commands the
+    prompt lists, never `.claude/bin/verify`, and answers in the caller's schema, `TEST_CONFLICT` included.
   - The `code-reviewer` agent's task review SHALL judge only the criteria the caller gives; another task's
     criteria are not a `fail`. With no criteria or no verify given, `verifyProves` is `true`.
   - IF the agent's body is empty, or `implementer.md` has no `## Under the driver` section, or
@@ -969,7 +967,8 @@ Before committing, the driver normalises the header so that `@commitlint/config-
     `"stage"`.
   - In a repo with no commits it does not apply, since a run needs a commit to branch from; spec-gate says that
     `codeBy` starts after the first commit.
-  - With the key missing or `"anyone"`, or with no `gates.json`, nothing changes.
+  - With the key missing, spec-gate acts as for `"driver"`. With `"anyone"`, the emergency exit, or with no
+    `gates.json`, nothing changes. The refusal line names `"anyone"`. `generate` writes the key.
   - IF the key has any other value, THEN spec-gate SHALL act as for `"driver"` and say the value is unknown.
   - `openPaths` (for example docs, `*.md`, `.claude/`) stay open: the human may still write a spec through the
     chat; it still needs the merge (AC-10). A file written through Bash is not caught (README "Limits").
@@ -1181,6 +1180,11 @@ Manual check, once, with the real `claude` on a scratch repo:
 
 ## Changes
 
+- 2026-11-27 — AC-18 (deleted), AC-67 (first sub-bullet), AC-71, Contract (`codeBy`), Decisions ("The driver from
+  a chat"): drive1. Why: evidence-gate is gone, so AC-18 has nothing to hold. The implementer has one mode
+  section, "Under the driver"; the chat mode is gone. `codeBy` now follows this Contract: a missing key means
+  `"driver"`, `"anyone"` is the emergency exit, the refusal line names it, and `generate` writes the key.
+  `codeBy: "driver"` is the default, no longer opt-in.
 - 2026-11-26 — AC-66 (defect 58): a test runner config that only lists new test files no longer stops the run;
   gate:accept shows it. A test that only adds its own file to a list cannot weaken a check that existed. Only a
   list that selects test files passes; a list that runs code (`setupFiles`, `globalSetup`) stops. The list must
