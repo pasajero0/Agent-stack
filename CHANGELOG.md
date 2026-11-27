@@ -2,6 +2,9 @@
 
 ## 0.5.4 — unreleased
 
+- **`.gitignore` keeps local state and secrets out of commits:** it now lists `.env`, `.env.*`, `*.log`,
+  `coverage/` and `/.claude/`. Before, `.claude/` was hidden only by `.git/info/exclude`, which lives on one
+  machine, so a fresh clone did not ignore it.
 - **Processes that a check or a role call started no longer outlive it (defects #49, #61):** when a check or a
   role call ends in any way (any exit code, an error, a timeout, an abort), the driver sends SIGKILL to what is
   left of that child's process group before it takes the result. Before, it did this only on a timeout or an

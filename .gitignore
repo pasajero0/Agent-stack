@@ -2,3 +2,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 .DS_Store
+# Keep local state and secrets out of commits
+.env
+.env.*
+*.log
+coverage/
+/.claude/
