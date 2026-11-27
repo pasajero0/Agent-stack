@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { detectHarnessParams } from "../detect/harness-params.js";
 import {
@@ -89,6 +89,21 @@ export async function updateCommand(
   reportExtras(projectDir, plan, missing);
 }
 
+/** True when gates.json is a JSON object whose `codeBy` is missing, null or "". Any other case: false. */
+function gatesLacksCodeBy(projectDir: string): boolean {
+  const path = join(projectDir, ".claude", "gates.json");
+  if (!existsSync(path)) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf-8"));
+  } catch {
+    return false;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+  const v = (parsed as Record<string, unknown>).codeBy;
+  return v === undefined || v === null || v === "";
+}
+
 function reportExtras(projectDir: string, plan: UpdatePlan, missingTools: readonly string[]): void {
   plan.customHooks.forEach((h) => log.dim(`  kept your hook in settings.json — ${h}`));
   plan.customSettings.forEach((s) => log.dim(`  kept your setting in settings.json — ${s}`));
@@ -101,6 +116,11 @@ function reportExtras(projectDir: string, plan: UpdatePlan, missingTools: readon
   plan.orphaned.forEach((p) =>
     log.dim(`  left ${p} — no longer part of the harness, but you changed it; delete it if unused`)
   );
+  if (gatesLacksCodeBy(projectDir)) {
+    log.warn(
+      'gates.json has no codeBy, so only the driver edits code (/drive). To let a chat edit code again, a human adds "codeBy": "anyone" to .claude/gates.json.'
+    );
+  }
   if (plan.noHashes) {
     log.warn(
       "This harness predates file hashes, so your own edits cannot be told apart this time: every `~` file " +
