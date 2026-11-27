@@ -39,9 +39,7 @@ never reached Terms.
 
 ## Subagent delegation
 
-- **task-analyzer** at the start of a non-trivial task (intake + decomposition).
 - **code-reviewer** after writing/modifying code (grep-first, severity-tagged).
-- **test-writer** for vitest unit tests (reads neighbouring tests first).
 - **pattern-scout** to (re)generate the path-scoped rules under `.claude/rules/` after structural
   changes.
 
