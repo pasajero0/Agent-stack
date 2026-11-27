@@ -53,4 +53,6 @@ export interface UpdatePlan {
   sandboxLines: SandboxLine[];
   /** settings.local.json holds `Read(...)` deny rules (0.5.0 and earlier wrote them): the warning to print. */
   readDenyWarning: string | null;
+  /** One warning line for each deny or ask entry the harness wrote last time and the user removed (permissions.ts). */
+  permissionLines: string[];
 }

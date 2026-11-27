@@ -6,7 +6,11 @@
 import { readFileSync } from "node:fs";
 import chalk from "chalk";
 
-/** Folders Bash may not read inside the sandbox, in the Contract order. Not `~/.config/gh`: `gh pr view` needs it. */
+/**
+ * Folders Bash may not read inside the sandbox, in the Contract order. `~/.config/gh` is last: github.com is an
+ * allowed domain, so gh's login would let Bash send data out. With it closed, gh is not logged in inside the
+ * sandbox; a user who wants gh there removes it from denyRead by hand (update keeps it removed and warns).
+ */
 export const SECRET_FOLDERS: readonly string[] = [
   "~/.ssh",
   "~/.aws",
@@ -17,7 +21,15 @@ export const SECRET_FOLDERS: readonly string[] = [
   "~/.npmrc",
   "~/.config/gcloud",
   "~/.azure",
+  "~/.config/gh",
 ];
+
+/**
+ * Harness places Bash may not write inside the sandbox (`sandbox.filesystem.denyWrite`); "./" is the project root.
+ * guard-file stops the Edit and Write tools there; this stops a script run through Bash. `generate` and `update`
+ * still write them: the human runs those from a terminal, outside the sandbox.
+ */
+export const HARNESS_WRITE_PATHS: readonly string[] = ["./.claude/gates.json", "./.claude/bin", "./CLAUDE.md"];
 
 const NPM = ["registry.npmjs.org"];
 const PYPI = ["pypi.org", "files.pythonhosted.org"];
@@ -68,7 +80,7 @@ export interface SandboxBlock {
   enabled: true;
   allowUnsandboxedCommands: false;
   failIfUnavailable: true;
-  filesystem: { denyRead: string[]; allowWrite?: string[] };
+  filesystem: { denyRead: string[]; denyWrite: string[]; allowWrite?: string[] };
   network: { allowedDomains: string[] };
 }
 
@@ -79,6 +91,7 @@ export function buildSandboxBlock(domains: readonly string[], writePaths: readon
     failIfUnavailable: true,
     filesystem: {
       denyRead: [...SECRET_FOLDERS],
+      denyWrite: [...HARNESS_WRITE_PATHS],
       ...(writePaths.length ? { allowWrite: [...writePaths] } : {}),
     },
     network: { allowedDomains: [...domains] },
@@ -121,6 +134,7 @@ export async function sandboxReadiness(platform: string, exists: Exists): Promis
 /** The manifest's `generatedSandbox`: the lists the harness wrote, without the user's entries. */
 export interface GeneratedSandbox {
   denyRead: string[];
+  denyWrite?: string[]; // always written; absent when read back from a manifest without it (before 0.5.4)
   allowedDomains: string[];
   allowWrite?: string[]; // only when the harness writes any
 }
@@ -128,6 +142,7 @@ export interface GeneratedSandbox {
 export function generatedSandbox(domains: readonly string[], writePaths: readonly string[] = []): GeneratedSandbox {
   return {
     denyRead: [...SECRET_FOLDERS],
+    denyWrite: [...HARNESS_WRITE_PATHS],
     allowedDomains: [...domains],
     ...(writePaths.length ? { allowWrite: [...writePaths] } : {}),
   };
@@ -144,8 +159,10 @@ const strings = (v: unknown): string[] =>
 export function readGeneratedSandbox(v: unknown): GeneratedSandbox {
   const g = isObject(v) ? v : {};
   const allowWrite = strings(g.allowWrite);
+  const denyWrite = strings(g.denyWrite);
   return {
     denyRead: strings(g.denyRead),
+    ...(denyWrite.length ? { denyWrite } : {}),
     allowedDomains: strings(g.allowedDomains),
     ...(allowWrite.length ? { allowWrite } : {}),
   };
@@ -214,8 +231,9 @@ interface MergeReport {
   keys: Record<"sandbox" | Place, string[]>; // other keys of each object place
   entries: Record<Place, string[]>; // denyRead, then allowedDomains entries
   warnings: string[];
-  replaced: Record<"objects" | "lists", string[]>; // the five places: the objects first, then the lists
+  replaced: Record<"objects" | "lists", string[]>; // the six places: the objects first, then the lists
   readable: string[]; // removed secret folders, in the secret folders' order (AC-18)
+  writable: string[]; // removed harness write paths, in their order
 }
 
 type Place = "filesystem" | "network";
@@ -281,6 +299,25 @@ function mergePlace(
 }
 
 /**
+ * `sandbox.filesystem.denyWrite`, as denyRead: absent → the harness list; not a list → the harness list and a
+ * "replaced" line; else the harness entries (minus those the user removed, each with a warning), then the user's.
+ */
+function mergeDenyWrite(user: Record<string, unknown>, harness: readonly string[], before: readonly string[],
+  r: MergeReport): unknown[] {
+  const path = "sandbox.filesystem.denyWrite";
+  const fs = user.filesystem;
+  if (!isObject(fs) || !Object.hasOwn(fs, "denyWrite")) return [...harness];
+  const list = fs.denyWrite;
+  if (!Array.isArray(list)) {
+    r.replaced.lists.push(replaced(path, "a list"));
+    return [...harness];
+  }
+  const removed = harness.filter((h) => before.includes(h) && !list.includes(h));
+  for (const p of removed) r.writable.push(`${safeText(p)} is writable by Bash inside the sandbox: it is not in ${path}`);
+  return mergeList(list, harness.filter((h) => !removed.includes(h)), before, path, r.entries.filesystem);
+}
+
+/**
  * `sandbox.filesystem.allowWrite`: the harness paths, then the user's (not one the harness wrote last time).
  * No key when the harness writes none and the user has none.
  */
@@ -336,6 +373,7 @@ export function mergeSandbox(
     warnings: [],
     replaced: { objects: [], lists: [] },
     readable: [],
+    writable: [],
   };
   const out: Record<string, unknown> = {};
   for (const key of ["enabled", "allowUnsandboxedCommands", "failIfUnavailable"] as const) {
@@ -349,7 +387,11 @@ export function mergeSandbox(
     r.warnings.push(`sandbox.${key} is ${safeValue(v)} in .claude/settings.json: ${SWITCH_WARNINGS[key]!}`);
   }
   const writes = harness.filesystem.allowWrite ?? [];
-  const fsOut = mergePlace(user, "filesystem", harness.filesystem.denyRead, before.denyRead, r, ["allowWrite"]);
+  const skip = ["denyWrite", "allowWrite"];
+  const place = mergePlace(user, "filesystem", harness.filesystem.denyRead, before.denyRead, r, skip);
+  const denyWrite = mergeDenyWrite(user, harness.filesystem.denyWrite, before.denyWrite ?? [], r);
+  const { denyRead, ...rest } = place;
+  const fsOut: Record<string, unknown> = { denyRead, denyWrite, ...rest }; // the key order: denyRead, denyWrite
   mergeAllowWrite(user, writes, before.allowWrite ?? [], fsOut, r);
   out.filesystem = fsOut;
   out.network = mergePlace(user, "network", harness.network.allowedDomains, before.allowedDomains, r);
@@ -369,7 +411,7 @@ export function mergeSandbox(
       ...r.entries.filesystem,
       ...r.entries.network,
     ],
-    lines: [...r.warnings, ...r.replaced.objects, ...r.replaced.lists, ...r.readable].map(warn),
+    lines: [...r.warnings, ...r.replaced.objects, ...r.replaced.lists, ...r.readable, ...r.writable].map(warn),
   };
 }
 

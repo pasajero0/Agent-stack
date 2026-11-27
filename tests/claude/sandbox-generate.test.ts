@@ -15,6 +15,7 @@ const SECRETS = [
   "~/.npmrc",
   "~/.config/gcloud",
   "~/.azure",
+  "~/.config/gh",
 ];
 
 // The Contract block for a pnpm repo with a GitHub remote, as it stands inside settings.json.
@@ -32,7 +33,13 @@ const CONTRACT_BLOCK = `  "sandbox": {
         "~/.netrc",
         "~/.npmrc",
         "~/.config/gcloud",
-        "~/.azure"
+        "~/.azure",
+        "~/.config/gh"
+      ],
+      "denyWrite": [
+        "./.claude/gates.json",
+        "./.claude/bin",
+        "./CLAUDE.md"
       ],
       "allowWrite": [
         "~/Library/pnpm/store",
@@ -62,9 +69,9 @@ function sandboxLines(settings: string): string[] {
 }
 
 describe("sandbox1: the generated sandbox block", () => {
-  it("sandbox1 AC-1: settings.json holds the exact 31-line Contract block for pnpm + gh", () => {
+  it("sandbox1 AC-1: settings.json holds the exact 37-line Contract block for pnpm + gh", () => {
     const lines = sandboxLines(content(TS_PARAMS, ".claude/settings.json"));
-    expect(lines).toHaveLength(31);
+    expect(lines).toHaveLength(37);
     expect(lines.join("\n")).toBe(CONTRACT_BLOCK);
   });
 
@@ -78,7 +85,7 @@ describe("sandbox1: the generated sandbox block", () => {
       "filesystem",
       "network",
     ]);
-    expect(Object.keys(s.sandbox.filesystem)).toEqual(["denyRead", "allowWrite"]);
+    expect(Object.keys(s.sandbox.filesystem)).toEqual(["denyRead", "denyWrite", "allowWrite"]);
     expect(Object.keys(s.sandbox.network)).toEqual(["allowedDomains"]);
     expect(s.sandbox.filesystem.denyRead).toEqual(SECRETS);
     expect(s.sandbox.network.allowedDomains).toEqual(detectedDomains("pnpm", "gh"));
@@ -90,9 +97,17 @@ describe("sandbox1: the generated sandbox block", () => {
       enabled: true,
       allowUnsandboxedCommands: false,
       failIfUnavailable: true,
-      filesystem: { denyRead: SECRETS },
+      filesystem: { denyRead: SECRETS, denyWrite: ["./.claude/gates.json", "./.claude/bin", "./CLAUDE.md"] },
       network: { allowedDomains: ["a.com"] },
     });
+  });
+
+  it("Q1: the built block and generate hold ~/.config/gh as the last denyRead entry", () => {
+    expect(buildSandboxBlock([]).filesystem.denyRead.at(-1)).toBe("~/.config/gh");
+    const s = JSON.parse(content(TS_PARAMS, ".claude/settings.json"));
+    expect(s.sandbox.filesystem.denyRead.at(-1)).toBe("~/.config/gh");
+    const m = JSON.parse(content(TS_PARAMS, ".claude/.harness.json"));
+    expect(m.generatedSandbox.denyRead.at(-1)).toBe("~/.config/gh");
   });
 
   it("sandbox1 AC-2: gates.json has sandbox.allowedDomains right before routing", () => {
@@ -106,10 +121,11 @@ describe("sandbox1: the generated sandbox block", () => {
     const m = JSON.parse(content(TS_PARAMS, ".claude/.harness.json"));
     expect(m.generatedSandbox).toEqual({
       denyRead: SECRETS,
+      denyWrite: ["./.claude/gates.json", "./.claude/bin", "./CLAUDE.md"],
       allowedDomains: ["registry.npmjs.org", "github.com", "api.github.com"],
       allowWrite: ["~/Library/pnpm/store", "~/Library/Caches/pnpm", "~/.local/share/pnpm/store", "~/.cache/pnpm"],
     });
-    expect(Object.keys(m.generatedSandbox)).toEqual(["denyRead", "allowedDomains", "allowWrite"]);
+    expect(Object.keys(m.generatedSandbox)).toEqual(["denyRead", "denyWrite", "allowedDomains", "allowWrite"]);
     expect(Array.isArray(m.generatedAllow)).toBe(true); // the old field stays
   });
 });

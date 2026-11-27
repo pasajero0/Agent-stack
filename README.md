@@ -14,8 +14,8 @@ that drive that workflow. It is stack-agnostic: everything language-specific liv
   approval gates.
 - **What is checked:** regression evals (7 tasks: 5 on known agent failure modes — a weakened test, a test
   conflict, an extra dependency, scope creep, a broken access check — and 2 plain ones; k = 3): 21/21 passed,
-  pass^k = 1, $1.16, on 0.5.3, started from the chat inside the OS sandbox, run of 2026-11-26 —
-  [evals/results/2026-11-26-220348.json](evals/results/2026-11-26-220348.json).
+  pass^k = 1, $1.21, on 0.5.4, started from the chat inside the OS sandbox, run of 2026-11-27 —
+  [evals/results/2026-11-27-012936.json](evals/results/2026-11-27-012936.json).
 
 Read [Limits](#limits--read-before-trusting-it) before you trust it.
 
@@ -299,7 +299,18 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
 - **OS sandbox (Bash only).** The generated `.claude/settings.json` turns on Claude Code's OS sandbox (the
   sandbox block).
   - It covers Bash and its child processes only. Read, Edit, Write, WebFetch, WebSearch, MCP servers and hooks
-    run outside it.
+    run outside it. A text the agent read can use these tools to send data out, so the harness closes them in
+    `.claude/settings.json` → `permissions`:
+    - **Claude in Chrome tools are denied:** `permissions.deny` has `mcp__claude-in-chrome__*`. That browser
+      has your own logins. A deny rule blocks in every permission mode.
+    - **WebFetch and every MCP tool ask each time:** `permissions.ask` has `WebFetch` and `mcp__*`. Claude Code
+      asks also in `bypassPermissions`, because an explicit ask rule wins there.
+    - **WebSearch is allowed and is not limited.**
+    - **The Read tool:** guard-file handles it (see the secret folders below).
+    - **To open a channel:** remove its entry from `.claude/settings.json` by hand. `update` keeps it removed
+      and prints a warning on each run. Your own deny and ask entries are always kept.
+    - **What stays open:** a project cannot turn off the Chrome integration itself; the harness only denies its
+      tools. In a headless call (`claude -p`), Claude Code refuses a tool that must ask.
   - **Network:** for Bash, only the listed domains are reached without a question. The list is `gates.json` →
     `sandbox.allowedDomains`. WebFetch is not limited by it. Node's built-in `fetch` does not use the sandbox
     proxy, so it fails even for a listed domain. Set `NODE_USE_ENV_PROXY=1` for it (checked on Node 22.21).
@@ -311,8 +322,11 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     The list is `sandbox.filesystem.allowWrite` in `.claude/settings.json`; `update` adds missing paths and
     keeps yours.
   - **Secret folders:** Bash cannot read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.docker`, `~/.netrc`,
-    `~/.npmrc`, `~/.config/gcloud` and `~/.azure`. The Read tool is not covered; guard-file still handles it.
-    `~/.config/gh` stays readable on purpose, so `gh` keeps its token. Git over SSH fails inside the sandbox,
+    `~/.npmrc`, `~/.config/gcloud`, `~/.azure` and `~/.config/gh`. The Read tool is not covered; guard-file
+    still handles it. Bash cannot read `~/.config/gh`, so gh is not logged in inside the sandbox and git over
+    HTTPS to a private GitHub repo may fail. To use gh from the agent's Bash,
+    remove "~/.config/gh" from sandbox.filesystem.denyRead in `.claude/settings.json` (`update` keeps it removed and warns). What stays
+    open: github.com and the package registry are still reachable without a login. Git over SSH fails inside the sandbox,
     because `~/.ssh` is unreadable. If you remove a secret folder from `denyRead`, `update` keeps it removed and
     warns on each run.
   - **No `Read(...)` deny rules:** with the sandbox on, Claude Code applies them to Bash too, so a command
@@ -323,10 +337,16 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     one Bash command. In the default mode Claude Code asks you. In auto mode its classifier decides and you are
     not asked. With `bypassPermissions` the host is reached without a question. The hard lock is
     `sandbox.network.allowManagedDomainsOnly`, and it works in managed settings only.
-  - **Harness files Bash can still write:** `.claude/gates.json`, `.claude/bin/` and `CLAUDE.md`. guard-file
-    stops the Edit and Write tools there, not a script run through Bash. The sandbox does deny Bash writes to
-    `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/`, `.claude/agents/` and `.git/hooks/`
-    (checked on macOS, Claude Code 2.1.329). A fix is planned.
+  - **Harness files Bash cannot write:** `.claude/gates.json`, `.claude/bin/` and `CLAUDE.md`. guard-file stops
+    the Edit and Write tools there; `sandbox.filesystem.denyWrite` in `.claude/settings.json` stops a script run
+    through Bash. The Claude Code documentation confirms denyWrite for folders. On Linux a path that does not
+    exist yet may have no effect. Checked by a live probe on 27/11/2026 (macOS, Claude Code 2.1.332, after
+    `update`): Bash in the sandbox got EPERM when it opened `.claude/gates.json`, `.claude/bin/verify` and
+    `CLAUDE.md` for writing, and when it created a file in `.claude/bin/`; the control probes (open `README.md`
+    for writing, create a file in `.claude/tmp/`) were allowed. So the rule works for a file path and for a
+    folder on macOS. Linux is not checked. The sandbox already denies Bash writes to `.claude/settings.json`,
+    `.claude/settings.local.json`, `.claude/hooks/`, `.claude/agents/` and `.git/hooks/` (checked on macOS,
+    Claude Code 2.1.329).
   - `dangerouslyDisableSandbox` does not take a command out of the sandbox (checked: the read of `~/.ssh` still
     fails with it).
   - **The driver started from the chat's Bash (macOS) needs a token file.** Inside the sandbox a `claude` cannot
@@ -339,6 +359,11 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
     environment can put it into the run's `calls/` record (the token makes model requests only, for a year);
     Linux is not handled; the driver finds the outer sandbox by asking the OS, and
     `AGENT_STACK_OUTER_SANDBOX=0` skips that check. A driver started from a terminal works as before.
+    Why the token is not masked: Claude Code can replace a credential with a placeholder for sandboxed
+    commands. But it accepts that setting only from user or managed settings or the `--settings` flag,
+    not from a project's settings. The setting is experimental, and nobody checked that a nested `claude` works
+    with a placeholder. So the harness does not set it, and the limit above stays: a command a call starts can read the
+    token, and the token makes model requests only.
   - **Temporary files:** Bash writes only under `$TMPDIR` inside the sandbox. A script or a test that writes to
     `/tmp` by name, or calls a bare `mktemp` on macOS, fails there.
   - **Who wins:** a `false` in user settings, `--settings` or managed settings wins over the project value.
@@ -350,6 +375,11 @@ vars. Besides privacy, this is the cost: the connectors alone added about 150k t
   - **Linux and WSL2:** the sandbox needs `bwrap` and `socat`. Without them every Bash command fails
     (`failIfUnavailable`). `generate` and `update` warn when one is missing. `agent-stack detect` reports whether
     they are found, not whether the sandbox starts.
+  - **Linux:** every probe of the sandbox (reading the secret folders, the domain list, the places Bash cannot
+    write) was run on macOS only. On Linux the sandbox uses bubblewrap and socat. `generate` and `update` say
+    when one is missing. CI installs them and runs the tests there, but no live probe of the sandbox itself has
+    run on Linux. Known differences from the Claude Code documentation: in sandbox path lists, only a trailing
+    `"/**"` wildcard works on Linux. An `allowWrite` entry for a path that does not exist yet has no effect there.
   - **Native Windows:** the sandbox is not documented there, so Bash commands most likely fail. Use WSL2.
 - **Hooks fail open** when they crash. Stop hooks can only nudge once per turn (`stop_hook_active`).
 - `verify` runs commands from an agent-written plan; it is not allow-listed and refuses commands guard-bash

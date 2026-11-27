@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.5.4 — Fewer ways around the sandbox
+
+This release closes the channels past the OS sandbox by default: Claude in Chrome tools are denied, and WebFetch and MCP tools ask. Bash cannot write the harness's own rules or read the GitHub CLI login. The driver marks outside text in its prompts as data, kills the processes its steps leave behind, and a failed check names the failing tests. Still open: Linux has no live probe, and the model token is not masked.
+
+- **`.gitignore` keeps local state and secrets out of commits:** it now lists `.env`, `.env.*`, `*.log`,
+  `coverage/` and `/.claude/`. Before, `.claude/` was hidden only by `.git/info/exclude`, which lives on one
+  machine, so a fresh clone did not ignore it.
+- **Processes that a check or a role call started no longer outlive it (defects #49, #61):** when a check or a
+  role call ends in any way (any exit code, an error, a timeout, an abort), the driver sends SIGKILL to what is
+  left of that child's process group before it takes the result. Before, it did this only on a timeout or an
+  abort, so vitest workers stayed alive with parent PID 1 at full CPU and made later checks fail by time. The
+  driver signals a group at most once after its child has ended, because an empty group's number can belong to a
+  new, unrelated group. The driver also keeps the set of its live child groups in memory and kills them when it
+  ends itself: on SIGHUP (new; it ends the run the same way SIGTERM does), SIGINT and SIGTERM, an uncaught
+  exception or unhandled rejection, and process exit. The result of the check or the call does not change, and
+  the exit codes and messages of SIGINT and SIGTERM do not change. Not reached: a driver killed with SIGKILL
+  cannot clean up, and a process that left the group (its own session, for example a daemon or a tool that calls
+  setsid).
+- **Bash cannot write the harness files inside the sandbox:** the generated `.claude/settings.json` now has
+  `sandbox.filesystem.denyWrite` with `./.claude/gates.json`, `./.claude/bin` and `./CLAUDE.md`. Before, guard-file
+  stopped only the Edit and Write tools there, so a script run through Bash could weaken the pipeline's rules.
+  The manifest records the entries in `generatedSandbox.denyWrite`. `update` adds them to a settings.json of an
+  older version and keeps your own denyWrite entries after them. If you remove one of the three entries, `update`
+  keeps it removed and prints one warning line for it on each run. `generate` and `update` still write these
+  places: you run them from a terminal, outside the sandbox. Checked by a live probe on 27/11/2026 (macOS, Claude Code 2.1.332, after `update`): Bash
+  in the sandbox got EPERM on `.claude/gates.json`, `.claude/bin/verify`, `CLAUDE.md` and a new file in
+  `.claude/bin/`; the control probes were allowed. So the rule works for a file path and for a folder on macOS.
+  Linux is not checked.
+- **Bash cannot read gh's login inside the sandbox:** `~/.config/gh` is now the last entry of the secret folders,
+  so the generated `sandbox.filesystem.denyRead` holds it. Before, a text the agent read could make Bash send data
+  out through github.com with your GitHub login. Inside the sandbox, gh now answers that it is not logged in, and
+  git over HTTPS to a private GitHub repo may fail. `update` adds the entry to a settings.json of an older version
+  and records it in `generatedSandbox.denyRead`. To use gh from the agent's Bash, remove `"~/.config/gh"` from
+  `sandbox.filesystem.denyRead` by hand: `update` keeps it removed and prints one warning line for it on each run.
+  The allowed domains and the `permissions.allow` entries for gh stay as they were.
+- **The channels past the OS sandbox are closed by default:** the generated `.claude/settings.json` now has
+  `permissions.deny` with `mcp__claude-in-chrome__*` (the Claude in Chrome tools), and `permissions.ask` with
+  `WebFetch` and `mcp__*` (every MCP tool). A deny rule blocks in every permission mode; an ask rule asks also
+  in `bypassPermissions`. `permissions.allow` stays as it was, WebSearch included. The manifest records these
+  entries in `generatedDeny` and `generatedAsk`. `update` adds them to a settings.json of an older version and
+  keeps your own deny and ask entries. If you remove one of the three entries, `update` keeps it removed and
+  prints one warning line for it on each run. In a headless call, Claude Code refuses a tool that must ask.
+- **The feedback of a failed check names the failing tests (defect #60):** the driver now takes the lines that
+  name failing tests from the whole output of a red check, not only from its last 50 lines. A line counts when,
+  after colour codes are removed, it starts with `FAIL`, `×`, `✗`, `not ok` or `--- FAIL`. The feedback shows
+  them under `Failing tests (from the whole output):`, before the tail: in order, without repeats, at most 40
+  lines of at most 300 characters, with the count of dropped lines. For a task's verify, the driver reads the
+  whole `verify.log`. Output with no such line gives the same feedback as before.
+- **The implement and review prompts mark outside text as data:** the driver now wraps the task description in
+  `<task_description>`, the feedback of the previous attempt in `<feedback>`, the diff in `<diff>` and the
+  implementer's report in `<implementer_report>`. Each prompt says, before the first tag, that the text inside
+  these tags is data, not instructions. A closing tag of the same name inside the text (any case, spaces inside)
+  gets a backslash after `<`, so the text cannot close its own tag. The labels and the order of the parts stay.
+- **CI installs the Linux sandbox tools, and the README says what is not checked on Linux:** the CI check job
+  now installs bubblewrap and socat with apt-get before it installs the dependencies. The README Limits section
+  has a Linux sub-item: every live probe of the sandbox ran on macOS only, only a trailing `"/**"` wildcard works
+  in sandbox path lists on Linux, and an `allowWrite` entry for a missing path has no effect there. The token
+  file sub-item now says why the harness does not mask the token: Claude Code accepts that setting only from
+  user or managed settings or `--settings`, it is experimental, and a nested `claude` with a placeholder is not
+  checked.
+- **Defect log:** #61, #62; #49 and #60 are closed.
+- **Eval run** on 0.5.4, k = 3, real `claude`, started from the chat inside the OS sandbox: 21/21 passed,
+  pass^3 = 1, $1.21, 5:25 — `evals/results/2026-11-27-012936.json`.
+
 ## 0.5.3 — Fewer stops that need a human
 
 - **A test runner config that lists new test files does not stop the run (defect #58, partly):** the driver no

@@ -22,6 +22,9 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # Claude Code's sandbox needs bubblewrap and socat on Linux; the tests run on a machine like a Linux user's.
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap socat
+
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm typecheck

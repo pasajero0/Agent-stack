@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, mkdirSync, readFileSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RunError } from "../../src/run/errors.js";
-import { runCheck, verifyTail, lintRuns, globMatch } from "../../src/run/checks.js";
+import { runCheck, verifyTail, verifyFailing, failingLines, lintRuns, globMatch } from "../../src/run/checks.js";
 
 let dir: string;
 beforeEach(() => {
@@ -75,6 +75,71 @@ describe("verifyTail", () => {
 
   it("v04 AC-19: a missing log gives an empty string", () => {
     expect(verifyTail(dir, "none")).toBe("");
+  });
+});
+
+describe("defect 60: failing lines from the whole output", () => {
+  it("Q1 failing: a red check keeps a FAIL line that is above the last 50 lines", async () => {
+    const r = await runCheck("echo ' FAIL  tests/a.test.ts > adds'; seq 1 80; exit 1", dir, 5000);
+    expect(r.tail).not.toContain("FAIL");
+    expect(r.failing).toBe(" FAIL  tests/a.test.ts > adds");
+  });
+
+  it("Q1 failing: keeps the order, drops exact repeats, knows each marker", () => {
+    const out = [
+      "  × adds",
+      "ok line",
+      "✗ subtracts",
+      "  × adds",
+      "not ok 3 - divides",
+      "--- FAIL: TestX (0.00s)",
+      "FAILED tests/b.py::test_y",
+      "a FAIL in the middle",
+    ].join("\n");
+    expect(failingLines(out).split("\n")).toEqual([
+      "  × adds",
+      "✗ subtracts",
+      "not ok 3 - divides",
+      "--- FAIL: TestX (0.00s)",
+      "FAILED tests/b.py::test_y",
+    ]);
+  });
+
+  it("Q1 failing: more than 40 lines are cut and the count of dropped lines is stated; a long line is cut", () => {
+    const out = Array.from({ length: 45 }, (_, i) => `FAIL t${i + 1}`).join("\n") + `\nFAIL ${"x".repeat(400)}`;
+    const lines = failingLines(out).split("\n");
+    expect(lines).toHaveLength(41);
+    expect(lines[0]).toBe("FAIL t1");
+    expect(lines[39]).toBe("FAIL t40");
+    expect(lines[40]).toBe("(6 more failing lines not shown)");
+    expect(failingLines(`FAIL ${"x".repeat(400)}`)).toHaveLength(300);
+  });
+
+  it("Q1 failing: ANSI colour codes do not hide a marker", () => {
+    expect(failingLines("\x1b[31m\x1b[1m FAIL \x1b[22m\x1b[39m tests/c.test.ts")).toBe(" FAIL  tests/c.test.ts");
+    expect(failingLines("   \x1b[31m×\x1b[39m adds")).toBe("   × adds");
+  });
+
+  it("Q1 failing: output with no marker gives no lines; a green check keeps none", async () => {
+    expect(failingLines("all good\n1 passed")).toBe("");
+    const green = await runCheck("echo 'FAIL looks bad'; exit 0", dir, 5000);
+    expect(green.failing ?? "").toBe("");
+    const red = await runCheck("echo nothing; exit 1", dir, 5000);
+    expect(red.failing ?? "").toBe("");
+  });
+
+  it("Q1 failing: a timed-out check is unchanged", async () => {
+    const r = await runCheck("echo 'FAIL x'; sleep 5", dir, 300);
+    expect(r.timedOut).toBe(true);
+    expect(r.failing ?? "").toBe("");
+  });
+
+  it("Q1 failing: verifyFailing reads the whole verify.log; a missing log gives an empty string", () => {
+    mkdirSync(join(dir, ".claude/tmp/s1"), { recursive: true });
+    const text = ["FAIL tests/v.test.ts > first", ...Array.from({ length: 80 }, (_, i) => `l${i}`)].join("\n");
+    writeFileSync(join(dir, ".claude/tmp/s1/verify.log"), text);
+    expect(verifyFailing(dir, "s1")).toBe("FAIL tests/v.test.ts > first");
+    expect(verifyFailing(dir, "none")).toBe("");
   });
 });
 

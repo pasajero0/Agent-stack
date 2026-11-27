@@ -24,6 +24,7 @@ const SECRET_FOLDERS = [
   "~/.npmrc",
   "~/.config/gcloud",
   "~/.azure",
+  "~/.config/gh",
 ];
 
 describe("sandbox1 AC-21: README Limits and Configuration", () => {
@@ -59,8 +60,14 @@ describe("sandbox1 AC-21: README Limits and Configuration", () => {
     }
   });
 
-  it("sandbox1 AC-21: Limits names all nine secret folders", () => {
+  it("sandbox1 AC-21: Limits names all ten secret folders", () => {
     for (const folder of SECRET_FOLDERS) expect(limits, folder).toContain(folder);
+  });
+
+  it("Q1: Limits says Bash cannot read ~/.config/gh and how to open it again", () => {
+    expect(limits).not.toContain("stays readable on purpose");
+    expect(limits).toContain("gh is not logged in inside the sandbox");
+    expect(limits).toContain('remove "~/.config/gh" from sandbox.filesystem.denyRead');
   });
 
   it("sandbox1 AC-21: Limits shows the managed-settings lock block", () => {

@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateCommand } from "../../src/commands/generate.js";
 import { updateCommand } from "../../src/commands/update.js";
-import { buildSandboxBlock, SECRET_FOLDERS } from "../../src/claude/sandbox.js";
+import { buildSandboxBlock, HARNESS_WRITE_PATHS, SECRET_FOLDERS } from "../../src/claude/sandbox.js";
 import { pinPlatform } from "./pin-platform.js";
+
+const DENY_WRITE = [...HARNESS_WRITE_PATHS];
 
 pinPlatform(); // the warnings these tests compare must not depend on the machine (Linux without socat)
 
@@ -111,7 +113,7 @@ describe("sandbox1: switches", () => {
     write("settings.json", settingsWith({ enabled: true, filesystem: {}, network: { other: 1 } }));
     await updateCommand();
     const sandbox = settingsSandbox();
-    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS] });
+    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS], denyWrite: DENY_WRITE });
     expect(sandbox.network).toEqual({ allowedDomains: detected, other: 1 });
     expect(warnings()).toEqual([]);
   });
@@ -182,8 +184,8 @@ describe("sandbox1: other keys and list entries", () => {
       "autoAllowBashIfSandboxed",
     ]);
     expect(sandbox.excludedCommands).toEqual(["docker"]);
-    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS], allowWrite: ["/tmp/x"] });
-    expect(Object.keys(sandbox.filesystem as object)).toEqual(["denyRead", "allowWrite"]);
+    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS], denyWrite: DENY_WRITE, allowWrite: ["/tmp/x"] });
+    expect(Object.keys(sandbox.filesystem as object)).toEqual(["denyRead", "denyWrite", "allowWrite"]);
     expect(sandbox.network).toEqual({ allowedDomains: detected, deniedDomains: ["bad.com"] });
     expect(Object.keys(sandbox.network as object)).toEqual(["allowedDomains", "deniedDomains"]);
     expect(sandboxKept()).toEqual([
@@ -277,7 +279,7 @@ describe("sandbox1: wrong-typed places", () => {
     await updateCommand();
     const sandbox = settingsSandbox();
     expect(sandbox.enabled).toBe(false);
-    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS] });
+    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS], denyWrite: DENY_WRITE });
     expect(sandbox.network).toEqual({ allowedDomains: detected });
     expect(sandbox.excludedCommands).toEqual(["x"]);
     expect(warnings()).toEqual([
@@ -298,7 +300,7 @@ describe("sandbox1: wrong-typed places", () => {
     );
     await updateCommand();
     const sandbox = settingsSandbox();
-    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS], allowWrite: ["/tmp"] });
+    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS], denyWrite: DENY_WRITE, allowWrite: ["/tmp"] });
     expect(sandbox.network).toEqual({ allowedDomains: detected, deniedDomains: ["bad.com"] });
     expect(warnings()).toEqual([
       replacedList("sandbox.filesystem.denyRead"),
@@ -368,7 +370,7 @@ describe("sandbox1: safe text and __proto__", () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     const sandbox = settingsSandbox();
     expect(Object.getPrototypeOf(sandbox)).toBe(Object.prototype);
-    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS] });
+    expect(sandbox.filesystem).toEqual({ denyRead: [...SECRET_FOLDERS], denyWrite: DENY_WRITE });
     expect(sandbox.network).toEqual({ allowedDomains: detected, x: 1 });
     expect(sandboxKept()).toEqual(["sandbox.network.x"]);
     expect(printed.filter((l) => l.includes("__proto__"))).toEqual([]);

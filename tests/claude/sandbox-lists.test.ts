@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateCommand } from "../../src/commands/generate.js";
 import { updateCommand } from "../../src/commands/update.js";
-import { buildSandboxBlock, SECRET_FOLDERS } from "../../src/claude/sandbox.js";
+import { buildSandboxBlock, HARNESS_WRITE_PATHS, SECRET_FOLDERS } from "../../src/claude/sandbox.js";
 import { pinPlatform } from "./pin-platform.js";
 
 pinPlatform(); // the warnings these tests compare must not depend on the machine (Linux without socat)
@@ -127,7 +127,11 @@ describe("sandbox1: entries the harness wrote last time", () => {
     expect(denyRead()).toEqual([...SECRET_FOLDERS, "~/.foo"]);
     expect(allowedDomains()).toEqual([...detected, "mine.com"]);
     expect(sandboxKept()).toEqual(["sandbox.filesystem.denyRead: ~/.foo", "sandbox.network.allowedDomains: mine.com"]);
-    expect(manifestSandbox()).toEqual({ denyRead: [...SECRET_FOLDERS], allowedDomains: detected });
+    expect(manifestSandbox()).toEqual({
+      denyRead: [...SECRET_FOLDERS],
+      denyWrite: [...HARNESS_WRITE_PATHS],
+      allowedDomains: detected,
+    });
     expect(readableLines()).toEqual([]);
   });
 });
@@ -149,7 +153,11 @@ describe("sandbox1: reading generatedSandbox", () => {
         "sandbox.network.allowedDomains: example.com",
       ]);
       expect(readableLines()).toEqual([]);
-      expect(manifestSandbox()).toEqual({ denyRead: [...SECRET_FOLDERS], allowedDomains: detected });
+      expect(manifestSandbox()).toEqual({
+        denyRead: [...SECRET_FOLDERS],
+        denyWrite: [...HARNESS_WRITE_PATHS],
+        allowedDomains: detected,
+      });
     }
   });
 
@@ -246,6 +254,29 @@ describe("sandbox1: removed secret folders", () => {
     await updateCommand();
     expect(denyRead()).toEqual(without("~/.docker"));
     expect(readableLines()).toEqual([readable("~/.docker")]);
+  });
+});
+
+describe("Q1: ~/.config/gh in the secret folders", () => {
+  it("Q1: update adds ~/.config/gh to a settings.json written before this change and records it", async () => {
+    manifestWith({ denyRead: without("~/.config/gh"), denyWrite: [...HARNESS_WRITE_PATHS], allowedDomains: detected });
+    write("settings.json", settingsWith({ ...buildSandboxBlock(detected), filesystem: { denyRead: without("~/.config/gh") } }));
+    await updateCommand();
+    expect(denyRead()).toEqual([...without("~/.config/gh"), "~/.config/gh"]);
+    expect((manifestSandbox().denyRead as string[]).at(-1)).toBe("~/.config/gh");
+    expect(readableLines()).toEqual([]);
+  });
+
+  it("Q1: a user who removed ~/.config/gh keeps it removed and gets the warning line on each run", async () => {
+    write("settings.json", settingsWith({ ...buildSandboxBlock(detected), filesystem: { denyRead: without("~/.config/gh") } }));
+    await updateCommand();
+    expect(denyRead()).toEqual(without("~/.config/gh"));
+    expect(readableLines()).toEqual([readable("~/.config/gh")]);
+    capture();
+    await updateCommand();
+    expect(denyRead()).toEqual(without("~/.config/gh"));
+    expect(readableLines()).toEqual([readable("~/.config/gh")]);
+    expect(manifestSandbox().denyRead).toEqual([...SECRET_FOLDERS]);
   });
 });
 
