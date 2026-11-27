@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0 — unreleased
+
+Code is written by the driver only. A chat no longer edits code; it runs the work with `/drive`.
+
+- **Breaking: a missing `codeBy` now means `"driver"`:** a chat no longer edits code; it runs the work with
+  `/drive`. The one line to get the old behaviour: `"codeBy": "anyone"` in `.claude/gates.json`.
+- **Removed: `test-writer` and `task-analyzer`:** task-analyzer was never called, and the driver's implementer
+  writes the tests.
+- **Removed: `evidence-gate`:** in the measured periods of the README usage table it ran 218 and then 580 times
+  and gave output once. The driver runs verify and decides the result.
+- **Removed: the Report contract and the implementer's chat mode:** the implementer has one mode, "Under the
+  driver".
+- **Removed: `_TOKENS.md` and the three flat skill files** (`ci-testing-patterns.md`, `repo-structure.md`,
+  `team-conventions.md`): nothing reads them.
+- **Upgrading:** `update` drops evidence-gate from `settings.json`, removes the removed files that you did not
+  change, and prints the codeBy line. `evidenceGate` in `gates.json` is read by nothing and can be deleted.
+
 ## 0.5.4 — Fewer ways around the sandbox
 
 This release closes the channels past the OS sandbox by default: Claude in Chrome tools are denied, and WebFetch and MCP tools ask. Bash cannot write the harness's own rules or read the GitHub CLI login. The driver marks outside text in its prompts as data, kills the processes its steps leave behind, and a failed check names the failing tests. Still open: Linux has no live probe, and the model token is not masked.
