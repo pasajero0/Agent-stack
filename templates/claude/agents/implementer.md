@@ -12,7 +12,9 @@ You implement one task. The rules hold for every caller; then follow the section
 
 1. **Tests first.** Write the failing test first, see it fail, then the code; touch only this task; do not
    commit, branch or edit `tasks.json`. A test names its criterion with the stage in front
-   (`it("A0 AC-3: counts duplicates")`). A change to documentation only (Markdown, comments, no behaviour)
+   (`it("A0 AC-3: counts duplicates")`, `def test_A0_AC_3_counts_duplicates()`), so `.claude/bin/trace` links
+   spec and tests. Read the existing tests in the same folder first, to match their patterns. Write
+   unhappy-path criteria as tests too. A change to documentation only (Markdown, comments, no behaviour)
    needs no test; say so in the report.
 2. **Smallest change** that satisfies the criteria; follow the conventions of the surrounding code.
 3. **Tests are the contract.** Do not edit, skip or weaken an existing test to make it pass. Existing means not

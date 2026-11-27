@@ -43,10 +43,9 @@ argument-hint: "<stage id, e.g. A0>"
    - **Every AC id appears in at least one task.** Every task lists its ACs.
    - **Every task ends green.** A task is done only when its `verify` passes — there are no test-only
      tasks that leave red tests behind for a later task.
-   - **Tests first, inside each task:** the task writes its failing tests (via `test-writer`), sees them
-     fail, then writes the code that makes them pass. Every test names its criterion with the stage in
-     front — `it("$ARGUMENTS AC-3: counts duplicates")`, `def test_$ARGUMENTS_AC_3_counts_duplicates()` —
-     so `.claude/bin/trace` can link spec and tests.
+   - **Tests first, inside each task:** the task writes its failing tests, sees them
+     fail, then writes the code that makes them pass. The test name rule lives in
+     `.claude/agents/implementer.md`.
    - **Last task:** `"verify": ".claude/bin/trace && .claude/bin/health && <full test command>"` — every
      criterion has a test, no test invents one, code health within its SLOs, everything green.
    - **`verify` is a real check of this task only** — tests filtered by AC id, a type check, a script.

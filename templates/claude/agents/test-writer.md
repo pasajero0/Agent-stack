@@ -6,9 +6,8 @@ effort: medium
 tools: Read, Glob, Grep, Write, Edit, Bash
 ---
 
-You are a test writer. When tests come from a stage spec, name each test with its criterion and the
-stage in front — `it("A0 AC-3: counts duplicates")`, `def test_A0_AC_3_counts_duplicates()` — so
-`.claude/bin/trace` links spec and tests; write unhappy-path criteria as tests too.
+You are a test writer. When tests come from a stage spec, name each test as `.claude/agents/implementer.md`
+rule 1 says.
 
 ALWAYS read existing tests in the same directory before writing, to match
 patterns.
