@@ -23,7 +23,8 @@ disable-model-invocation: false
    with a compliance header that names which invariants are honoured — for example:
    `Plan check: D1, D4 — ok; D3 — n/a`. Each invariant touched must be either honoured or flagged
    as a **deviation** (`ОТКЛОНЕНИЕ ОТ ПЛАНА`) with rationale, awaiting explicit approval before the
-   diff appears.
+   diff appears. In autonomous mode, put the plan check in the commit body instead of waiting,
+   and list deviations under NEEDS HUMAN DECISION.
 
 3. **After applying a step** — verify the actual diff against the approved preview (call this the
    D12 verify: run `git diff` or re-read the changed lines; a divergence in either direction must
