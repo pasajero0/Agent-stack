@@ -60,6 +60,9 @@ This release closes the channels past the OS sandbox by default: Claude in Chrom
   file sub-item now says why the harness does not mask the token: Claude Code accepts that setting only from
   user or managed settings or `--settings`, it is experimental, and a nested `claude` with a placeholder is not
   checked.
+- **Defect log:** #61, #62; #49 and #60 are closed.
+- **Eval run** on 0.5.4, k = 3, real `claude`, started from the chat inside the OS sandbox: 21/21 passed,
+  pass^3 = 1, $1.21, 5:25 — `evals/results/2026-11-27-012936.json`.
 
 ## 0.5.3 — Fewer stops that need a human
 
