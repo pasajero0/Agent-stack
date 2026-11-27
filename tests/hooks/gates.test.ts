@@ -21,6 +21,7 @@ const SPEC = "docs/specs/A0/SPEC.md";
 /** A git repo with the harness and an initial commit on main. */
 function repo(): string {
   const dir = deployHarness();
+  patchGates(dir, { codeBy: "anyone" });
   git(dir, "init", "-q", "-b", "main");
   write(dir, "README.md", "# demo\n");
   git(dir, "add", "README.md");
@@ -51,6 +52,7 @@ const codeEdit = (dir: string) => edit(join(dir, "src/app.ts"));
 describe("spec-gate", () => {
   it("stays open in a repository with no commits, and closes after the first one", () => {
     const dir = deployHarness();
+    patchGates(dir, { codeBy: "anyone" });
     git(dir, "init", "-q", "-b", "main");
     expect(runHook(dir, "spec-gate.sh", codeEdit(dir)).code).toBe(0);
     write(dir, "package.json", "{}\n");

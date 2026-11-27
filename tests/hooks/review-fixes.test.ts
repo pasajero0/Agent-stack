@@ -4,12 +4,14 @@ import { mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { bash, cleanupProjects, deployHarness, edit, git, runHook, setMode, write } from "./fixture.js";
+import { bash, cleanupProjects, deployHarness, edit, git, patchGates, runHook, setMode, write } from "./fixture.js";
 
 afterAll(cleanupProjects);
 
 function repo(): string {
   const dir = deployHarness();
+  // The spec-gate tests here check path resolution and the specGate default, not codeBy (drive1).
+  patchGates(dir, { codeBy: "anyone" });
   git(dir, "init", "-q", "-b", "main");
   write(dir, "README.md", "# demo\n");
   git(dir, "add", "README.md");

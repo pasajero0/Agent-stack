@@ -18,7 +18,7 @@ const TASKS = ".claude/tmp/B1/tasks.json";
 /** A repo with the harness in flow `branch`, an initial commit on main, and work on `branch`. */
 function repo(branch: string, flow: string = "branch"): string {
   const dir = deployHarness();
-  patchGates(dir, { specFlow: flow });
+  patchGates(dir, { specFlow: flow, codeBy: "anyone" });
   git(dir, "init", "-q", "-b", "main");
   write(dir, "README.md", "# demo\n");
   git(dir, "add", "README.md");

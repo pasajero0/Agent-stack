@@ -57,7 +57,17 @@ const env = (id: string) => ({ AGENT_STACK_RUN: id });
 const NO_ENV = { AGENT_STACK_RUN: "" };
 const codeEdit = (dir: string) => edit(join(dir, "src/app.ts"));
 
+/** repo() with "codeBy": "anyone", so a later spec-gate check answers, not the codeBy check (drive1). */
+function anyoneRepo(branch: string): string {
+  const dir = repo(branch);
+  patchGates(dir, { codeBy: "anyone" });
+  return dir;
+}
+
 describe("spec-gate: quick-run bypass", () => {
+  // These tests check the quick-run bypass and the stage checks after it, not codeBy.
+  const repo = anyoneRepo;
+
   it("v04 AC-26: a live quick run on the current branch may edit code without a stage spec or plan", () => {
     const dir = repo("fix/login");
     writeRun(dir, {});

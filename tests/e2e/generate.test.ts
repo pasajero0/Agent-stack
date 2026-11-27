@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { emitHarness } from "../../src/claude/harness.js";
-import { bash, edit, git, runHook, write, writeTool } from "../hooks/fixture.js";
+import { bash, edit, git, patchGates, runHook, write, writeTool } from "../hooks/fixture.js";
 
 // Detection + emission + hooks together, on fresh repos of different stacks — what `generate` does.
 const dirs: string[] = [];
@@ -44,6 +44,8 @@ describe("generate → full gate cycle on a TypeScript repo", () => {
     expect(g.commands.lint).toBe("pnpm exec eslint --no-warn-ignored {file}");
     expect(statSync(join(dir, ".claude/bin/verify")).mode & 0o111).not.toBe(0);
 
+    // The steps below check spec-gate's spec and plan steps in a chat, so a human opens codeBy (drive1).
+    patchGates(dir, { codeBy: "anyone" });
     const src = join(dir, "src/app.ts");
     // 1. No spec merged → no code.
     expect(runHook(dir, "spec-gate.sh", edit(src)).code).toBe(2);
@@ -107,6 +109,7 @@ describe("generate on other stacks", () => {
       const input = hook === "guard-bash.sh" ? bash("ls") : edit(join(dir, "main.go"), "x", "y");
       expect(runHook(dir, hook, input).code, hook).toBe(0);
     }
+    patchGates(dir, { codeBy: "anyone" }); // the check below is the stage check, not codeBy (drive1)
     expect(runHook(dir, "spec-gate.sh", edit(join(dir, "main.go"))).code).toBe(2);
   });
 });
