@@ -184,6 +184,12 @@ it here first.
   merges it with the user's own `sandbox` keys: a switch the user set wins, with a warning when it is weaker, and a
   secret folder the user removed stays removed, with a warning. One exception, announced: an object or list of the
   wrong type is replaced.
+- **Probe** — one short command that tries an action a rule forbids, on the real machine with the real settings,
+  and reports "denied" or "allowed". A probe changes nothing: it opens a file for writing and closes it, or lists
+  a folder, and prints no file names or contents. A test checks that the harness wrote a rule into the settings;
+  a probe checks that Claude Code enforces it. A set of probes has a control probe: an action that must stay
+  allowed, so a probe that always says "denied" is seen. Probes run after `update`, before a release that changes
+  the sandbox block or the permission lists. A probe is not a role, not a subagent and not a model call.
 - **Interactive / autonomous** — `gates.json` → `mode`. Interactive asks the human; autonomous never asks,
   blocks instead, and records decisions under NEEDS HUMAN DECISION.
 - **Seed files** — files `init` writes once and `update` leaves alone: `CLAUDE.md`, `CODEMAP.md`,

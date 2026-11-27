@@ -22,7 +22,10 @@
   The manifest records the entries in `generatedSandbox.denyWrite`. `update` adds them to a settings.json of an
   older version and keeps your own denyWrite entries after them. If you remove one of the three entries, `update`
   keeps it removed and prints one warning line for it on each run. `generate` and `update` still write these
-  places: you run them from a terminal, outside the sandbox. Not yet checked by a live probe.
+  places: you run them from a terminal, outside the sandbox. Checked by a live probe on 27/11/2026 (macOS, Claude Code 2.1.332, after `update`): Bash
+  in the sandbox got EPERM on `.claude/gates.json`, `.claude/bin/verify`, `CLAUDE.md` and a new file in
+  `.claude/bin/`; the control probes were allowed. So the rule works for a file path and for a folder on macOS.
+  Linux is not checked.
 - **Bash cannot read gh's login inside the sandbox:** `~/.config/gh` is now the last entry of the secret folders,
   so the generated `sandbox.filesystem.denyRead` holds it. Before, a text the agent read could make Bash send data
   out through github.com with your GitHub login. Inside the sandbox, gh now answers that it is not logged in, and
